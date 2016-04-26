@@ -90,6 +90,10 @@ class Request {
   CURL *easy_handle() { return curl_; }
 
   void SendResponse(int listen_sock) {
+    if (buf_ == NULL) {
+      DLOG("No response received. Ignoring.");
+      return;
+    }
     DNSPacket r;
     if (!r.ReadJson(tx_id_, buf_)) {
       WLOG("Failed to interpret JSON '%s'. Skipping.", buf_);
@@ -159,7 +163,6 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
   curl_slist *client_resolv = NULL;
 
   while (gKeepRunning) {
-    DLOG("tick");
     fd_set rfd, wfd, efd;
     int max_fd;
 
