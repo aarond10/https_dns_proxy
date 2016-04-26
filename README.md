@@ -25,31 +25,22 @@ $ make
 
 ## INSTALL
 
-There is no installer at this stage but OpenWRT packages are maintained in the
-openwrt/ directory. Just copy the package definition into your openwrt build
-directory with something like:
+There is no installer at this stage - just run it.
 
 ```
-cp openwrt/packages ~/my_openwrt_build_dir/ -R
+$ ./https_dns_proxy -u nobody -g nogroup -p 5053 -d
 ```
 
-Then you should see `https_dns_proxy` show up under "Network services" when you
-configure OpenWRT with something like `make menuconfig`
+### OpenWRT
 
-To set it up as a foward proxy for OpenWRT, add this to your 
-`/etc/config/dhcp` file:
-
-```
-list server '127.0.0.1#5053'
-<b># Remove all other list server lines</b>
-```
-
-You might also want to set up some iptables rules to block all forwarded outgoing port 53
-traffic. (Note, you'll still need to allow localhost so `https_dns_proxy` can resolve
-"dns.google.com".)
+I've got some basic OpenWRT packages I maintain in [a
+separate](https://github.com/aarond10/https_dns_proxy_openwrt) repository so I
+can avoid it being self-referential. :P
 
 ## TODO
 
+* The whole binary here is extremely "alpha" in quality. Expect issues. That
+  said, I've been running it successfully for a week now without any problems!
 * The DNS client and DNS packet code is extremely rough and could do with much
   love.
 * Test coverage could be better.
@@ -57,4 +48,4 @@ traffic. (Note, you'll still need to allow localhost so `https_dns_proxy` can re
 
 ## AUTHORS
 
-Aaron Drew (aarond10@gmail.com)
+* Aaron Drew (aarond10@gmail.com)
