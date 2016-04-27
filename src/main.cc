@@ -9,6 +9,7 @@
 #include <curl/curl.h>
 #include <errno.h>
 #include <grp.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <pwd.h>
 #include <signal.h>
@@ -19,8 +20,7 @@
 #include <time.h>
 #include <unistd.h>
 
-
-#include "dns_client.h"
+#include <ares.h>
 #include "dns_packet.h"
 #include "options.h"
 #include "logging.h"
@@ -60,6 +60,28 @@ void Daemonize(const Options& opt) {
   if(fork() != 0) { exit(0); }
   if (uid) setuid(uid);
   if (gid) setgid(gid);
+}
+
+void AresCallback(void *arg, int status, int timeouts,
+                  struct hostent *hostent) {
+  if (status != ARES_SUCCESS) {
+    WLOG("DNS lookup failed: %d", status);
+  }
+  if (!hostent || hostent->h_length < 1) {
+    WLOG("No hosts.");
+    return;
+  }
+  char buf[256] = "dns.google.com:443:";
+  char *p = buf + strlen(buf);
+  int l = sizeof(buf) - strlen(buf);
+  ares_inet_ntop(AF_INET, hostent->h_addr_list[0], p, l);
+  DLOG("Received new IP '%s'", p);
+
+  // Update libcurl's resolv cache (we pass these cache injection entries in on
+  // every request)
+  curl_slist **p_client_resolv = (curl_slist**)arg;
+  curl_slist_free_all(*p_client_resolv);
+  *p_client_resolv = curl_slist_append(NULL, buf);
 }
 
 class Request {
@@ -156,8 +178,14 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
   Request* reqs[4096];
   int num_reqs = 0;
 
-  // DNS client state.
-  TrivialDNSClient client(opt.bootstrap_dns, "dns.google.com");
+  // DNS client.
+  ares_channel ares;
+  if (ares_init(&ares) != ARES_SUCCESS) {
+    FLOG("Failed to init c-ares channel");
+  }
+  if (ares_set_servers_csv(ares, opt.bootstrap_dns) != ARES_SUCCESS) {
+    FLOG("Failed to set DNS servers to '%s'.", opt.bootstrap_dns);
+  }
   const time_t client_req_interval = 300; // 5 minutes.
   time_t last_client_req_time = 0;
   curl_slist *client_resolv = NULL;
@@ -170,7 +198,8 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
     if (last_client_req_time + client_req_interval < time(NULL)) {
       DLOG("Sending DNS request for dns.google.com");
       last_client_req_time = time(NULL);
-      client.Send();
+      ares_gethostbyname(ares, "dns.google.com", AF_INET, 
+          &AresCallback, &client_resolv);
     }
 
     // Curl tells us how long select should wait.
@@ -181,7 +210,7 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
     timeout.tv_sec = curl_timeo / 1000;
     timeout.tv_usec = (curl_timeo % 1000) * 1000;
 
-    FD_ZERO(&rfd); FD_ZERO(&wfd); FD_ZERO(&efd);  max_fd = 0;
+    FD_ZERO(&rfd); FD_ZERO(&wfd); FD_ZERO(&efd); max_fd = 0;
     CURLMcode err;
     if ((err = curl_multi_fdset(curlm, &rfd, &wfd, &efd, &max_fd)) != CURLM_OK) {
       FLOG("CURL error: %s", curl_multi_strerror(err));
@@ -189,8 +218,9 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
 
     FD_SET(listen_sock, &rfd);
     max_fd = max_fd > listen_sock ? max_fd : listen_sock;
-    FD_SET(client.sock(), &rfd);
-    max_fd = max_fd > client.sock() ? max_fd : client.sock();
+
+    int ares_max_fd = ares_fds(ares, &rfd, &wfd) - 1;
+    max_fd = max_fd > ares_max_fd ? max_fd : ares_max_fd;
 
     int r = select(max_fd + 1,  &rfd, &wfd, &efd, &timeout);
 
@@ -230,17 +260,7 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
       }
     }
     // DNS response
-    if (FD_ISSET(client.sock(), &rfd)) {
-      if (client.Recv()) {
-        // Update libcurl's resolv cache (done on each request)
-        curl_slist_free_all(client_resolv);
-        char entry[256] = {};
-        snprintf(entry, sizeof(entry)-1, "dns.google.com:443:%s",
-                 client.ip());
-        client_resolv = curl_slist_append(NULL, entry);
-        DLOG("dns.google.com at %s", client.ip());
-      }
-    }
+    ares_process(ares, &rfd, &wfd);
     // CURL transfers
     if (r >= 0) {
       int running_https = 0;
@@ -272,6 +292,7 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
     delete reqs[i];
   }
   curl_multi_cleanup(curlm);
+  ares_destroy(ares);
   curl_slist_free_all(client_resolv);
   close(listen_sock);
 }
@@ -299,6 +320,7 @@ int main(int argc, char *argv[]) {
   }
 
   curl_global_init(CURL_GLOBAL_DEFAULT);
+  ares_library_init(ARES_LIB_INIT_ALL);
   ILOG("Listening on %s:%d", opt.listen_addr, opt.listen_port);
   if (opt.daemonize) Daemonize(opt);
 
@@ -311,6 +333,7 @@ int main(int argc, char *argv[]) {
   RunSelectLoop(opt, sock);
 
   curl_global_cleanup();
+  ares_library_cleanup();
   return 0;
 }
 

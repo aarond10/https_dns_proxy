@@ -14,15 +14,19 @@ set(CMAKE_CXX_FLAGS
 set(NXJSON_DIR lib/nxjson/)
 set(NXJSON_SRC ${NXJSON_DIR}/nxjson.c)
 
-find_path(LIBCURL_INCLUDE_DIR curl/curl.h HINTS ${LIBCURL_DIR}/include)
-include_directories(${LIBCURL_INCLUDE_DIR} ${NXJSON_DIR} src)
+find_path(LIBCARES_INCLUDE_DIR ares.h)
+find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
+find_path(LIBEV_INCLUDE_DIR ev.h)
+include_directories(
+  ${LIVCARES_INCLUDE_DIR} ${LIBCURL_INCLUDE_DIR} 
+  ${LIBEV_INCLUDE_DIR} ${NXJSON_DIR} src)
 
 # The main binary
 set(TARGET_NAME "https_dns_proxy")
 aux_source_directory(src SRC_LIST)
 set(SRC_LIST ${SRC_LIST} ${NXJSON_SRC})
 add_executable(${TARGET_NAME} ${SRC_LIST})
-set(LIBS ${LIBS} curl)
+set(LIBS ${LIBS} cares curl ev)
 target_link_libraries(${TARGET_NAME} ${LIBS})
 
 install(CODE "MESSAGE(\"Please install manually for now.\")")
