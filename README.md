@@ -18,6 +18,8 @@ Features:
 
 ## BUILD
 
+Depends on `c-ares`, `libcurl`, `libev`.
+
 ```
 $ cmake .
 $ make

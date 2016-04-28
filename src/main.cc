@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <time.h>
@@ -32,36 +33,12 @@ sig_atomic_t gKeepRunning = 1;
 // Quit gracefully on Ctrl-C
 void SigHandler(int sig) {
   if (sig == SIGINT) {
-    WLOG("SIGINT received. Shutting down.");
     gKeepRunning = 0; 
   }
 }
 
-// Forks and drops to a regular user if running as root.
-void Daemonize(const Options& opt) {
-  uid_t uid = 0;
-  gid_t gid = 0;
-  if (getuid() == 0) {
-    WLOG("Dropping to %s:%s", opt.user, opt.group);
-    struct passwd *p;
-    if (!(p = getpwnam(opt.user)) || !p->pw_uid) {
-      FLOG("Username (%s) invalid.", opt.user);
-    } else {
-      uid = p->pw_uid;
-    }
-    struct group *g;
-    if (!(g = getgrnam(opt.group)) || !g->gr_gid) {
-      FLOG("Group (%s) invalid.", opt.group);
-    } else {
-      gid = g->gr_gid;
-    }
-  }
-  if(fork() != 0) { exit(0); }
-  if(fork() != 0) { exit(0); }
-  if (uid) setuid(uid);
-  if (gid) setgid(gid);
-}
-
+// Called when c-ares has a DNS response or error for a lookup of
+// dns.google.com.
 void AresCallback(void *arg, int status, int timeouts,
                   struct hostent *hostent) {
   if (status != ARES_SUCCESS) {
@@ -71,7 +48,7 @@ void AresCallback(void *arg, int status, int timeouts,
     WLOG("No hosts.");
     return;
   }
-  char buf[256] = "dns.google.com:443:";
+  char buf[128] = "dns.google.com:443:";
   char *p = buf + strlen(buf);
   int l = sizeof(buf) - strlen(buf);
   ares_inet_ntop(AF_INET, hostent->h_addr_list[0], p, l);
@@ -101,7 +78,7 @@ class Request {
     }
     curl_easy_setopt(curl_, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
     curl_easy_setopt(curl_, CURLOPT_URL, url);
-    curl_easy_setopt(curl_, CURLOPT_TIMEOUT_MS, 3000);
+    //curl_easy_setopt(curl_, CURLOPT_TIMEOUT_MS, 3000);
     curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteBuffer);
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, (void *)this);
     curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -169,7 +146,6 @@ class Request {
 //  3. Outgoing socket for periodic DNS client query for dns.google.com.
 void RunSelectLoop(const Options& opt, int listen_sock) {
   CURLM *curlm = curl_multi_init();
-
   curl_multi_setopt(curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
 
   // Avoid C++ map, etc for symbol bloat.
@@ -186,7 +162,8 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
   if (ares_set_servers_csv(ares, opt.bootstrap_dns) != ARES_SUCCESS) {
     FLOG("Failed to set DNS servers to '%s'.", opt.bootstrap_dns);
   }
-  const time_t client_req_interval = 300; // 5 minutes.
+  // 60 seconds poll. Rely on c-ares to honor DNS TTL.
+  const time_t client_req_interval = 60; 
   time_t last_client_req_time = 0;
   curl_slist *client_resolv = NULL;
 
@@ -223,41 +200,52 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
     max_fd = max_fd > ares_max_fd ? max_fd : ares_max_fd;
 
     int r = select(max_fd + 1,  &rfd, &wfd, &efd, &timeout);
-
-    if (r < 0) continue; // signal?
-
-    if (r == 0) {
-      // Timeout. Try again.
-      continue;
-    }
+    if (r < 0) continue; // Signal.
+    if (r == 0) continue; // Timeout.
 
     // DNS request
     if (FD_ISSET(listen_sock, &rfd)) {
-      char buf[2048];
+      unsigned char buf[1500];  // A whole MTU. We don't do TCP so any bigger is a waste.
       sockaddr_in raddr;
       socklen_t raddr_size = sizeof(raddr);
-      int len = recvfrom(listen_sock, buf, sizeof(buf), 0, (sockaddr *)&raddr, &raddr_size);
+      int len = recvfrom(listen_sock, buf, sizeof(buf), 0, 
+                         (sockaddr *)&raddr, &raddr_size);
       if (len < 0) {
         WLOG("recvfrom failed: %s", strerror(errno));
         continue;
       }
-      DNSPacket p;
-      if (!p.ReadDNS(buf, buf + len)) {
-        DLOG("Failed to decode packet.");
+      unsigned char *p = buf;
+      uint16_t tx_id = ntohs(*(uint16_t*)p); p += 2;
+      uint16_t flags = ntohs(*(uint16_t*)p); p += 2;
+      uint16_t num_q = ntohs(*(uint16_t*)p); p += 2;
+      uint16_t num_rr = ntohs(*(uint16_t*)p); p += 2;
+      uint16_t num_arr = ntohs(*(uint16_t*)p); p += 2;
+      uint16_t num_xrr = ntohs(*(uint16_t*)p); p += 2;
+      if (num_q != 1) {
+        DLOG("Malformed request received.");
+        continue;
+      };
+      char *domain_name;
+      long enc_len;
+      if (ares_expand_name(p, buf, len, 
+                           &domain_name, &enc_len) != ARES_SUCCESS) {
+        DLOG("Malformed request received.");
         continue;
       }
-      if (p.num_q == 1) {
-        bool cd_bit = p.flags & (1 << 4);
-        char *escaped_name = curl_escape(p.q[0].name, strlen(p.q[0].name));
-        char url[1500] = {};
-        snprintf(url, sizeof(url)-1,
-            "https://dns.google.com/resolve?name=%s&type=%d%s",
-            escaped_name, p.q[0].type, cd_bit ? "&cd=true" : "");
-        curl_free(escaped_name);
-        Request *req = new Request(p.tx_id, url, raddr, client_resolv);
-        reqs[num_reqs++] = req;
-        curl_multi_add_handle(curlm, req->easy_handle());
-      }
+      p += enc_len;
+      uint16_t type = ntohs(*(uint16_t*)p); p += 2;
+        
+      bool cd_bit = flags & (1 << 4);
+      char *escaped_name = curl_escape(domain_name, strlen(domain_name));
+      ares_free_string(domain_name);
+      char url[1500] = {};
+      snprintf(url, sizeof(url)-1,
+          "https://dns.google.com/resolve?name=%s&type=%d%s",
+          escaped_name, type, cd_bit ? "&cd=true" : "");
+      curl_free(escaped_name);
+      Request *req = new Request(tx_id, url, raddr, client_resolv);
+      reqs[num_reqs++] = req;
+      curl_multi_add_handle(curlm, req->easy_handle());
     }
     // DNS response
     ares_process(ares, &rfd, &wfd);
@@ -286,6 +274,8 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
     }
   }
 
+  WLOG("Shutting down.");
+
   // Cancel all pending requests.
   for (int i = 0; i < num_reqs; i++) {
     curl_multi_remove_handle(curlm, reqs[i]->easy_handle());
@@ -304,6 +294,7 @@ int main(int argc, char *argv[]) {
     opt.ShowUsage(argc, argv);
     exit(1);
   }
+  log_init(opt.logfd);
 
   sockaddr_in laddr, raddr;
   memset(&laddr, 0, sizeof(laddr));
@@ -322,7 +313,13 @@ int main(int argc, char *argv[]) {
   curl_global_init(CURL_GLOBAL_DEFAULT);
   ares_library_init(ARES_LIB_INIT_ALL);
   ILOG("Listening on %s:%d", opt.listen_addr, opt.listen_port);
-  if (opt.daemonize) Daemonize(opt);
+  if (opt.daemonize) {
+    if (setgid(opt.gid)) FLOG("Failed to set gid.");
+    if (setuid(opt.uid)) FLOG("Failed to set uid.");
+    // Note: this isn't a standard so, if necessary, look at something like
+    // OpenSSH's openbsd-compat/daemon.c
+    daemon(0, 0);
+  }
 
   if (signal(SIGINT, SigHandler) == SIG_ERR) {
     FLOG("Can't set signal handler.");
@@ -334,7 +331,6 @@ int main(int argc, char *argv[]) {
 
   curl_global_cleanup();
   ares_library_cleanup();
+  log_destroy();
   return 0;
 }
-
-
