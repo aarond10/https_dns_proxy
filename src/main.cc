@@ -37,6 +37,17 @@ void SigHandler(int sig) {
   }
 }
 
+// rand() is used for tx_id selection in outgoing DNS requests.
+// This is probably overkill but seed the PRNG with a decent
+// source to minimize chance of sequence prediction.
+static void prng_init() {
+  struct timeval time;
+  gettimeofday(&time, NULL);
+  srand(time.tv_sec);
+  srand(rand() + time.tv_usec);
+}
+
+
 // Called when c-ares has a DNS response or error for a lookup of
 // dns.google.com.
 void AresCallback(void *arg, int status, int timeouts,
@@ -296,6 +307,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
   log_init(opt.logfd);
+  prng_init();
 
   sockaddr_in laddr, raddr;
   memset(&laddr, 0, sizeof(laddr));
@@ -325,8 +337,6 @@ int main(int argc, char *argv[]) {
   if (signal(SIGINT, SigHandler) == SIG_ERR) {
     FLOG("Can't set signal handler.");
   }
-
-  srand(time(0));  // PRNG used for tx_id when we query for dns.google.com.
 
   RunSelectLoop(opt, sock);
 
