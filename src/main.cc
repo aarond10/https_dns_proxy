@@ -89,7 +89,6 @@ class Request {
     }
     curl_easy_setopt(curl_, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
     curl_easy_setopt(curl_, CURLOPT_URL, url);
-    //curl_easy_setopt(curl_, CURLOPT_TIMEOUT_MS, 3000);
     curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteBuffer);
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, (void *)this);
     curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 1L);
