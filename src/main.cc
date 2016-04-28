@@ -120,7 +120,7 @@ class Request {
   CURL *curl_;
   uint16_t tx_id_;
   char *buf_;
-  int len_;
+  size_t len_;
   sockaddr_in raddr_;
   curl_slist *resolv_;
 
