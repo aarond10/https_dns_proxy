@@ -146,7 +146,7 @@ class Request {
     req->buf_ = new_buf;
     memcpy(&(req->buf_[req->len_]), contents, size * nmemb);
     req->len_ += size * nmemb;
-    req->buf_[req->len_] = 0;
+    req->buf_[req->len_] = '\0';
     return size * nmemb;
   }
 
@@ -301,12 +301,14 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
 }  // namespace
 
 int main(int argc, char *argv[]) {
-  Options opt;
-  if (!opt.ParseArgs(argc, argv)) {
-    opt.ShowUsage(argc, argv);
+  struct Options opt;
+  options_init(&opt);
+
+  if (options_parse_args(&opt, argc, argv)) {
+    options_show_usage(argc, argv);
     exit(1);
   }
-  log_init(opt.logfd);
+  logging_init(opt.logfd, opt.loglevel);
   prng_init();
 
   sockaddr_in laddr, raddr;
@@ -342,6 +344,7 @@ int main(int argc, char *argv[]) {
 
   curl_global_cleanup();
   ares_library_cleanup();
-  log_destroy();
+  logging_cleanup();
+  options_cleanup(&opt);
   return 0;
 }

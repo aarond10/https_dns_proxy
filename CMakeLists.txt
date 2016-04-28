@@ -3,13 +3,8 @@ cmake_minimum_required(VERSION 2.8)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
 
-#set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_BUILD_TYPE "Release")
-
-# Use a __FILENAME__ define that is much shorter than the full path __FILE__.
-# We use this in our logging code.
-set(CMAKE_CXX_FLAGS 
-    "${CMAKE_CXX_FLAGS} -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
+set(CMAKE_BUILD_TYPE "Debug")
+#set(CMAKE_BUILD_TYPE "Release")
 
 set(NXJSON_DIR lib/nxjson/)
 set(NXJSON_SRC ${NXJSON_DIR}/nxjson.c)

@@ -160,7 +160,7 @@ struct Reader {
     } 
     NS_GET16(q->type, pos);
     NS_GET16(q->cls, pos);
-    if (q->cls != 1 /* IN */) {
+    if (q->cls != ns_c_in) {
       DLOG("Don't support classes other than 'IN': %d", q->cls);
       return false;
     }
@@ -343,7 +343,7 @@ bool DNSPacket::ReadJson(uint16_t id, char *str) {
       const nx_json *subobj = nx_json_item(obj, i);
       strncpy(q[i].name, nx_json_get(subobj, "name")->text_value, sizeof(q[i].name)-1);
       q[i].type = nx_json_get(subobj, "type")->int_value;
-      q[i].cls = 1 /* IN */;
+      q[i].cls = ns_c_in;
     }
   }
   obj = nx_json_get(json, "Answer");
@@ -353,7 +353,7 @@ bool DNSPacket::ReadJson(uint16_t id, char *str) {
       const nx_json *subobj = nx_json_item(obj, i);
       strncpy(rr[i].name, nx_json_get(subobj, "name")->text_value, sizeof(rr[i].name)-1);
       rr[i].type = nx_json_get(subobj, "type")->int_value;
-      rr[i].cls = 1 /* IN */;
+      rr[i].cls = ns_c_in;
       rr[i].ttl = nx_json_get(subobj, "TTL")->int_value;
       strncpy(rr[i].data, nx_json_get(subobj, "data")->text_value, sizeof(rr[i].data)-1);
     }
@@ -363,11 +363,11 @@ bool DNSPacket::ReadJson(uint16_t id, char *str) {
     num_arr = kMaxARR < obj->length ? kMaxARR : obj->length;
     for (int i = 0; i < num_arr; i++) {
       const nx_json *subobj = nx_json_item(obj, i);
-      strncpy(rr[i].name, nx_json_get(subobj, "name")->text_value, sizeof(rr[i].name)-1);
-      rr[i].type = nx_json_get(subobj, "type")->int_value;
-      rr[i].cls = 1 /* IN */;
-      rr[i].ttl = nx_json_get(subobj, "TTL")->int_value;
-      strncpy(rr[i].data, nx_json_get(subobj, "data")->text_value, sizeof(rr[i].data)-1);
+      strncpy(arr[i].name, nx_json_get(subobj, "name")->text_value, sizeof(arr[i].name)-1);
+      arr[i].type = nx_json_get(subobj, "type")->int_value;
+      arr[i].cls = ns_c_in;
+      arr[i].ttl = nx_json_get(subobj, "TTL")->int_value;
+      strncpy(arr[i].data, nx_json_get(subobj, "data")->text_value, sizeof(arr[i].data)-1);
     }
   }
   obj = nx_json_get(json, "Additional");
@@ -375,11 +375,11 @@ bool DNSPacket::ReadJson(uint16_t id, char *str) {
     num_xrr = kMaxXRR > obj->length ? kMaxXRR : obj->length;
     for (int i = 0; i < num_xrr; i++) {
       const nx_json *subobj = nx_json_item(obj, i);
-      strncpy(rr[i].name, nx_json_get(subobj, "name")->text_value, sizeof(rr[i].name)-1);
-      rr[i].type = nx_json_get(subobj, "type")->int_value;
-      rr[i].cls = 1 /* IN */;
-      rr[i].ttl = nx_json_get(subobj, "TTL")->int_value;
-      strncpy(rr[i].data, nx_json_get(subobj, "data")->text_value, sizeof(rr[i].data)-1);
+      strncpy(xrr[i].name, nx_json_get(subobj, "name")->text_value, sizeof(xrr[i].name)-1);
+      xrr[i].type = nx_json_get(subobj, "type")->int_value;
+      xrr[i].cls = ns_c_in;
+      xrr[i].ttl = nx_json_get(subobj, "TTL")->int_value;
+      strncpy(xrr[i].data, nx_json_get(subobj, "data")->text_value, sizeof(xrr[i].data)-1);
     }
   }
   nx_json_free(json);

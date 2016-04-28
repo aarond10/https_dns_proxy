@@ -4,9 +4,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif 
-void log_init(int fd);
+// Initializes logging.
+// Writes logs to descriptor 'fd' for log levels above or equal to 'level'.
+void logging_init(int fd, int level);
+
+// Cleans up and flushes open logs.
+void logging_cleanup();
+
+// Internal. Don't use.
 void _log(const char *filename, int line, int fd, const char *fmt, ...);
-void log_destroy();
 #ifdef __cplusplus
 }
 #endif
@@ -20,11 +26,11 @@ enum _LogSeverity {
 };
 
 // Debug, Info, Warning, Error logging.
-#define DLOG(...) _log(__FILENAME__, __LINE__, LOG_DEBUG, __VA_ARGS__)
-#define ILOG(...) _log(__FILENAME__, __LINE__, LOG_INFO, __VA_ARGS__)
-#define WLOG(...) _log(__FILENAME__, __LINE__, LOG_WARNING, __VA_ARGS__)
-#define ELOG(...) _log(__FILENAME__, __LINE__, LOG_ERROR, __VA_ARGS__)
-#define FLOG(...) _log(__FILENAME__, __LINE__, LOG_FATAL, __VA_ARGS__)
+#define DLOG(...) _log(__FILE__, __LINE__, LOG_DEBUG, __VA_ARGS__)
+#define ILOG(...) _log(__FILE__, __LINE__, LOG_INFO, __VA_ARGS__)
+#define WLOG(...) _log(__FILE__, __LINE__, LOG_WARNING, __VA_ARGS__)
+#define ELOG(...) _log(__FILE__, __LINE__, LOG_ERROR, __VA_ARGS__)
+#define FLOG(...) _log(__FILE__, __LINE__, LOG_FATAL, __VA_ARGS__)
 
 #ifdef NDEBUG
 #undef DLOG

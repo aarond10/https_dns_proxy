@@ -2,11 +2,13 @@
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include "logging.h"
 
 static FILE *logf = NULL;
+static int loglevel = LOG_ERROR;
 
 // Renders a severity as a short string.
 static const char *SeverityStr(int severity) {
@@ -22,24 +24,33 @@ static const char *SeverityStr(int severity) {
   }
 }
 
-void log_init(int fd) {
+void logging_init(int fd, int level) {
   if (logf) fclose(logf);
   logf = fdopen(fd, "a");
-  printf("logf now %p (fd %d)\n", logf, fd);
+  loglevel = level;
 }
 
-void log_destroy() {
+void logging_cleanup() {
   if (logf) fclose(logf);
   logf = NULL;
 }
 
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
+  if (severity < loglevel) return;
+
   if (!logf) logf = fdopen(STDOUT_FILENO, "w");
+
+  // We just want to log the filename, not the path.
+  const char *filename = file + strlen(file);
+  while (filename > file && *filename != '/') {
+    filename--;
+  }
+  if (*filename == '/') filename++;
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
   fprintf(logf, "%s %8d.%06d %s:%d ",
-      SeverityStr(severity), tv.tv_sec, tv.tv_usec, file, line);
+      SeverityStr(severity), tv.tv_sec, tv.tv_usec, filename, line);
 
   va_list args;
     va_start(args, fmt);
