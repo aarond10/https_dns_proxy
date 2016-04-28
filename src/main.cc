@@ -127,11 +127,12 @@ class Request {
   static size_t WriteBuffer(
       void *contents, size_t size, size_t nmemb, void *userp) {
     Request *req = (Request *)userp;
-    req->buf_ = (char *)realloc(req->buf_, req->len_ + size * nmemb + 1);
-    if(req->buf_ == NULL) {
+    char *new_buf = (char *)realloc(req->buf_, req->len_ + size * nmemb + 1);
+    if(new_buf == NULL) {
       ELOG("Out of memory!");
       return 0;
     }
+    req->buf_ = new_buf;
     memcpy(&(req->buf_[req->len_]), contents, size * nmemb);
     req->len_ += size * nmemb;
     req->buf_[req->len_] = 0;
