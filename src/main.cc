@@ -109,7 +109,7 @@ class Request {
       return;
     }
 
-    char ret[4096];
+    char ret[1500];
     int len = 0;
     if (!r.WriteDNS(ret, ret + sizeof(ret), &len)) {
       DLOG("Failed to write DNS response to buffer. Skipping.");
