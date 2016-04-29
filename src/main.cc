@@ -26,15 +26,10 @@
 #include "options.h"
 #include "logging.h"
 
-using namespace std;
-
-namespace {
-sig_atomic_t gKeepRunning = 1;
+static sig_atomic_t gKeepRunning = 1;
 // Quit gracefully on Ctrl-C
-void SigHandler(int sig) {
-  if (sig == SIGINT) {
-    gKeepRunning = 0; 
-  }
+static void SigHandler(int sig) {
+  if (sig == SIGINT) gKeepRunning = 0; 
 }
 
 // rand() is used for tx_id selection in outgoing DNS requests.
@@ -46,7 +41,6 @@ static void prng_init() {
   srand(time.tv_sec);
   srand(rand() + time.tv_usec);
 }
-
 
 // Called when c-ares has a DNS response or error for a lookup of
 // dns.google.com.
@@ -91,7 +85,7 @@ class Request {
     curl_easy_setopt(curl_, CURLOPT_URL, url);
     curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteBuffer);
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, (void *)this);
-    curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 5L);
     curl_easy_setopt(curl_, CURLOPT_USERAGENT, "dns-to-https-proxy/0.1");
     DLOG("Req %04x: %s", tx_id_, url);
   }
