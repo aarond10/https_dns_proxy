@@ -54,10 +54,10 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
         opt->loglevel--;
         break;
       case '?':
-        ELOG("Unknown option '-%c'", c);
+        printf("Unknown option '-%c'", c);
         return -1;
       default:
-        ELOG("Unknown state!");
+        printf("Unknown state!");
         exit(1);
     }
   }
