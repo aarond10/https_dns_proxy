@@ -4,6 +4,8 @@
 // 
 // Intended for use with Google's Public-DNS over HTTPS service
 // (https://developers.google.com/speed/public-dns/docs/dns-over-https)
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <arpa/inet.h>
 #include <curl/curl.h>
@@ -16,8 +18,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -338,5 +338,5 @@ int main(int argc, char *argv[]) {
   ares_library_cleanup();
   logging_cleanup();
   options_cleanup(&opt);
-  return 0;
+  return EXIT_SUCCESS;
 }
