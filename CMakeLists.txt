@@ -25,12 +25,3 @@ set(LIBS ${LIBS} cares curl ev)
 target_link_libraries(${TARGET_NAME} ${LIBS})
 
 install(CODE "MESSAGE(\"Please install manually for now.\")")
-
-# Tests 
-option(HTTPS_DNS_PROXY_TESTS "Build tests for https_dns_proxy" OFF)
-if(HTTPS_DNS_PROXY_TESTS)
-  set(TARGET_NAME "dns_packet_test")
-  set(SRC_LIST test/dns_packet_test.cc src/dns_packet.cc src/logging.c ${NXJSON_SRC})
-  add_executable(${TARGET_NAME} ${SRC_LIST})
-  target_link_libraries(${TARGET_NAME} gtest)
-endif(HTTPS_DNS_PROXY_TESTS)
