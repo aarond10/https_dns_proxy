@@ -20,7 +20,7 @@ static const char *SeverityStr(int severity) {
    case LOG_FATAL: return "[F]";
    default:
     fprintf(logf, "Unknown log severity: %d\n", severity);
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 }
 
