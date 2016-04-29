@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 2.8)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
 
-set(CMAKE_BUILD_TYPE "Debug")
-#set(CMAKE_BUILD_TYPE "Release")
+#set(CMAKE_BUILD_TYPE "Debug")
+set(CMAKE_BUILD_TYPE "Release")
 
 set(NXJSON_DIR lib/nxjson/)
 set(NXJSON_SRC ${NXJSON_DIR}/nxjson.c)
@@ -21,7 +21,7 @@ set(TARGET_NAME "https_dns_proxy")
 aux_source_directory(src SRC_LIST)
 set(SRC_LIST ${SRC_LIST} ${NXJSON_SRC})
 add_executable(${TARGET_NAME} ${SRC_LIST})
-set(LIBS ${LIBS} cares curl ev)
+set(LIBS ${LIBS} cares curl ev resolv)
 target_link_libraries(${TARGET_NAME} ${LIBS})
 
 install(CODE "MESSAGE(\"Please install manually for now.\")")

@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <time.h>
@@ -81,10 +82,9 @@ class Request {
     buf_ = NULL;
     len_ = 0;
     raddr_ = raddr;
-    resolv_ = resolv;
 
     CURLcode res;
-    if ((res = curl_easy_setopt(curl_, CURLOPT_RESOLVE, resolv_)) != CURLE_OK) {
+    if ((res = curl_easy_setopt(curl_, CURLOPT_RESOLVE, resolv)) != CURLE_OK) {
       FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
     }
     curl_easy_setopt(curl_, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
@@ -103,16 +103,10 @@ class Request {
       DLOG("No response received. Ignoring.");
       return;
     }
-    DNSPacket r;
-    if (!r.ReadJson(tx_id_, buf_)) {
-      WLOG("Failed to interpret JSON '%s'. Skipping.", buf_);
-      return;
-    }
-
-    char ret[1500];
-    int len = 0;
-    if (!r.WriteDNS(ret, ret + sizeof(ret), &len)) {
-      DLOG("Failed to write DNS response to buffer. Skipping.");
+    uint8_t ret[1500];
+    int len;
+    if ((len = json_to_dns(tx_id_, buf_, ret, sizeof(ret))) < 0) {
+      DLOG("Failed to translate JSON to DNS response.");
       return;
     }
     if (len > 0) {
@@ -132,7 +126,6 @@ class Request {
   char *buf_;
   size_t len_;
   sockaddr_in raddr_;
-  curl_slist *resolv_;
 
   static size_t WriteBuffer(
       void *contents, size_t size, size_t nmemb, void *userp) {
@@ -145,10 +138,10 @@ class Request {
     req->buf_ = new_buf;
     memcpy(&(req->buf_[req->len_]), contents, size * nmemb);
     req->len_ += size * nmemb;
+    // note: this doesn't mean strlen() is safe, just that we shouldn't overrun.
     req->buf_[req->len_] = '\0';
     return size * nmemb;
   }
-
 };
 
 // Multiplexes three things, forever:
