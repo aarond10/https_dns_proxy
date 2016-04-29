@@ -32,11 +32,4 @@ enum _LogSeverity {
 #define ELOG(...) _log(__FILE__, __LINE__, LOG_ERROR, __VA_ARGS__)
 #define FLOG(...) _log(__FILE__, __LINE__, LOG_FATAL, __VA_ARGS__)
 
-#ifdef NDEBUG
-#undef DLOG
-#undef ILOG
-#define DLOG(...) do { } while(0);
-#define ILOG(...) do { } while(0);
-#endif
-
 #endif  // _LOGGING_H_
