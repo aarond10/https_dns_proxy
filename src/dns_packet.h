@@ -47,7 +47,6 @@ struct DNSPacket {
   }
 
   // Methods to encode/decode to wire formats.
-  bool ReadDNS(char *pkt_start, char *pkt_end);
   bool WriteDNS(char *buf, char *end, int *size);
   bool ReadJson(uint16_t tx_id, char *json_str);
 
