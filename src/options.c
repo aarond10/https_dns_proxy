@@ -1,11 +1,12 @@
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <ctype.h>
 #include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include "logging.h"
@@ -54,11 +55,11 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
         opt->loglevel--;
         break;
       case '?':
-        ELOG("Unknown option '-%c'", c);
+        printf("Unknown option '-%c'", c);
         return -1;
       default:
-        ELOG("Unknown state!");
-        exit(1);
+        printf("Unknown state!");
+        exit(EXIT_FAILURE);
     }
   }
   if (opt->daemonize) {
@@ -109,4 +110,3 @@ void options_show_usage(int argc, char **argv) {
 void options_cleanup(struct Options *opt) {
   if (opt->logfd > 0) close(opt->logfd);
 }
-

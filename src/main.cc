@@ -4,6 +4,8 @@
 // 
 // Intended for use with Google's Public-DNS over HTTPS service
 // (https://developers.google.com/speed/public-dns/docs/dns-over-https)
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include <arpa/inet.h>
 #include <curl/curl.h>
@@ -17,8 +19,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -27,15 +27,10 @@
 #include "options.h"
 #include "logging.h"
 
-using namespace std;
-
-namespace {
-sig_atomic_t gKeepRunning = 1;
+static sig_atomic_t gKeepRunning = 1;
 // Quit gracefully on Ctrl-C
-void SigHandler(int sig) {
-  if (sig == SIGINT) {
-    gKeepRunning = 0; 
-  }
+static void SigHandler(int sig) {
+  if (sig == SIGINT) gKeepRunning = 0; 
 }
 
 // rand() is used for tx_id selection in outgoing DNS requests.
@@ -47,7 +42,6 @@ static void prng_init() {
   srand(time.tv_sec);
   srand(rand() + time.tv_usec);
 }
-
 
 // Called when c-ares has a DNS response or error for a lookup of
 // dns.google.com.
@@ -91,7 +85,7 @@ class Request {
     curl_easy_setopt(curl_, CURLOPT_URL, url);
     curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteBuffer);
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, (void *)this);
-    curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 5L);
     curl_easy_setopt(curl_, CURLOPT_USERAGENT, "dns-to-https-proxy/0.1");
     DLOG("Req %04x: %s", tx_id_, url);
   }
@@ -290,18 +284,19 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
   curl_slist_free_all(client_resolv);
   close(listen_sock);
 }
-}  // namespace
 
 int main(int argc, char *argv[]) {
+  prng_init();
+
   struct Options opt;
   options_init(&opt);
-
   if (options_parse_args(&opt, argc, argv)) {
     options_show_usage(argc, argv);
     exit(1);
   }
   logging_init(opt.logfd, opt.loglevel);
-  prng_init();
+  ares_library_init(ARES_LIB_INIT_ALL);
+  curl_global_init(CURL_GLOBAL_DEFAULT);
 
   sockaddr_in laddr, raddr;
   memset(&laddr, 0, sizeof(laddr));
@@ -317,14 +312,11 @@ int main(int argc, char *argv[]) {
     FLOG("Error binding %s:%d", opt.listen_addr, opt.listen_port);
   }
 
-  curl_global_init(CURL_GLOBAL_DEFAULT);
-  ares_library_init(ARES_LIB_INIT_ALL);
   ILOG("Listening on %s:%d", opt.listen_addr, opt.listen_port);
   if (opt.daemonize) {
     if (setgid(opt.gid)) FLOG("Failed to set gid.");
     if (setuid(opt.uid)) FLOG("Failed to set uid.");
-    // Note: this isn't a standard so, if necessary, look at something like
-    // OpenSSH's openbsd-compat/daemon.c
+    // Note: This is non-standard. If needed, see OpenSSH openbsd-compat/daemon.c
     daemon(0, 0);
   }
 
@@ -338,5 +330,5 @@ int main(int argc, char *argv[]) {
   ares_library_cleanup();
   logging_cleanup();
   options_cleanup(&opt);
-  return 0;
+  return EXIT_SUCCESS;
 }

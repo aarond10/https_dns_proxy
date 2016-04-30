@@ -1,5 +1,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +21,7 @@ static const char *SeverityStr(int severity) {
    case LOG_FATAL: return "[F]";
    default:
     fprintf(logf, "Unknown log severity: %d\n", severity);
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -53,7 +54,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
       SeverityStr(severity), tv.tv_sec, tv.tv_usec, filename, line);
 
   va_list args;
-    va_start(args, fmt);
+  va_start(args, fmt);
   vfprintf(logf, fmt, args);
   va_end(args);
   fprintf(logf, "\n");
