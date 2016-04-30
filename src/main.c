@@ -26,27 +26,28 @@
 #include "dns_packet.h"
 #include "options.h"
 #include "logging.h"
+#include "request.h"
 
-static sig_atomic_t gKeepRunning = 1;
-// Quit gracefully on Ctrl-C
+// So we can quit gracefully on Ctrl-C...
+static sig_atomic_t g_keep_running = 1;
 static void SigHandler(int sig) {
-  if (sig == SIGINT) gKeepRunning = 0; 
+  if (sig == SIGINT) g_keep_running = 0; 
 }
 
 // rand() is used for tx_id selection in outgoing DNS requests.
 // This is probably overkill but seed the PRNG with a decent
 // source to minimize chance of sequence prediction.
 static void prng_init() {
-  struct timeval time;
-  gettimeofday(&time, NULL);
-  srand(time.tv_sec);
-  srand(rand() + time.tv_usec);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  srand(tv.tv_sec);
+  srand(rand() + tv.tv_usec);
 }
 
 // Called when c-ares has a DNS response or error for a lookup of
 // dns.google.com.
-void AresCallback(void *arg, int status, int timeouts,
-                  struct hostent *hostent) {
+static void AresCallback(void *arg, int status, int timeouts,
+                         struct hostent *hostent) {
   if (status != ARES_SUCCESS) {
     WLOG("DNS lookup failed: %d", status);
   }
@@ -62,94 +63,23 @@ void AresCallback(void *arg, int status, int timeouts,
 
   // Update libcurl's resolv cache (we pass these cache injection entries in on
   // every request)
-  curl_slist **p_client_resolv = (curl_slist**)arg;
+  struct curl_slist **p_client_resolv = (struct curl_slist**)arg;
   curl_slist_free_all(*p_client_resolv);
   *p_client_resolv = curl_slist_append(NULL, buf);
 }
-
-class Request {
- public:
-  Request(uint16_t tx_id, const char *url, 
-          sockaddr_in raddr, curl_slist *resolv) {
-    curl_ = curl_easy_init();
-    tx_id_ = tx_id;
-    buf_ = NULL;
-    len_ = 0;
-    raddr_ = raddr;
-
-    CURLcode res;
-    if ((res = curl_easy_setopt(curl_, CURLOPT_RESOLVE, resolv)) != CURLE_OK) {
-      FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
-    }
-    curl_easy_setopt(curl_, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
-    curl_easy_setopt(curl_, CURLOPT_URL, url);
-    curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &WriteBuffer);
-    curl_easy_setopt(curl_, CURLOPT_WRITEDATA, (void *)this);
-    curl_easy_setopt(curl_, CURLOPT_TCP_KEEPALIVE, 5L);
-    curl_easy_setopt(curl_, CURLOPT_USERAGENT, "dns-to-https-proxy/0.1");
-    DLOG("Req %04x: %s", tx_id_, url);
-  }
-
-  CURL *easy_handle() { return curl_; }
-
-  void SendResponse(int listen_sock) {
-    if (buf_ == NULL) {
-      DLOG("No response received. Ignoring.");
-      return;
-    }
-    uint8_t ret[1500];
-    int len;
-    if ((len = json_to_dns(tx_id_, buf_, ret, sizeof(ret))) < 0) {
-      DLOG("Failed to translate JSON to DNS response.");
-      return;
-    }
-    if (len > 0) {
-      sendto(listen_sock, ret, len, 0, (sockaddr *)&raddr_, sizeof(raddr_));
-    }
-    DLOG("Resp %04x", tx_id_);
-  }
-
-  ~Request() {
-    curl_easy_cleanup(curl_);
-    free(buf_);
-  }
-
- private:
-  CURL *curl_;
-  uint16_t tx_id_;
-  char *buf_;
-  size_t len_;
-  sockaddr_in raddr_;
-
-  static size_t WriteBuffer(
-      void *contents, size_t size, size_t nmemb, void *userp) {
-    Request *req = (Request *)userp;
-    char *new_buf = (char *)realloc(req->buf_, req->len_ + size * nmemb + 1);
-    if(new_buf == NULL) {
-      ELOG("Out of memory!");
-      return 0;
-    }
-    req->buf_ = new_buf;
-    memcpy(&(req->buf_[req->len_]), contents, size * nmemb);
-    req->len_ += size * nmemb;
-    // note: this doesn't mean strlen() is safe, just that we shouldn't overrun.
-    req->buf_[req->len_] = '\0';
-    return size * nmemb;
-  }
-};
 
 // Multiplexes three things, forever:
 //  1. Listening socket for incoming DNS requests.
 //  2. Outgoing sockets for HTTPS requests.
 //  3. Outgoing socket for periodic DNS client query for dns.google.com.
-void RunSelectLoop(const Options& opt, int listen_sock) {
+static void RunSelectLoop(const struct Options* opt, int listen_sock) {
   CURLM *curlm = curl_multi_init();
   curl_multi_setopt(curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
 
-  // Avoid C++ map, etc for symbol bloat.
-  // We don't bother sorting this, so O(n) cost in number of concurrent
-  // requests. I assume this won't hurt much.
-  Request* reqs[4096];
+  // Note: I don't bother sorting this, so O(n) cost in number of concurrent
+  // requests. I assume this won't hurt much given typical concurrency levels.
+  const int max_reqs = 1024;
+  struct Request reqs[max_reqs];
   int num_reqs = 0;
 
   // DNS client.
@@ -157,15 +87,15 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
   if (ares_init(&ares) != ARES_SUCCESS) {
     FLOG("Failed to init c-ares channel");
   }
-  if (ares_set_servers_csv(ares, opt.bootstrap_dns) != ARES_SUCCESS) {
-    FLOG("Failed to set DNS servers to '%s'.", opt.bootstrap_dns);
+  if (ares_set_servers_csv(ares, opt->bootstrap_dns) != ARES_SUCCESS) {
+    FLOG("Failed to set DNS servers to '%s'.", opt->bootstrap_dns);
   }
   // 60 seconds poll. Rely on c-ares to honor DNS TTL.
   const time_t client_req_interval = 60; 
   time_t last_client_req_time = 0;
-  curl_slist *client_resolv = NULL;
+  struct curl_slist *client_resolv = NULL;
 
-  while (gKeepRunning) {
+  while (g_keep_running) {
     fd_set rfd, wfd, efd;
     int max_fd;
 
@@ -179,11 +109,11 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
 
     // Curl tells us how long select should wait.
     long curl_timeo;
-    timeval timeout;
+    struct timeval tv;
     curl_multi_timeout(curlm, &curl_timeo);
     if(curl_timeo < 0) curl_timeo = 1000;
-    timeout.tv_sec = curl_timeo / 1000;
-    timeout.tv_usec = (curl_timeo % 1000) * 1000;
+    tv.tv_sec = curl_timeo / 1000;
+    tv.tv_usec = (curl_timeo % 1000) * 1000;
 
     FD_ZERO(&rfd); FD_ZERO(&wfd); FD_ZERO(&efd); max_fd = 0;
     CURLMcode err;
@@ -197,21 +127,27 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
     int ares_max_fd = ares_fds(ares, &rfd, &wfd) - 1;
     max_fd = max_fd > ares_max_fd ? max_fd : ares_max_fd;
 
-    int r = select(max_fd + 1,  &rfd, &wfd, &efd, &timeout);
+    int r = select(max_fd + 1,  &rfd, &wfd, &efd, &tv);
     if (r < 0) continue; // Signal.
     if (r == 0) continue; // Timeout.
 
     // DNS request
     if (FD_ISSET(listen_sock, &rfd)) {
       unsigned char buf[1500];  // A whole MTU. We don't do TCP so any bigger is a waste.
-      sockaddr_in raddr;
+      struct sockaddr_in raddr;
       socklen_t raddr_size = sizeof(raddr);
       int len = recvfrom(listen_sock, buf, sizeof(buf), 0, 
-                         (sockaddr *)&raddr, &raddr_size);
+                         (struct sockaddr *)&raddr, &raddr_size);
       if (len < 0) {
         WLOG("recvfrom failed: %s", strerror(errno));
         continue;
       }
+
+      if (num_reqs >= max_reqs) {
+        WLOG("Too many requests in flight. Ignoring.");
+        continue;
+      }
+
       unsigned char *p = buf;
       uint16_t tx_id = ntohs(*(uint16_t*)p); p += 2;
       uint16_t flags = ntohs(*(uint16_t*)p); p += 2;
@@ -233,7 +169,7 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
       p += enc_len;
       uint16_t type = ntohs(*(uint16_t*)p); p += 2;
         
-      bool cd_bit = flags & (1 << 4);
+      int cd_bit = flags & (1 << 4);
       char *escaped_name = curl_escape(domain_name, strlen(domain_name));
       ares_free_string(domain_name);
       char url[1500] = {};
@@ -241,9 +177,9 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
           "https://dns.google.com/resolve?name=%s&type=%d%s",
           escaped_name, type, cd_bit ? "&cd=true" : "");
       curl_free(escaped_name);
-      Request *req = new Request(tx_id, url, raddr, client_resolv);
-      reqs[num_reqs++] = req;
-      curl_multi_add_handle(curlm, req->easy_handle());
+      request_init(&reqs[num_reqs], tx_id, url, raddr, client_resolv);
+      curl_multi_add_handle(curlm, reqs[num_reqs].curl);
+      num_reqs++;
     }
     // DNS response
     ares_process(ares, &rfd, &wfd);
@@ -258,12 +194,11 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
       while (m = curl_multi_info_read(curlm, &msgq)) {
         if(m->msg == CURLMSG_DONE) {
           for (int i = 0; i < num_reqs; i++) {
-            if (reqs[i]->easy_handle() == m->easy_handle) {
-              Request *req = reqs[i];
-              req->SendResponse(listen_sock);
-              reqs[i] = reqs[--num_reqs];
+            if (reqs[i].curl == m->easy_handle) {
+              request_send_response(&reqs[i], listen_sock);
               curl_multi_remove_handle(curlm, m->easy_handle);
-              delete req;
+              request_cleanup(&reqs[i]);
+              reqs[i] = reqs[--num_reqs];
               break;
             }
           }
@@ -276,8 +211,8 @@ void RunSelectLoop(const Options& opt, int listen_sock) {
 
   // Cancel all pending requests.
   for (int i = 0; i < num_reqs; i++) {
-    curl_multi_remove_handle(curlm, reqs[i]->easy_handle());
-    delete reqs[i];
+    curl_multi_remove_handle(curlm, reqs[i].curl);
+    request_cleanup(&reqs[i]);
   }
   curl_multi_cleanup(curlm);
   ares_destroy(ares);
@@ -298,7 +233,7 @@ int main(int argc, char *argv[]) {
   ares_library_init(ARES_LIB_INIT_ALL);
   curl_global_init(CURL_GLOBAL_DEFAULT);
 
-  sockaddr_in laddr, raddr;
+  struct sockaddr_in laddr, raddr;
   memset(&laddr, 0, sizeof(laddr));
   laddr.sin_family = AF_INET;
   laddr.sin_port = htons(opt.listen_port);
@@ -324,7 +259,7 @@ int main(int argc, char *argv[]) {
     FLOG("Can't set signal handler.");
   }
 
-  RunSelectLoop(opt, sock);
+  RunSelectLoop(&opt, sock);
 
   curl_global_cleanup();
   ares_library_cleanup();
