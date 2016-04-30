@@ -9,7 +9,7 @@ almost impossible.
 
 Features:
 
-* Tiny Size (50kiB when linked against external libcurl)
+* Tiny Size (32kiB when linked against external libcurl, libcares, libresolv)
 * Uses curl for HTTP/2 and pipelining, keeping resolve latencies extremely low.
 * Single-threaded, non-blocking select() server for use on resource-starved 
   embedded systems.

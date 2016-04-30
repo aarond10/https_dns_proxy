@@ -97,7 +97,8 @@ static void RunSelectLoop(const struct Options* opt, int listen_sock) {
 
   while (g_keep_running) {
     fd_set rfd, wfd, efd;
-    int max_fd;
+    int max_fd = 0;
+    FD_ZERO(&rfd); FD_ZERO(&wfd); FD_ZERO(&efd);
 
     // If we need to, send off a DNS request.
     if (last_client_req_time + client_req_interval < time(NULL)) {
@@ -115,9 +116,9 @@ static void RunSelectLoop(const struct Options* opt, int listen_sock) {
     tv.tv_sec = curl_timeo / 1000;
     tv.tv_usec = (curl_timeo % 1000) * 1000;
 
-    FD_ZERO(&rfd); FD_ZERO(&wfd); FD_ZERO(&efd); max_fd = 0;
     CURLMcode err;
-    if ((err = curl_multi_fdset(curlm, &rfd, &wfd, &efd, &max_fd)) != CURLM_OK) {
+    if ((err = curl_multi_fdset(
+         curlm, &rfd, &wfd, &efd, &max_fd)) != CURLM_OK) {
       FLOG("CURL error: %s", curl_multi_strerror(err));
     }
 
