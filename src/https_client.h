@@ -34,16 +34,15 @@ typedef struct {
   struct https_fetch_ctx *fetches;
 
   ev_timer timer;
-  ev_io fd[FD_SETSIZE];  // I'm lazy.
+  ev_io fd[FD_SETSIZE]; // I'm lazy.
   int still_running;
 } https_client_t;
 
 void https_client_init(https_client_t *c, struct ev_loop *loop);
 
-void https_client_fetch(https_client_t *c, 
-                        const char *url,
-                        struct curl_slist *resolv,
-                        https_response_cb cb, void *data);
+void https_client_fetch(https_client_t *c, const char *url,
+                        struct curl_slist *resolv, https_response_cb cb,
+                        void *data);
 
 void https_client_cleanup(https_client_t *c);
 

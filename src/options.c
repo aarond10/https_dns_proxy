@@ -28,38 +28,38 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int ix, c;
-  while((c = getopt(argc, argv, "a:p:du:g:b:l:v")) != -1) {
-    switch(c) {
-      case 'a':  // listen_addr
-        opt->listen_addr = optarg;
-        break;
-      case 'p':  // listen_port
-        opt->listen_port = atoi(optarg);
-        break;
-      case 'd':  // daemonize
-        opt->daemonize = 1;
-        break;
-      case 'u':  // user
-        opt->user = optarg;
-        break;
-      case 'g':  // group
-        opt->group = optarg;
-        break;
-      case 'b':  // bootstrap dns servers
-        opt->bootstrap_dns = optarg;
-        break;
-      case 'l':  // logfile
-        opt->logfile = optarg;
-        break;
-      case 'v': // verbose
-        opt->loglevel--;
-        break;
-      case '?':
-        printf("Unknown option '-%c'", c);
-        return -1;
-      default:
-        printf("Unknown state!");
-        exit(EXIT_FAILURE);
+  while ((c = getopt(argc, argv, "a:p:du:g:b:l:v")) != -1) {
+    switch (c) {
+    case 'a': // listen_addr
+      opt->listen_addr = optarg;
+      break;
+    case 'p': // listen_port
+      opt->listen_port = atoi(optarg);
+      break;
+    case 'd': // daemonize
+      opt->daemonize = 1;
+      break;
+    case 'u': // user
+      opt->user = optarg;
+      break;
+    case 'g': // group
+      opt->group = optarg;
+      break;
+    case 'b': // bootstrap dns servers
+      opt->bootstrap_dns = optarg;
+      break;
+    case 'l': // logfile
+      opt->logfile = optarg;
+      break;
+    case 'v': // verbose
+      opt->loglevel--;
+      break;
+    case '?':
+      printf("Unknown option '-%c'", c);
+      return -1;
+    default:
+      printf("Unknown state!");
+      exit(EXIT_FAILURE);
     }
   }
   if (opt->daemonize) {
@@ -77,7 +77,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     opt->gid = g->gr_gid;
   }
   if ((opt->logfd = open(opt->logfile, O_CREAT | O_WRONLY | O_APPEND,
-                         S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP)) <= 0) {
+                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
     printf("Logfile '%s' is not writable.\n", opt->logfile);
   }
   return 0;
@@ -91,7 +91,7 @@ void options_show_usage(int argc, char **argv) {
   printf("        [-l <logfile>]\n\n");
   printf("  -a listen_addr    Local address to bind to. (%s)\n",
          defaults.listen_addr);
-  printf("  -p listen_port    Local port to bind to (%d).\n", 
+  printf("  -p listen_port    Local port to bind to (%d).\n",
          defaults.listen_port);
   printf("  -d                Daemonize\n");
   printf("  -u user           User to drop to launched as root (%s).\n",
@@ -108,5 +108,6 @@ void options_show_usage(int argc, char **argv) {
 }
 
 void options_cleanup(struct Options *opt) {
-  if (opt->logfd > 0) close(opt->logfd);
+  if (opt->logfd > 0)
+    close(opt->logfd);
 }

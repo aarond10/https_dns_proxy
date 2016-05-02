@@ -23,13 +23,12 @@ typedef struct {
 // provided ev_loop. `bootstrap_dns` is a comma-separated list of DNS servers to
 // use for the lookup `hostname` every `interval_seconds`. For each successful
 // lookup, `cb` will be called with the resolved address.
-// 
+//
 // Note: hostname *not* copied. It should remain valid until
 // dns_poller_cleanup called.
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
-                     const char *bootstrap_dns,
-                     const char *hostname, int interval_seconds,
-                     dns_poller_cb cb, void *cb_data);
+                     const char *bootstrap_dns, const char *hostname,
+                     int interval_seconds, dns_poller_cb cb, void *cb_data);
 
 // Tears down timer and frees resources associated with a dns poller.
 void dns_poller_cleanup(dns_poller_t *d);

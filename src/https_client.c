@@ -23,7 +23,7 @@
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
   char *new_buf = (char *)realloc(ctx->buf, ctx->buflen + size * nmemb + 1);
-  if(new_buf == NULL) {
+  if (new_buf == NULL) {
     ELOG("Out of memory!");
     return 0;
   }
@@ -36,8 +36,7 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
 }
 
 static void https_fetch_ctx_init(https_client_t *client,
-                                 struct https_fetch_ctx *ctx,
-                                 const char *url,
+                                 struct https_fetch_ctx *ctx, const char *url,
                                  struct curl_slist *resolv,
                                  https_response_cb cb, void *cb_data) {
   ctx->curl = curl_easy_init();
@@ -49,7 +48,8 @@ static void https_fetch_ctx_init(https_client_t *client,
   client->fetches = ctx;
 
   CURLcode res;
-  if ((res = curl_easy_setopt(ctx->curl, CURLOPT_RESOLVE, resolv)) != CURLE_OK) {
+  if ((res = curl_easy_setopt(ctx->curl, CURLOPT_RESOLVE, resolv)) !=
+      CURLE_OK) {
     FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
   }
   curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
@@ -87,10 +87,10 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
 static void check_multi_info(https_client_t *c) {
   CURLMsg *msg;
   int msgs_left;
-  while((msg = curl_multi_info_read(c->curlm, &msgs_left))) {
-    if(msg->msg == CURLMSG_DONE) {
+  while ((msg = curl_multi_info_read(c->curlm, &msgs_left))) {
+    if (msg->msg == CURLMSG_DONE) {
       struct https_fetch_ctx *n = c->fetches;
-      while(n) {
+      while (n) {
         if (n->curl == msg->easy_handle) {
           https_fetch_ctx_cleanup(c, n);
           free(n);
@@ -105,27 +105,27 @@ static void check_multi_info(https_client_t *c) {
 static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
   https_client_t *c = (https_client_t *)w->data;
   CURLMcode rc = curl_multi_socket_action(
-      c->curlm, w->fd, 
-      (revents & EV_READ ? CURL_POLL_IN : 0) |
-      (revents & EV_WRITE ? CURL_POLL_OUT : 0), &c->still_running);
-  if (rc != CURLM_OK) {
-    FLOG("curl_multi_socket_action: %d", rc);
-  }
-  check_multi_info(c); 
-}
-
-static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
-  https_client_t *c = (https_client_t *)w->data;
-  CURLMcode rc = curl_multi_socket_action(
-      c->curlm, CURL_SOCKET_TIMEOUT, 0, &c->still_running);
+      c->curlm, w->fd, (revents & EV_READ ? CURL_POLL_IN : 0) |
+                           (revents & EV_WRITE ? CURL_POLL_OUT : 0),
+      &c->still_running);
   if (rc != CURLM_OK) {
     FLOG("curl_multi_socket_action: %d", rc);
   }
   check_multi_info(c);
 }
 
-static int multi_sock_cb(
-    CURL *curl, curl_socket_t sock, int what, https_client_t *c, void *sockp) {
+static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
+  https_client_t *c = (https_client_t *)w->data;
+  CURLMcode rc = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
+                                          &c->still_running);
+  if (rc != CURLM_OK) {
+    FLOG("curl_multi_socket_action: %d", rc);
+  }
+  check_multi_info(c);
+}
+
+static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
+                         https_client_t *c, void *sockp) {
   if (what == CURL_POLL_REMOVE) {
     ev_io_stop(c->loop, &c->fd[sock]);
     c->fd[sock].fd = 0;
@@ -133,9 +133,9 @@ static int multi_sock_cb(
   } else if (c->fd[sock].fd) {
     ev_io_stop(c->loop, &c->fd[sock]);
   }
-  ev_io_init(&c->fd[sock], sock_cb, sock, 
+  ev_io_init(&c->fd[sock], sock_cb, sock,
              ((what & CURL_POLL_IN) ? EV_READ : 0) |
-             ((what & CURL_POLL_OUT) ? EV_WRITE : 0));
+                 ((what & CURL_POLL_OUT) ? EV_WRITE : 0));
   c->fd[sock].data = c;
   ev_io_start(c->loop, &c->fd[sock]);
   return 0;
@@ -143,7 +143,7 @@ static int multi_sock_cb(
 
 static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
   ev_timer_stop(c->loop, &c->timer);
-  if(timeout_ms > 0) {
+  if (timeout_ms > 0) {
     ev_timer_init(&c->timer, timer_cb, timeout_ms / 1000.0, 0);
     c->timer.data = c;
     ev_timer_start(c->loop, &c->timer);
@@ -158,7 +158,8 @@ void https_client_init(https_client_t *c, struct ev_loop *loop) {
   c->curlm = curl_multi_init();
   c->fetches = NULL;
 
-  for (int i = 0; i < FD_SETSIZE; i++) c->fd[i].fd = 0;
+  for (int i = 0; i < FD_SETSIZE; i++)
+    c->fd[i].fd = 0;
 
   curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
@@ -167,11 +168,10 @@ void https_client_init(https_client_t *c, struct ev_loop *loop) {
   curl_multi_setopt(c->curlm, CURLMOPT_TIMERDATA, c);
 }
 
-void https_client_fetch(https_client_t *c, 
-                        const char *url,
-                        struct curl_slist *resolv,
-                        https_response_cb cb, void *data) {
-  struct https_fetch_ctx *new_ctx = 
+void https_client_fetch(https_client_t *c, const char *url,
+                        struct curl_slist *resolv, https_response_cb cb,
+                        void *data) {
+  struct https_fetch_ctx *new_ctx =
       (struct https_fetch_ctx *)malloc(sizeof(struct https_fetch_ctx));
   https_fetch_ctx_init(c, new_ctx, url, resolv, cb, data);
 }
@@ -188,7 +188,8 @@ void https_client_cleanup(https_client_t *c) {
   curl_multi_cleanup(c->curlm);
 
   for (int i = 0; i < FD_SETSIZE; i++) {
-    if (c->fd[i].fd) ev_io_stop(c->loop, &c->fd[i]);
+    if (c->fd[i].fd)
+      ev_io_stop(c->loop, &c->fd[i]);
   }
 
   ev_timer_stop(c->loop, &c->timer);

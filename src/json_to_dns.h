@@ -4,7 +4,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif 
+#endif
 // Creates a DNS packet from a JSON representation.
 // 'tx_id' is the ID to use in the packet, 'in' is the JSON representation.
 // (https://developers.google.com/speed/public-dns/docs/dns-over-https#dns_response_in_json)
@@ -13,6 +13,6 @@ extern "C" {
 int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen);
 #ifdef __cplusplus
 }
-#endif 
+#endif
 
-#endif  // _JSON_TO_DNS_H_
+#endif // _JSON_TO_DNS_H_

@@ -13,15 +13,13 @@
 #include "logging.h"
 
 static void sock_cb(struct ev_loop *loop, ev_io *w, int revents) {
-  dns_poller_t *d = (dns_poller_t*)w->data;
-  ares_process_fd(
-      d->ares, 
-      (revents & EV_READ) ? w->fd : ARES_SOCKET_BAD,
-      (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
+  dns_poller_t *d = (dns_poller_t *)w->data;
+  ares_process_fd(d->ares, (revents & EV_READ) ? w->fd : ARES_SOCKET_BAD,
+                  (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
 }
 
 static void sock_state_cb(void *data, int fd, int read, int write) {
-  dns_poller_t *d = (dns_poller_t*)data;
+  dns_poller_t *d = (dns_poller_t *)data;
   if (!read && !write) {
     ev_io_stop(d->loop, &d->fd[fd]);
     d->fd[fd].fd = 0;
@@ -40,26 +38,26 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
 }
 
 static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
-  dns_poller_t *d = (dns_poller_t*)arg;
+  dns_poller_t *d = (dns_poller_t *)arg;
   if (status != ARES_SUCCESS) {
     WLOG("DNS lookup failed: %d", status);
-  } else if (!h|| h->h_length < 1) {
+  } else if (!h || h->h_length < 1) {
     WLOG("No hosts.");
   } else {
-    d->cb(d->cb_data, (struct sockaddr_in*)h->h_addr_list[0]);
+    d->cb(d->cb_data, (struct sockaddr_in *)h->h_addr_list[0]);
   }
 }
 
-static void timer_cb(struct ev_loop* loop, ev_timer *w, int revents) {
-  dns_poller_t *d = (dns_poller_t*)w->data;
+static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
+  dns_poller_t *d = (dns_poller_t *)w->data;
   ares_gethostbyname(d->ares, d->hostname, AF_INET, ares_cb, d);
 }
 
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
-                     const char *bootstrap_dns,
-                     const char *hostname, int interval_seconds,
-                     dns_poller_cb cb, void *cb_data) {
-  for (int i = 0; i < FD_SETSIZE; i++) d->fd[i].fd = 0;
+                     const char *bootstrap_dns, const char *hostname,
+                     int interval_seconds, dns_poller_cb cb, void *cb_data) {
+  for (int i = 0; i < FD_SETSIZE; i++)
+    d->fd[i].fd = 0;
 
   int r;
   ares_library_init(ARES_LIB_INIT_ALL);

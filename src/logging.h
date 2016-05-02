@@ -3,7 +3,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif 
+#endif
 // Initializes logging.
 // Writes logs to descriptor 'fd' for log levels above or equal to 'level'.
 void logging_init(int fd, int level);
@@ -32,4 +32,4 @@ enum _LogSeverity {
 #define ELOG(...) _log(__FILE__, __LINE__, LOG_ERROR, __VA_ARGS__)
 #define FLOG(...) _log(__FILE__, __LINE__, LOG_FATAL, __VA_ARGS__)
 
-#endif  // _LOGGING_H_
+#endif // _LOGGING_H_

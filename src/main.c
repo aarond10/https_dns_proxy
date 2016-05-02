@@ -1,7 +1,7 @@
 // Simple UDP-to-HTTPS DNS Proxy
 //
 // (C) 2016 Aaron Drew
-// 
+//
 // Intended for use with Google's Public-DNS over HTTPS service
 // (https://developers.google.com/speed/public-dns/docs/dns-over-https)
 #include <sys/socket.h>
@@ -44,7 +44,7 @@ typedef struct {
 } request_t;
 
 static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
-  ev_break (loop, EVBREAK_ALL);
+  ev_break(loop, EVBREAK_ALL);
 }
 
 static int is_printable(int ch) {
@@ -54,24 +54,32 @@ static void debug_dump(unsigned char *buf, unsigned int buflen) {
   unsigned char *end = buf + buflen;
   int i;
   for (i = 0; buf < end; i++, buf++) {
-    if (i && !(i%16)) {
+    if (i && !(i % 16)) {
       printf(" ");
-      for (int j = 0; j < 16; j++) 
-        printf("%c", is_printable(buf[j-16]) ? buf[j-16] : '.');
+      for (int j = 0; j < 16; j++)
+        printf("%c", is_printable(buf[j - 16]) ? buf[j - 16] : '.');
       printf("\n");
     }
     printf("%02x ", *buf);
   }
-  while ((i%16)) { printf("   "); buf++; i++; }
+  while ((i % 16)) {
+    printf("   ");
+    buf++;
+    i++;
+  }
   printf(" ");
   buf -= 16;
-  while (buf < end) { printf("%c", is_printable(*buf) ? *buf : '.'); buf++; }
+  while (buf < end) {
+    printf("%c", is_printable(*buf) ? *buf : '.');
+    buf++;
+  }
   printf("\n");
 }
 
 static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   request_t *req = (request_t *)data;
-  if (strlen(buf) > buflen) FLOG("Buffer overflow! Wat?!");
+  if (strlen(buf) > buflen)
+    FLOG("Buffer overflow! Wat?!");
 
   DLOG("Received response for id %04x: %s", req->tx_id, buf);
 
@@ -81,35 +89,34 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   if ((r = json_to_dns(req->tx_id, buf, obuf, obuf_size)) <= 0) {
     ELOG("Failed to decode JSON.");
   } else {
-    //debug_dump(obuf, r);
+    // debug_dump(obuf, r);
     dns_server_respond(req->dns_server, req->raddr, obuf, r);
   }
   free(req);
 }
 
-static void dns_server_cb(
-    dns_server_t *dns_server, void *data, struct sockaddr_in addr,
-    uint16_t tx_id, uint16_t flags, const char *name, int type) {
+static void dns_server_cb(dns_server_t *dns_server, void *data,
+                          struct sockaddr_in addr, uint16_t tx_id,
+                          uint16_t flags, const char *name, int type) {
   app_state_t *app = (app_state_t *)data;
 
-  DLOG("Received request for '%s' id: %04x, type %d, flags %04x", 
-       name, tx_id, type, flags);
-    
+  DLOG("Received request for '%s' id: %04x, type %d, flags %04x", name, tx_id,
+       type, flags);
+
   // Build URL
   int cd_bit = flags & (1 << 4);
   char *escaped_name = curl_escape(name, strlen(name));
   char url[1500] = {};
-  snprintf(url, sizeof(url)-1,
-      "https://dns.google.com/resolve?name=%s&type=%d%s",
-      escaped_name, type, cd_bit ? "&cd=true" : "");
+  snprintf(url, sizeof(url) - 1,
+           "https://dns.google.com/resolve?name=%s&type=%d%s", escaped_name,
+           type, cd_bit ? "&cd=true" : "");
   curl_free(escaped_name);
 
   request_t *req = (request_t *)malloc(sizeof(request_t));
   req->tx_id = tx_id;
   req->raddr = addr;
   req->dns_server = dns_server;
-  https_client_fetch(
-      app->https_client, url, app->resolv, https_resp_cb, req);
+  https_client_fetch(app->https_client, url, app->resolv, https_resp_cb, req);
 }
 
 static void dns_poll_cb(void *data, struct sockaddr_in *addr) {
@@ -122,7 +129,6 @@ static void dns_poll_cb(void *data, struct sockaddr_in *addr) {
   curl_slist_free_all(*resolv);
   *resolv = curl_slist_append(NULL, buf);
 }
-
 
 int main(int argc, char *argv[]) {
   struct ev_loop *loop = EV_DEFAULT;
@@ -146,13 +152,14 @@ int main(int argc, char *argv[]) {
   app.resolv = resolv;
 
   dns_server_t dns_server;
-  dns_server_init(&dns_server, loop,
-                  opt.listen_addr, opt.listen_port,
+  dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
                   dns_server_cb, &app);
 
   if (opt.daemonize) {
-    if (setgid(opt.gid)) FLOG("Failed to set gid.");
-    if (setuid(opt.uid)) FLOG("Failed to set uid.");
+    if (setgid(opt.gid))
+      FLOG("Failed to set gid.");
+    if (setuid(opt.uid))
+      FLOG("Failed to set uid.");
     // daemon() is non-standard. If needed, see OpenSSH openbsd-compat/daemon.c
     daemon(0, 0);
   }
@@ -162,8 +169,8 @@ int main(int argc, char *argv[]) {
   ev_signal_start(loop, &sigint);
 
   dns_poller_t dns_poller;
-  dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
-                  "dns.google.com", 120 /* seconds */, dns_poll_cb, &resolv);
+  dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, "dns.google.com",
+                  120 /* seconds */, dns_poll_cb, &resolv);
 
   ev_run(loop, 0);
 
