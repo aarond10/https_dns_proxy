@@ -75,7 +75,7 @@ static void debug_dump(unsigned char *buf, unsigned int buflen) {
   while ((i%16)) { printf("   "); buf++; i++; }
   printf(" ");
   buf -= 16;
-  while (buf < end) { printf("%c", isascii(*buf) ? *buf : '.'); buf++; }
+  while (buf < end) { printf("%c", is_printable(*buf) ? *buf : '.'); buf++; }
   printf("\n");
 }
 
