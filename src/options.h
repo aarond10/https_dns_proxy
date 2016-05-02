@@ -28,6 +28,7 @@ struct Options {
   // DNS servers to look up dns.google.com
   const char *bootstrap_dns;
 };
+typedef struct Options options_t;
 
 #ifdef __cplusplus
 extern "C" {

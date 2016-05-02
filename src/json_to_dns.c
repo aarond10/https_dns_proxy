@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "dns_packet.h"
+#include "json_to_dns.h"
 #include "logging.h"
 #include "nxjson.h"
 
@@ -115,7 +115,7 @@ int json_to_rdata(uint8_t type, char *data,
   };
   size_t r = pos - enc_len_pos - 2;
   NS_PUT16(r, enc_len_pos);
-  return r;
+  return r + 2;
 }
 
 int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
@@ -165,11 +165,14 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
     NS_PUT16(nx_json_get(subobj, "type")->int_value, pos);
     NS_PUT16(ns_c_in, pos);
   }
+  DLOG("Q done.");
   const char *rr_keys[] = { "Answer", "Authority", "Additional", NULL };
   for (int i = 0; rr_keys[i]; i++) {
     obj = nx_json_get(json, rr_keys[i]);
     if (obj->type == NX_JSON_ARRAY) {
+      DLOG("Doing %s.", rr_keys[i]);
       for (int j = 0; j < obj->length; j++) {
+        DLOG("%d of %d", j, obj->length);
         const nx_json *subobj = nx_json_item(obj, j);
         int r = ns_name_compress(nx_json_get(subobj, "name")->text_value,
                                  pos, end - pos, dnptrs, lastdnptr);

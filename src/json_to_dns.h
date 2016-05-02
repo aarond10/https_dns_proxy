@@ -1,6 +1,6 @@
 // A simple JSON -> DNS packet converter.
-#ifndef _DNSPACKET_H_
-#define _DNSPACKET_H_
+#ifndef _JSON_TO_DNS_H_
+#define _JSON_TO_DNS_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,4 +15,4 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen);
 }
 #endif 
 
-#endif  // _DNSPACKET_H_
+#endif  // _JSON_TO_DNS_H_
