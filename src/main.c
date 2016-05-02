@@ -43,16 +43,6 @@ typedef struct {
   dns_server_t *dns_server;
 } request_t;
 
-// rand() is used for tx_id selection in outgoing DNS requests.
-// This is probably overkill but seed the PRNG with a decent
-// source to minimize chance of sequence prediction.
-static void prng_init() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  srand(tv.tv_sec);
-  srand(rand() + tv.tv_usec);
-}
-
 static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
   ev_break (loop, EVBREAK_ALL);
 }
@@ -147,8 +137,6 @@ int main(int argc, char *argv[]) {
 
   logging_init(opt.logfd, opt.loglevel);
   curl_global_init(CURL_GLOBAL_DEFAULT);
-
-  prng_init();
 
   https_client_t https_client;
   https_client_init(&https_client, loop);
