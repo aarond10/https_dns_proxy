@@ -77,11 +77,15 @@ static void debug_dump(unsigned char *buf, unsigned int buflen) {
 }
 
 static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
+  if (buf == NULL) { // Timeout, DNS failure, or something similar.
+    return;
+  }
+  debug_dump(buf, buflen);
   request_t *req = (request_t *)data;
   if (strlen(buf) > buflen)
     FLOG("Buffer overflow! Wat?!");
 
-  DLOG("Received response for id %04x: %s", req->tx_id, buf);
+  DLOG("Received response for id %04x: %.*s", req->tx_id, buflen, buf);
 
   const int obuf_size = 1500;
   char obuf[obuf_size];
@@ -89,7 +93,6 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   if ((r = json_to_dns(req->tx_id, buf, obuf, obuf_size)) <= 0) {
     ELOG("Failed to decode JSON.");
   } else {
-    // debug_dump(obuf, r);
     dns_server_respond(req->dns_server, req->raddr, obuf, r);
   }
   free(req);
