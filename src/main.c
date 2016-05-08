@@ -145,6 +145,10 @@ int main(int argc, char *argv[]) {
   }
 
   logging_init(opt.logfd, opt.loglevel);
+
+  ILOG("System c-ares: %s", ares_version(NULL));
+  ILOG("System libcurl: %s", curl_version());
+
   curl_global_init(CURL_GLOBAL_DEFAULT);
 
   https_client_t https_client;

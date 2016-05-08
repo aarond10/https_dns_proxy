@@ -67,10 +67,28 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   struct ares_options options;
   options.sock_state_cb = sock_state_cb;
   options.sock_state_cb_data = d;
-  ares_init_options(&d->ares, &options, ARES_OPT_SOCK_STATE_CB);
 
-  if ((r = ares_set_servers_csv(d->ares, bootstrap_dns)) != ARES_SUCCESS) {
-    FLOG("ares_set_servers_csv error: %s", ares_strerror(r));
+  options.servers = NULL;
+  options.nservers = 0;
+  char *csv = (char *)malloc(strlen(bootstrap_dns)+1);
+  strcpy(csv, bootstrap_dns);
+  char *last = NULL;
+  char *ipstr = strtok_r(csv, ",", &last);
+  while (ipstr) {
+    options.servers = (struct in_addr *)realloc(
+        options.servers, sizeof(struct in_addr)*(options.nservers + 1));
+    if (ares_inet_pton(AF_INET, ipstr, 
+                       &options.servers[options.nservers++]) != 1) {
+      FLOG("Failed to parse '%s'", ipstr);
+    }
+    ipstr = strtok_r(NULL, ",", &last);
+  }
+  free(csv);
+
+  if ((r = ares_init_options(
+      &d->ares, &options, 
+      ARES_OPT_SOCK_STATE_CB | ARES_OPT_SERVERS)) != ARES_SUCCESS) {
+    FLOG("ares_init_options error: %s", ares_strerror(r));
   }
 
   d->loop = loop;
