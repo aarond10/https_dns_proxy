@@ -64,13 +64,14 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   if ((r = ares_init(&d->ares)) != ARES_SUCCESS) {
     FLOG("ares_init error: %s", ares_strerror(r));
   }
-  if ((r = ares_set_servers_csv(d->ares, bootstrap_dns)) != ARES_SUCCESS) {
-    FLOG("ares_set_servers_csv error: %s", ares_strerror(r));
-  }
   struct ares_options options;
   options.sock_state_cb = sock_state_cb;
   options.sock_state_cb_data = d;
   ares_init_options(&d->ares, &options, ARES_OPT_SOCK_STATE_CB);
+
+  if ((r = ares_set_servers_csv(d->ares, bootstrap_dns)) != ARES_SUCCESS) {
+    FLOG("ares_set_servers_csv error: %s", ares_strerror(r));
+  }
 
   d->loop = loop;
   d->hostname = hostname;
