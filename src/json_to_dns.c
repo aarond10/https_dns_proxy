@@ -99,7 +99,7 @@ static int dn_find_dnptr(const char *name,
 // dnptrs[0] should point to the start of the packet. dnptrs[1-n] point at$
 // previous domain names. dnptrs[n] should be NULL. lastdnptr should be$
 // &dnptrs[m] where m > n.
-int dn_name_compress(const char *name, uint8_t *out, size_t outlen,$
+int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
                      const uint8_t **dnptrs, const uint8_t **lastdnptr) {
   uint16_t out_ofs;
   uint16_t name_ofs = dn_find_dnptr(name, dnptrs, lastdnptr, &out_ofs);
