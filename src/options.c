@@ -7,6 +7,7 @@
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "logging.h"
@@ -15,7 +16,7 @@
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
-  opt->logfile = "/dev/stdout";
+  opt->logfile = "-";
   opt->logfd = -1;
   opt->loglevel = LOG_ERROR;
   opt->daemonize = 0;
@@ -76,8 +77,10 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     }
     opt->gid = g->gr_gid;
   }
-  if ((opt->logfd = open(opt->logfile, O_CREAT | O_WRONLY | O_APPEND,
-                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
+  if (!strcmp(opt->logfile, "-")) {
+    opt->logfd = STDOUT_FILENO;
+  } else if ((opt->logfd = open(opt->logfile, O_CREAT | O_WRONLY | O_APPEND,
+                                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
     printf("Logfile '%s' is not writable.\n", opt->logfile);
   }
   return 0;
