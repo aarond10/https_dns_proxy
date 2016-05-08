@@ -22,6 +22,9 @@
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
+  DLOG("write_buffer(%p, %d, %d, %p): ctx->buf %p, ctx->buflen %d",
+       buf, size, nmemb, userp, ctx->buf, ctx->buflen);
+
   char *new_buf = (char *)realloc(ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
     ELOG("Out of memory!");
@@ -179,11 +182,7 @@ void https_client_fetch(https_client_t *c, const char *url,
 void https_client_cleanup(https_client_t *c) {
   while (c->fetches) {
     https_fetch_ctx_cleanup(c, c->fetches);
-    struct https_fetch_ctx *next = c->fetches->next;
-    free(c->fetches);
-    c->fetches = next;
   }
-  c->fetches = NULL;
 
   curl_multi_cleanup(c->curlm);
 

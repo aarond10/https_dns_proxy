@@ -24,6 +24,7 @@
 
 #include <ares.h>
 #include <ev.h>
+#include "debug_utils.h"
 #include "dns_server.h"
 #include "dns_poller.h"
 #include "https_client.h"
@@ -47,40 +48,10 @@ static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
   ev_break(loop, EVBREAK_ALL);
 }
 
-static int is_printable(int ch) {
-  return (ch >= '0' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
-}
-static void debug_dump(unsigned char *buf, unsigned int buflen) {
-  unsigned char *end = buf + buflen;
-  int i;
-  for (i = 0; buf < end; i++, buf++) {
-    if (i && !(i % 16)) {
-      printf(" ");
-      for (int j = 0; j < 16; j++)
-        printf("%c", is_printable(buf[j - 16]) ? buf[j - 16] : '.');
-      printf("\n");
-    }
-    printf("%02x ", *buf);
-  }
-  while ((i % 16)) {
-    printf("   ");
-    buf++;
-    i++;
-  }
-  printf(" ");
-  buf -= 16;
-  while (buf < end) {
-    printf("%c", is_printable(*buf) ? *buf : '.');
-    buf++;
-  }
-  printf("\n");
-}
-
 static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   if (buf == NULL) { // Timeout, DNS failure, or something similar.
     return;
   }
-  debug_dump(buf, buflen);
   request_t *req = (request_t *)data;
   if (strlen(buf) > buflen)
     FLOG("Buffer overflow! Wat?!");
@@ -135,7 +106,6 @@ static void dns_poll_cb(void *data, struct sockaddr_in *addr) {
 
 int main(int argc, char *argv[]) {
   struct ev_loop *loop = EV_DEFAULT;
-  struct curl_slist *resolv = NULL;
 
   struct Options opt;
   options_init(&opt);
@@ -156,7 +126,7 @@ int main(int argc, char *argv[]) {
 
   app_state_t app;
   app.https_client = &https_client;
-  app.resolv = resolv;
+  app.resolv = NULL;
 
   dns_server_t dns_server;
   dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
@@ -177,13 +147,13 @@ int main(int argc, char *argv[]) {
 
   dns_poller_t dns_poller;
   dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, "dns.google.com",
-                  120 /* seconds */, dns_poll_cb, &resolv);
+                  120 /* seconds */, dns_poll_cb, &app.resolv);
 
   ev_run(loop, 0);
 
   dns_poller_cleanup(&dns_poller);
 
-  curl_slist_free_all(resolv);
+  curl_slist_free_all(app.resolv);
 
   ev_signal_stop(loop, &sigint);
   dns_server_cleanup(&dns_server);
