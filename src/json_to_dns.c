@@ -43,7 +43,7 @@ static int dn_match(const char *str, const uint8_t *pos, const uint8_t *pkt_star
     }
     pos++;
     if (strlen(str) < len) {
-      DLOG("Domain longer than string. %d > %d.", len, strlen(str));
+      // If domain is longer than the suffix we're checking, it's no match.
       return 0;
     }
     if (memcmp(str, pos, len)) return 0;
