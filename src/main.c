@@ -48,24 +48,29 @@ static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
   ev_break(loop, EVBREAK_ALL);
 }
 
+static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
+  DLOG("Received SIGPIPE. Ignoring.");
+}
+
 static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   if (buf == NULL) { // Timeout, DNS failure, or something similar.
     return;
   }
   request_t *req = (request_t *)data;
-  if (strlen(buf) > buflen)
-    FLOG("Buffer overflow! Wat?!");
+  char *bufcpy = (char *)calloc(1, buflen + 1);
+  memcpy(bufcpy, buf, buflen);
 
-  DLOG("Received response for id %04x: %.*s", req->tx_id, buflen, buf);
+  DLOG("Received response for id %04x: %.*s", req->tx_id, buflen, bufcpy);
 
   const int obuf_size = 1500;
   char obuf[obuf_size];
   int r;
-  if ((r = json_to_dns(req->tx_id, buf, obuf, obuf_size)) <= 0) {
+  if ((r = json_to_dns(req->tx_id, bufcpy, obuf, obuf_size)) <= 0) {
     ELOG("Failed to decode JSON.");
   } else {
     dns_server_respond(req->dns_server, req->raddr, obuf, r);
   }
+  free(bufcpy);
   free(req);
 }
 
@@ -86,7 +91,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
            type, cd_bit ? "&cd=true" : "");
   curl_free(escaped_name);
 
-  request_t *req = (request_t *)malloc(sizeof(request_t));
+  request_t *req = (request_t *)calloc(1, sizeof(request_t));
   req->tx_id = tx_id;
   req->raddr = addr;
   req->dns_server = dns_server;
@@ -141,6 +146,10 @@ int main(int argc, char *argv[]) {
     daemon(0, 0);
   }
 
+  ev_signal sigpipe;
+  ev_signal_init(&sigpipe, sigpipe_cb, SIGPIPE);
+  ev_signal_start(loop, &sigpipe);
+
   ev_signal sigint;
   ev_signal_init(&sigint, sigint_cb, SIGINT);
   ev_signal_start(loop, &sigint);
@@ -159,8 +168,11 @@ int main(int argc, char *argv[]) {
   dns_server_cleanup(&dns_server);
   https_client_cleanup(&https_client);
 
+  ev_loop_destroy(loop);
+
   curl_global_cleanup();
   logging_cleanup();
   options_cleanup(&opt);
+
   return EXIT_SUCCESS;
 }

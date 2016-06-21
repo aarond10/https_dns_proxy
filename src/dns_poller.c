@@ -61,16 +61,14 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
 
   int r;
   ares_library_init(ARES_LIB_INIT_ALL);
-  if ((r = ares_init(&d->ares)) != ARES_SUCCESS) {
-    FLOG("ares_init error: %s", ares_strerror(r));
-  }
+
   struct ares_options options;
   options.sock_state_cb = sock_state_cb;
   options.sock_state_cb_data = d;
 
   options.servers = NULL;
   options.nservers = 0;
-  char *csv = (char *)malloc(strlen(bootstrap_dns)+1);
+  char *csv = (char *)calloc(1, strlen(bootstrap_dns)+1);
   strcpy(csv, bootstrap_dns);
   char *last = NULL;
   char *ipstr = strtok_r(csv, ",", &last);
@@ -90,6 +88,8 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
       ARES_OPT_SOCK_STATE_CB | ARES_OPT_SERVERS)) != ARES_SUCCESS) {
     FLOG("ares_init_options error: %s", ares_strerror(r));
   }
+
+  free(options.servers);
 
   d->loop = loop;
   d->hostname = hostname;

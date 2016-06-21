@@ -22,9 +22,6 @@
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
-  DLOG("write_buffer(%p, %d, %d, %p): ctx->buf %p, ctx->buflen %d",
-       buf, size, nmemb, userp, ctx->buf, ctx->buflen);
-
   char *new_buf = (char *)realloc(ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
     ELOG("Out of memory!");
@@ -148,7 +145,6 @@ static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms > 0) {
     ev_timer_init(&c->timer, timer_cb, timeout_ms / 1000.0, 0);
-    c->timer.data = c;
     ev_timer_start(c->loop, &c->timer);
   } else {
     timer_cb(c->loop, &c->timer, 0);
@@ -157,25 +153,27 @@ static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
 }
 
 void https_client_init(https_client_t *c, struct ev_loop *loop) {
+  memset(c, 0, sizeof(*c));
   c->loop = loop;
   c->curlm = curl_multi_init();
   c->fetches = NULL;
+  c->timer.data = c;
 
   for (int i = 0; i < FD_SETSIZE; i++)
     c->fd[i].fd = 0;
 
   curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
-  curl_multi_setopt(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETDATA, c);
-  curl_multi_setopt(c->curlm, CURLMOPT_TIMERFUNCTION, multi_timer_cb);
+  curl_multi_setopt(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   curl_multi_setopt(c->curlm, CURLMOPT_TIMERDATA, c);
+  curl_multi_setopt(c->curlm, CURLMOPT_TIMERFUNCTION, multi_timer_cb);
 }
 
 void https_client_fetch(https_client_t *c, const char *url,
                         struct curl_slist *resolv, https_response_cb cb,
                         void *data) {
   struct https_fetch_ctx *new_ctx =
-      (struct https_fetch_ctx *)malloc(sizeof(struct https_fetch_ctx));
+      (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
   https_fetch_ctx_init(c, new_ctx, url, resolv, cb, data);
 }
 
@@ -184,12 +182,10 @@ void https_client_cleanup(https_client_t *c) {
     https_fetch_ctx_cleanup(c, c->fetches);
   }
 
-  curl_multi_cleanup(c->curlm);
-
   for (int i = 0; i < FD_SETSIZE; i++) {
     if (c->fd[i].fd)
       ev_io_stop(c->loop, &c->fd[i]);
   }
-
   ev_timer_stop(c->loop, &c->timer);
+  curl_multi_cleanup(c->curlm);
 }

@@ -123,7 +123,7 @@ int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
     if (end - pos < 1) return -1;
     *pos++ = 0;
   }
-  if (((*out) & 0xc0) != 0xc0) {  // Don't keep duplicate dnptrs.
+  if ((*out & 0xc0) != 0xc0) {  // Don't keep duplicate dnptrs.
     const uint8_t **d = &dnptrs[1];
     while (*d && d < lastdnptr) d++;
     if (d < lastdnptr) {
