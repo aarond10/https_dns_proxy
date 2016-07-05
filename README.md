@@ -35,10 +35,22 @@ There is no installer at this stage - just run it.
 # ./https_dns_proxy -u nobody -g nogroup -d
 ```
 
-### OpenWRT
+### OpenWRT package install
 
-I've got a pending pull request to add net/https-dns-proxy to the OpenWRT
-package repository. My repo lives [here](https://github.com/aarond10/packages).
+I maintain a package in the [OpenWRT packages](https://github.com/openwrt/packages) repository as well.
+You can install as follows:
+
+
+```
+root@OpenWrt:~# opkg update
+root@OpenWrt:~# opkg install https_dns_proxy
+root@OpenWrt:~# /etc/init.d/https_dns_proxy enable
+root@OpenWrt:~# /etc/init.d/https_dns_proxy start
+```
+
+Replace any 'list server' lines in `/etc/config/dhcp` with:
+
+`list server '127.0.0.1#5053'`
 
 ## TODO
 
