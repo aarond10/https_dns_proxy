@@ -52,6 +52,12 @@ Replace any 'list server' lines in `/etc/config/dhcp` with:
 
 `list server '127.0.0.1#5053'`
 
+You will also want to add the line:
+
+`noresolv '1'`
+
+This prevents dnsmasq from using /etc/resolv.conf DNS servers, leaving only our proxy server.
+
 ## TODO
 
 * Test coverage could be better.
