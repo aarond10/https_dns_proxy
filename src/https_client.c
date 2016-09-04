@@ -58,6 +58,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);
   curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
   curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.1");
+  curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
   curl_multi_add_handle(client->curlm, ctx->curl);
 }
 
@@ -104,6 +105,9 @@ static void check_multi_info(https_client_t *c) {
 
 static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
   https_client_t *c = (https_client_t *)w->data;
+  if (c == NULL) {
+    FLOG("c is NULL");
+  }
   CURLMcode rc = curl_multi_socket_action(
       c->curlm, w->fd, (revents & EV_READ ? CURL_POLL_IN : 0) |
                            (revents & EV_WRITE ? CURL_POLL_OUT : 0),
@@ -179,7 +183,9 @@ void https_client_fetch(https_client_t *c, const char *url,
 
 void https_client_cleanup(https_client_t *c) {
   while (c->fetches) {
-    https_fetch_ctx_cleanup(c, c->fetches);
+    struct https_fetch_ctx *n = c->fetches;
+    https_fetch_ctx_cleanup(c, n);
+    free(n);
   }
 
   for (int i = 0; i < FD_SETSIZE; i++) {

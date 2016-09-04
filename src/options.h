@@ -8,6 +8,15 @@ struct Options {
   const char *listen_addr;
   uint16_t listen_port;
 
+  // Google DNS can accept an edns_client_subnet option.
+  // (https://tools.ietf.org/html/draft-ietf-dnsop-edns-client-subnet-08)
+  // This can be used to localize DNS responses to the clients region to (say)
+  // return the lowest latency CDN endpoint for some content.
+  // It could also be used for geo-blocking and privacy invading user tracking.
+  // If an IPv4 subnet is specified here, all requests will be made as if from
+  // this address for supported domain resolvers.
+  const char *edns_client_subnet;
+
   // Logfile.
   const char *logfile;
   int logfd;

@@ -16,6 +16,7 @@
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
+  opt->edns_client_subnet = "";
   opt->logfile = "-";
   opt->logfd = -1;
   opt->loglevel = LOG_ERROR;
@@ -29,13 +30,16 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int ix, c;
-  while ((c = getopt(argc, argv, "a:p:du:g:b:l:v")) != -1) {
+  while ((c = getopt(argc, argv, "a:p:e:du:g:b:l:v")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
       break;
     case 'p': // listen_port
       opt->listen_port = atoi(optarg);
+      break;
+    case 'e': // edns_client_subnet
+      opt->edns_client_subnet = optarg;
       break;
     case 'd': // daemonize
       opt->daemonize = 1;
@@ -90,23 +94,26 @@ void options_show_usage(int argc, char **argv) {
   struct Options defaults;
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);
-  printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
+  printf("        [-e <subnet>] [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
   printf("        [-l <logfile>]\n\n");
   printf("  -a listen_addr    Local address to bind to. (%s)\n",
          defaults.listen_addr);
-  printf("  -p listen_port    Local port to bind to (%d).\n",
+  printf("  -p listen_port    Local port to bind to. (%d)\n",
          defaults.listen_port);
-  printf("  -d                Daemonize\n");
-  printf("  -u user           User to drop to launched as root (%s).\n",
+  printf("  -e subnet_addr    An edns-client-subnet to use such as "
+                             "\"203.31.0.0/16\". (%s)\n",
+         defaults.edns_client_subnet);
+  printf("  -d                Daemonize.\n");
+  printf("  -u user           User to drop to launched as root. (%s)\n",
          defaults.user);
-  printf("  -g group          Group to drop to launched as root (%s).\n",
+  printf("  -g group          Group to drop to launched as root. (%s)\n",
          defaults.group);
   printf("  -b dns_servers    Comma separated IPv4 address of DNS servers\n");
-  printf("                    to resolve dns.google.com (%s)\n",
+  printf("                    to resolve dns.google.com. (%s)\n",
          defaults.bootstrap_dns);
   printf("  -l logfile        Path to file to log to. (%s)\n",
          defaults.logfile);
-  printf("  -v                Increase logging verbosity (INFO)\n");
+  printf("  -v                Increase logging verbosity. (INFO)\n");
   options_cleanup(&defaults);
 }
 

@@ -36,6 +36,8 @@
 typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
+  // currently only used for edns_client_subnet, if specified.
+  const char *extra_request_args;
 } app_state_t;
 
 typedef struct {
@@ -49,15 +51,22 @@ static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
 }
 
 static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
-  DLOG("Received SIGPIPE. Ignoring.");
+  ELOG("Received SIGPIPE. Ignoring.");
 }
 
 static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
+  DLOG("buflen %u\n", buflen);
   if (buf == NULL) { // Timeout, DNS failure, or something similar.
     return;
   }
   request_t *req = (request_t *)data;
+  if (req == NULL) {
+    FLOG("data NULL");
+  }
   char *bufcpy = (char *)calloc(1, buflen + 1);
+  if (bufcpy == NULL) {
+    FLOG("calloc");
+  }
   memcpy(bufcpy, buf, buflen);
 
   DLOG("Received response for id %04x: %.*s", req->tx_id, buflen, bufcpy);
@@ -87,8 +96,9 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   char *escaped_name = curl_escape(name, strlen(name));
   char url[1500] = {};
   snprintf(url, sizeof(url) - 1,
-           "https://dns.google.com/resolve?name=%s&type=%d%s", escaped_name,
-           type, cd_bit ? "&cd=true" : "");
+           "https://dns.google.com/resolve?name=%s&type=%d%s%s",
+           escaped_name, type, cd_bit ? "&cd=true" : "",
+           app->extra_request_args);
   curl_free(escaped_name);
 
   request_t *req = (request_t *)calloc(1, sizeof(request_t));
@@ -110,8 +120,6 @@ static void dns_poll_cb(void *data, struct sockaddr_in *addr) {
 }
 
 int main(int argc, char *argv[]) {
-  struct ev_loop *loop = EV_DEFAULT;
-
   struct Options opt;
   options_init(&opt);
   if (options_parse_args(&opt, argc, argv)) {
@@ -124,7 +132,14 @@ int main(int argc, char *argv[]) {
   ILOG("System c-ares: %s", ares_version(NULL));
   ILOG("System libcurl: %s", curl_version());
 
+  // Note: curl intentionally uses uninitialized stack variables and similar
+  // tricks to increase it's entropy pool. This confuses valgrind and leaks
+  // through to errors about use of uninitialized values in our code. :(
   curl_global_init(CURL_GLOBAL_DEFAULT);
+
+  // Note: This calls ev_default_loop(0) which never cleans up.
+  //       valgrind will report a leak. :(
+  struct ev_loop *loop = EV_DEFAULT;
 
   https_client_t https_client;
   https_client_init(&https_client, loop);
@@ -132,6 +147,13 @@ int main(int argc, char *argv[]) {
   app_state_t app;
   app.https_client = &https_client;
   app.resolv = NULL;
+  if (opt.edns_client_subnet[0]) {
+    static char buf[200];
+    memset(buf, 0, sizeof(buf));
+    snprintf(buf, sizeof(buf)-1, "&edns_client_subnet=%s",
+             opt.edns_client_subnet);
+    app.extra_request_args = buf;
+  }
 
   dns_server_t dns_server;
   dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
