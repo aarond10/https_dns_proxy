@@ -40,7 +40,6 @@ There is no installer at this stage - just run it.
 I maintain a package in the [OpenWRT packages](https://github.com/openwrt/packages) repository as well.
 You can install as follows:
 
-
 ```
 root@OpenWrt:~# opkg update
 root@OpenWrt:~# opkg install https_dns_proxy
@@ -52,11 +51,32 @@ Replace any 'list server' lines in `/etc/config/dhcp` with:
 
 `list server '127.0.0.1#5053'`
 
-You will also want to add the line:
+You may also want to add the line:
 
 `noresolv '1'`
 
 This prevents dnsmasq from using /etc/resolv.conf DNS servers, leaving only our proxy server.
+
+## Usage
+
+Just run it as a daemon and point traffic at it. Commandline flags are:
+
+```
+Usage: https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
+        [-e <subnet>] [-d] [-u <user>] [-g <group>] [-b <dns_servers>]
+        [-l <logfile>]
+
+  -a listen_addr    Local address to bind to. (127.0.0.1)
+  -p listen_port    Local port to bind to. (5053)
+  -e subnet_addr    An edns-client-subnet to use such as "203.31.0.0/16". ()
+  -d                Daemonize.
+  -u user           User to drop to launched as root. (nobody)
+  -g group          Group to drop to launched as root. (nobody)
+  -b dns_servers    Comma separated IPv4 address of DNS servers
+                    to resolve dns.google.com. (8.8.8.8,8.8.4.4)
+  -l logfile        Path to file to log to. (-)
+  -v                Increase logging verbosity. (INFO)
+```
 
 ## TODO
 
