@@ -153,6 +153,8 @@ int main(int argc, char *argv[]) {
     snprintf(buf, sizeof(buf)-1, "&edns_client_subnet=%s",
              opt.edns_client_subnet);
     app.extra_request_args = buf;
+  } else {
+    app.extra_request_args = "";
   }
 
   dns_server_t dns_server;
