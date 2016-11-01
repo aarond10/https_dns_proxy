@@ -6,6 +6,8 @@
 #include <ev.h>
 #include <stdint.h>
 
+#include "options.h"
+
 // Callback type for receiving data when a transfer finishes.
 typedef void (*https_response_cb)(void *data, uint8_t *buf, uint32_t buflen);
 
@@ -36,9 +38,11 @@ typedef struct {
   ev_timer timer;
   ev_io fd[FD_SETSIZE]; // I'm lazy.
   int still_running;
+
+  options_t *opt;
 } https_client_t;
 
-void https_client_init(https_client_t *c, struct ev_loop *loop);
+void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop);
 
 void https_client_fetch(https_client_t *c, const char *url,
                         struct curl_slist *resolv, https_response_cb cb,

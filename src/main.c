@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
   struct ev_loop *loop = EV_DEFAULT;
 
   https_client_t https_client;
-  https_client_init(&https_client, loop);
+  https_client_init(&https_client, &opt, loop);
 
   app_state_t app;
   app.https_client = &https_client;

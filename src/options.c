@@ -26,11 +26,12 @@ void options_init(struct Options *opt) {
   opt->uid = -1;
   opt->gid = -1;
   opt->bootstrap_dns = "8.8.8.8,8.8.4.4";
+  opt->curl_proxy = NULL;
 };
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int ix, c;
-  while ((c = getopt(argc, argv, "a:p:e:du:g:b:l:v")) != -1) {
+  while ((c = getopt(argc, argv, "a:p:e:du:g:b:t:l:v")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -52,6 +53,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'b': // bootstrap dns servers
       opt->bootstrap_dns = optarg;
+      break;
+    case 't': // curl http proxy
+      opt->curl_proxy = optarg;
       break;
     case 'l': // logfile
       opt->logfile = optarg;
@@ -111,6 +115,8 @@ void options_show_usage(int argc, char **argv) {
   printf("  -b dns_servers    Comma separated IPv4 address of DNS servers\n");
   printf("                    to resolve dns.google.com. (%s)\n",
          defaults.bootstrap_dns);
+  printf("  -t proxy_server   Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
+  printf("                    (Initial DNS resolution can't be done over this.)\n");
   printf("  -l logfile        Path to file to log to. (%s)\n",
          defaults.logfile);
   printf("  -v                Increase logging verbosity. (INFO)\n");

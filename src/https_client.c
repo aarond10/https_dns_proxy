@@ -59,6 +59,12 @@ static void https_fetch_ctx_init(https_client_t *client,
   curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
   curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.1");
   curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
+  if (client->opt->curl_proxy) {
+    if ((res = curl_easy_setopt(ctx->curl, CURLOPT_PROXY,
+                                client->opt->curl_proxy)) != CURLE_OK) {
+      FLOG("CURLOPT_PROXY error: %s", curl_easy_strerror(res));
+    }
+  }
   curl_multi_add_handle(client->curlm, ctx->curl);
 }
 
@@ -156,7 +162,7 @@ static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
   return 0;
 }
 
-void https_client_init(https_client_t *c, struct ev_loop *loop) {
+void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) {
   memset(c, 0, sizeof(*c));
   c->loop = loop;
   c->curlm = curl_multi_init();
@@ -165,6 +171,8 @@ void https_client_init(https_client_t *c, struct ev_loop *loop) {
 
   for (int i = 0; i < FD_SETSIZE; i++)
     c->fd[i].fd = 0;
+
+  c->opt = opt;
 
   curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETDATA, c);

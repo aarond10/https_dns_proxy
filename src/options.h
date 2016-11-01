@@ -36,6 +36,11 @@ struct Options {
 
   // DNS servers to look up dns.google.com
   const char *bootstrap_dns;
+
+  // Optional http proxy if required.
+  // e.g. "socks5://127.0.0.1:1080"
+  const char *curl_proxy;
+
 };
 typedef struct Options options_t;
 
