@@ -22,7 +22,8 @@
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
-  char *new_buf = (char *)realloc(ctx->buf, ctx->buflen + size * nmemb + 1);
+  unsigned char *new_buf = (unsigned char *)realloc(
+      ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
     ELOG("Out of memory!");
     return 0;
@@ -163,13 +164,15 @@ static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
 }
 
 void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) {
+  int i = 0;
+
   memset(c, 0, sizeof(*c));
   c->loop = loop;
   c->curlm = curl_multi_init();
   c->fetches = NULL;
   c->timer.data = c;
 
-  for (int i = 0; i < FD_SETSIZE; i++)
+  for (i = 0; i < FD_SETSIZE; i++)
     c->fd[i].fd = 0;
 
   c->opt = opt;
@@ -190,13 +193,15 @@ void https_client_fetch(https_client_t *c, const char *url,
 }
 
 void https_client_cleanup(https_client_t *c) {
+  int i;
+
   while (c->fetches) {
     struct https_fetch_ctx *n = c->fetches;
     https_fetch_ctx_cleanup(c, n);
     free(n);
   }
 
-  for (int i = 0; i < FD_SETSIZE; i++) {
+  for (i = 0; i < FD_SETSIZE; i++) {
     if (c->fd[i].fd)
       ev_io_stop(c->loop, &c->fd[i]);
   }

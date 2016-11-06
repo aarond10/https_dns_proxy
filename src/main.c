@@ -24,7 +24,6 @@
 
 #include <ares.h>
 #include <ev.h>
-#include "debug_utils.h"
 #include "dns_server.h"
 #include "dns_poller.h"
 #include "https_client.h"
@@ -74,7 +73,8 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   const int obuf_size = 1500;
   char obuf[obuf_size];
   int r;
-  if ((r = json_to_dns(req->tx_id, bufcpy, obuf, obuf_size)) <= 0) {
+  if ((r = json_to_dns(req->tx_id, bufcpy,
+                       (unsigned char *)obuf, obuf_size)) <= 0) {
     ELOG("Failed to decode JSON.");
   } else {
     dns_server_respond(req->dns_server, req->raddr, obuf, r);
@@ -94,7 +94,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   // Build URL
   int cd_bit = flags & (1 << 4);
   char *escaped_name = curl_escape(name, strlen(name));
-  char url[1500] = {};
+  char url[1500] = "";
   snprintf(url, sizeof(url) - 1,
            "https://dns.google.com/resolve?name=%s&type=%d%s%s",
            escaped_name, type, cd_bit ? "&cd=true" : "",

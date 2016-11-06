@@ -61,11 +61,11 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
   p += 2;
   uint16_t num_q = ntohs(*(uint16_t *)p);
   p += 2;
-  uint16_t num_rr = ntohs(*(uint16_t *)p);
+  //uint16_t num_rr = ntohs(*(uint16_t *)p);
   p += 2;
-  uint16_t num_arr = ntohs(*(uint16_t *)p);
+  //uint16_t num_arr = ntohs(*(uint16_t *)p);
   p += 2;
-  uint16_t num_xrr = ntohs(*(uint16_t *)p);
+  //uint16_t num_xrr = ntohs(*(uint16_t *)p);
   p += 2;
   if (num_q != 1) {
     DLOG("Malformed request received.");

@@ -88,8 +88,8 @@ static int dn_find_dnptr(const char *name,
       }
       d++;
     }
-    while (npos < nend && *npos != '.') *npos++;
-    if (*npos) *npos++;
+    while (npos < nend && *npos != '.') npos++;
+    if (*npos) npos++;
   }
   *pkt_ofs = 0;
   return nend - name;
@@ -256,6 +256,8 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
 
 int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
   const nx_json *json = nx_json_parse_utf8(in);
+  int i, j;
+
   if (!json) {
     DLOG("Parser fail.");
     return 1;
@@ -285,7 +287,7 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
   dnptrs[1] = NULL;
 
   const nx_json *obj = nx_json_get(json, "Question");
-  for (int i = 0; i < obj->length; i++) {
+  for (i = 0; i < obj->length; i++) {
     const nx_json *subobj = nx_json_item(obj, i);
     int r = dn_name_compress(nx_json_get(subobj, "name")->text_value, pos,
                              end - pos, dnptrs, lastdnptr);
@@ -302,10 +304,10 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
     NS_PUT16(ns_c_in, pos);
   }
   const char *rr_keys[] = {"Answer", "Authority", "Additional", NULL};
-  for (int i = 0; rr_keys[i]; i++) {
+  for (i = 0; rr_keys[i]; i++) {
     obj = nx_json_get(json, rr_keys[i]);
     if (obj->type == NX_JSON_ARRAY) {
-      for (int j = 0; j < obj->length; j++) {
+      for (j = 0; j < obj->length; j++) {
         // We drop RR we can't translate from JSON by restoring pos to this.
         uint8_t *saved_pos = pos;
         const nx_json *subobj = nx_json_item(obj, j);

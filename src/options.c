@@ -27,10 +27,10 @@ void options_init(struct Options *opt) {
   opt->gid = -1;
   opt->bootstrap_dns = "8.8.8.8,8.8.4.4";
   opt->curl_proxy = NULL;
-};
+}
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
-  int ix, c;
+  int c;
   while ((c = getopt(argc, argv, "a:p:e:du:g:b:t:l:v")) != -1) {
     switch (c) {
     case 'a': // listen_addr

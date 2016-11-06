@@ -60,7 +60,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  fprintf(logf, "%s %8d.%06d %s:%d ", SeverityStr(severity), tv.tv_sec,
+  fprintf(logf, "%s %8ld.%06ld %s:%d ", SeverityStr(severity), tv.tv_sec,
           tv.tv_usec, filename, line);
 
   va_list args;

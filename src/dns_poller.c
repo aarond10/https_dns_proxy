@@ -56,7 +56,8 @@ static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns, const char *hostname,
                      int interval_seconds, dns_poller_cb cb, void *cb_data) {
-  for (int i = 0; i < FD_SETSIZE; i++)
+  int i;
+  for (i = 0; i < FD_SETSIZE; i++)
     d->fd[i].fd = 0;
 
   int r;
