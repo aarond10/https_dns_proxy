@@ -74,6 +74,8 @@ Usage: https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -g group          Group to drop to launched as root. (nobody)
   -b dns_servers    Comma separated IPv4 address of DNS servers
                     to resolve dns.google.com. (8.8.8.8,8.8.4.4)
+  -t proxy_server   Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
+                    (Initial DNS resolution can't be done over this.)
   -l logfile        Path to file to log to. (-)
   -v                Increase logging verbosity. (INFO)
 ```
