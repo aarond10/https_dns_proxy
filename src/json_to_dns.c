@@ -245,6 +245,20 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // min
     break;
   }
+  case ns_t_srv: {
+    char *saveptr = NULL;
+    NS_PUT16(atoi(strtok_r(data, " ", &saveptr)), pos); // prio
+    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // weight
+    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // port
+    int r = dn_name_compress(strtok_r(NULL, " ", &saveptr), pos, end - pos, dnptrs,
+                         lastdnptr);
+    if (r < 0) {
+      DLOG("Failed to compress rname.");
+      return -1;
+    }
+    pos += r;
+    break;
+  }
   default:
     DLOG("Unexpected RR type: %d", type);
     return -1;
