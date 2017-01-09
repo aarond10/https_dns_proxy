@@ -70,12 +70,18 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   options.servers = NULL;
   options.nservers = 0;
   char *csv = (char *)calloc(1, strlen(bootstrap_dns)+1);
+  if (!csv) {
+    FLOG("Out of mem");
+  }
   strcpy(csv, bootstrap_dns);
   char *last = NULL;
   char *ipstr = strtok_r(csv, ",", &last);
   while (ipstr) {
     options.servers = (struct in_addr *)realloc(
         options.servers, sizeof(struct in_addr)*(options.nservers + 1));
+    if (!options.servers) {
+      FLOG("Out of mem");
+    }
     if (ares_inet_pton(AF_INET, ipstr, 
                        &options.servers[options.nservers++]) != 1) {
       FLOG("Failed to parse '%s'", ipstr);

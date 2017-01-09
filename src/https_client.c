@@ -192,6 +192,9 @@ void https_client_fetch(https_client_t *c, const char *url,
                         void *data) {
   struct https_fetch_ctx *new_ctx =
       (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
+  if (!new_ctx) {
+    FLOG("Out of mem");
+  }
   https_fetch_ctx_init(c, new_ctx, url, resolv, cb, data);
 }
 

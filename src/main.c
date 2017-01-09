@@ -64,7 +64,7 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   }
   char *bufcpy = (char *)calloc(1, buflen + 1);
   if (bufcpy == NULL) {
-    FLOG("calloc");
+    FLOG("Out of mem");
   }
   memcpy(bufcpy, buf, buflen);
 
@@ -102,6 +102,9 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   curl_free(escaped_name);
 
   request_t *req = (request_t *)calloc(1, sizeof(request_t));
+  if (!req) {
+    FLOG("Out of mem");
+  }
   req->tx_id = tx_id;
   req->raddr = addr;
   req->dns_server = dns_server;
