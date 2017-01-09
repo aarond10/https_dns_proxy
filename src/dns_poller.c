@@ -69,11 +69,10 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
 
   options.servers = NULL;
   options.nservers = 0;
-  char *csv = (char *)calloc(1, strlen(bootstrap_dns)+1);
+  char *csv = strdup(bootstrap_dns);
   if (!csv) {
     FLOG("Out of mem");
   }
-  strcpy(csv, bootstrap_dns);
   char *last = NULL;
   char *ipstr = strtok_r(csv, ",", &last);
   while (ipstr) {
