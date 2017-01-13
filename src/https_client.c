@@ -89,6 +89,12 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
           DLOG("CURLINFO_EFFECTIVE_URL: %s", str_resp);
         }
         if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_REDIRECT_URL: %s", str_resp);
+        }
+        if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
         } else {
@@ -112,6 +118,42 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
         } else {
           DLOG("CURLINFO_OS_ERRNO: %d", long_resp);
         }
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_HTTP_VERSION: %d", long_resp);
+        }
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_PROTOCOL: %d", long_resp);
+        }
+
+        double namelookup_time, connect_time, appconnect_time, pretransfer_time;
+        double starttransfer_time, total_time, redirect_time;
+        if (curl_easy_getinfo(ctx->curl,
+                              CURLINFO_NAMELOOKUP_TIME, &namelookup_time) != CURLE_OK ||
+            curl_easy_getinfo(ctx->curl,
+                              CURLINFO_CONNECT_TIME, &connect_time) != CURLE_OK ||
+            curl_easy_getinfo(ctx->curl,
+                              CURLINFO_APPCONNECT_TIME, &appconnect_time) != CURLE_OK ||
+            curl_easy_getinfo(ctx->curl,
+                              CURLINFO_PRETRANSFER_TIME, &pretransfer_time) != CURLE_OK ||
+            curl_easy_getinfo(ctx->curl,
+                              CURLINFO_STARTTRANSFER_TIME, &starttransfer_time) != CURLE_OK ||
+            curl_easy_getinfo(ctx->curl,
+                              CURLINFO_TOTAL_TIME, &total_time) != CURLE_OK ||
+            curl_easy_getinfo(ctx->curl,
+                              CURLINFO_REDIRECT_TIME, &redirect_time) != CURLE_OK) {
+          ELOG("Err getting timing");
+        } else {
+          DLOG("Times: %lf, %lf, %lf, %lf, %lf, %lf, %lf",
+               namelookup_time, connect_time, appconnect_time, pretransfer_time,
+               starttransfer_time, total_time, redirect_time);
+        }
+
       }
       curl_easy_cleanup(ctx->curl);
       ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
