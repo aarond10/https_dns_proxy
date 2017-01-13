@@ -54,6 +54,7 @@ static void https_fetch_ctx_init(https_client_t *client,
     FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
   }
 
+  DLOG("Requesting HTTP/1.1: %d\n", client->opt->use_http_1_1);
   curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION,
                    client->opt->use_http_1_1 ?
                    CURL_HTTP_VERSION_1_1 :
@@ -259,7 +260,11 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
 
   c->opt = opt;
 
-  curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+  if (c->opt->use_http_1_1) {
+    curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1);
+  } else {
+    curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+  }
   curl_multi_setopt(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, 8);
   curl_multi_setopt(c->curlm, CURLMOPT_MAXCONNECTS, 8);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETDATA, c);
