@@ -53,12 +53,13 @@ static void https_fetch_ctx_init(https_client_t *client,
       CURLE_OK) {
     FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
   }
+
   curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);
   curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
-  curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.1");
+  curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
   curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
   curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, 2 /* seconds */);
   if (client->opt->curl_proxy) {
@@ -77,6 +78,41 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   while (cur) {
     if (cur == ctx) {
       curl_multi_remove_handle(client->curlm, ctx->curl);
+      if (client->opt->loglevel <= LOG_DEBUG) {
+        CURLcode res;
+        long long_resp = 0;
+        char *str_resp = NULL;
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_EFFECTIVE_URL: %s", str_resp);
+        }
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_RESPONSE_CODE: %d", long_resp);
+        }
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_HTTP_CONNECTCODE, &long_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_HTTP_CONNECTCODE: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_HTTP_CONNECTCODE: %d", long_resp);
+        }
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_SSL_VERIFYRESULT: %d", long_resp);
+        }
+        if ((res = curl_easy_getinfo(
+                ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
+          ELOG("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
+        } else {
+          DLOG("CURLINFO_OS_ERRNO: %d", long_resp);
+        }
+      }
       curl_easy_cleanup(ctx->curl);
       ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
       free(ctx->buf);

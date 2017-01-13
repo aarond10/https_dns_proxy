@@ -132,6 +132,7 @@ int main(int argc, char *argv[]) {
 
   logging_init(opt.logfd, opt.loglevel);
 
+  ILOG("Built "__DATE__" "__TIME__".");
   ILOG("System c-ares: %s", ares_version(NULL));
   ILOG("System libcurl: %s", curl_version());
 
