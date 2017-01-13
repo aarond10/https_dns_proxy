@@ -41,6 +41,8 @@ struct Options {
   // e.g. "socks5://127.0.0.1:1080"
   const char *curl_proxy;
 
+  // Hack to fix OpenWRT issues due to dropping of HTTP/2 support from libcurl.
+  int use_http_1_1;
 };
 typedef struct Options options_t;
 

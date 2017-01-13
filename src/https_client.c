@@ -54,7 +54,10 @@ static void https_fetch_ctx_init(https_client_t *client,
     FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
   }
 
-  curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+  curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION,
+                   client->opt->use_http_1_1 ?
+                   CURL_HTTP_VERSION_1_1 :
+                   CURL_HTTP_VERSION_2_0);
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);

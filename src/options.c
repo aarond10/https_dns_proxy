@@ -27,11 +27,12 @@ void options_init(struct Options *opt) {
   opt->gid = -1;
   opt->bootstrap_dns = "8.8.8.8,8.8.4.4";
   opt->curl_proxy = NULL;
+  opt->use_http_1_1 = 0;
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "a:p:e:du:g:b:t:l:v")) != -1) {
+  while ((c = getopt(argc, argv, "a:p:e:du:g:b:t:l:v1")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -62,6 +63,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'v': // verbose
       opt->loglevel--;
+      break;
+    case '1': // http/1.1
+      opt->use_http_1_1 = 1;
       break;
     case '?':
       printf("Unknown option '-%c'", c);
@@ -119,6 +123,8 @@ void options_show_usage(int argc, char **argv) {
   printf("                    (Initial DNS resolution can't be done over this.)\n");
   printf("  -l logfile        Path to file to log to. (%s)\n",
          defaults.logfile);
+  printf("  -1                Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
+         "                    or limited builds of libcurl (false).\n");
   printf("  -v                Increase logging verbosity. (INFO)\n");
   options_cleanup(&defaults);
 }
