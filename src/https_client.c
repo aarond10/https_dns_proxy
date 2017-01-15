@@ -66,7 +66,10 @@ static void https_fetch_ctx_init(https_client_t *client,
   curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
   curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
   curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, 2 /* seconds */);
+  // We know Google supports this, so force it.
+  curl_easy_setopt(ctx->curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
   if (client->opt->curl_proxy) {
+    DLOG("Using curl proxy: %s", client->opt->curl_proxy);
     if ((res = curl_easy_setopt(ctx->curl, CURLOPT_PROXY,
                                 client->opt->curl_proxy)) != CURLE_OK) {
       FLOG("CURLOPT_PROXY error: %s", curl_easy_strerror(res));
@@ -95,48 +98,54 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
           ELOG("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
-        } else {
+        } else if (str_resp != NULL) {
           DLOG("CURLINFO_REDIRECT_URL: %s", str_resp);
         }
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
-        } else {
+        } else if (long_resp != 200) {
           DLOG("CURLINFO_RESPONSE_CODE: %d", long_resp);
-        }
-        if ((res = curl_easy_getinfo(
-                ctx->curl, CURLINFO_HTTP_CONNECTCODE, &long_resp)) != CURLE_OK) {
-          ELOG("CURLINFO_HTTP_CONNECTCODE: %s", curl_easy_strerror(res));
-        } else {
-          DLOG("CURLINFO_HTTP_CONNECTCODE: %d", long_resp);
         }
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
-        } else {
-          DLOG("CURLINFO_SSL_VERIFYRESULT: %d", long_resp);
+        } else if (long_resp != CURLE_OK) {
+          ELOG("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
         }
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
-        } else {
-          DLOG("CURLINFO_OS_ERRNO: %d", long_resp);
+        } else if (long_resp != 0) {
+          ELOG("CURLINFO_OS_ERRNO: %d", long_resp);
         }
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
         } else {
-          DLOG("CURLINFO_HTTP_VERSION: %d", long_resp);
+          switch (long_resp) {
+            case CURL_HTTP_VERSION_1_0:
+              DLOG("CURLINFO_HTTP_VERSION: %s", "1.0");
+              break;
+            case CURL_HTTP_VERSION_1_1:
+              DLOG("CURLINFO_HTTP_VERSION: %s", "1.1");
+              break;
+            case CURL_HTTP_VERSION_2_0:
+              DLOG("CURLINFO_HTTP_VERSION: %s", "2");
+              break;
+            default:
+              DLOG("CURLINFO_HTTP_VERSION: %d", long_resp);
+          }
         }
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
-        } else {
+        } else if (long_resp != CURLPROTO_HTTPS) {
           DLOG("CURLINFO_PROTOCOL: %d", long_resp);
         }
 
         double namelookup_time, connect_time, appconnect_time, pretransfer_time;
-        double starttransfer_time, total_time, redirect_time;
+        double starttransfer_time, total_time;
         if (curl_easy_getinfo(ctx->curl,
                               CURLINFO_NAMELOOKUP_TIME, &namelookup_time) != CURLE_OK ||
             curl_easy_getinfo(ctx->curl,
@@ -148,14 +157,12 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
             curl_easy_getinfo(ctx->curl,
                               CURLINFO_STARTTRANSFER_TIME, &starttransfer_time) != CURLE_OK ||
             curl_easy_getinfo(ctx->curl,
-                              CURLINFO_TOTAL_TIME, &total_time) != CURLE_OK ||
-            curl_easy_getinfo(ctx->curl,
-                              CURLINFO_REDIRECT_TIME, &redirect_time) != CURLE_OK) {
+                              CURLINFO_TOTAL_TIME, &total_time) != CURLE_OK) {
           ELOG("Err getting timing");
         } else {
-          DLOG("Times: %lf, %lf, %lf, %lf, %lf, %lf, %lf",
+          DLOG("Times: %lf, %lf, %lf, %lf, %lf, %lf",
                namelookup_time, connect_time, appconnect_time, pretransfer_time,
-               starttransfer_time, total_time, redirect_time);
+               starttransfer_time, total_time);
         }
 
       }
