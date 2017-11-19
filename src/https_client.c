@@ -119,6 +119,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
         } else if (long_resp != 0) {
           ELOG("CURLINFO_OS_ERRNO: %d", long_resp);
         }
+#ifdef CURLINFO_HTTP_VERSION
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
@@ -137,12 +138,15 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
               DLOG("CURLINFO_HTTP_VERSION: %d", long_resp);
           }
         }
+#endif
+#ifdef CURLINFO_PROTOCOL
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
         } else if (long_resp != CURLPROTO_HTTPS) {
           DLOG("CURLINFO_PROTOCOL: %d", long_resp);
         }
+#endif
 
         double namelookup_time, connect_time, appconnect_time, pretransfer_time;
         double starttransfer_time, total_time;
