@@ -210,8 +210,8 @@ static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
     FLOG("c is NULL");
   }
   CURLMcode rc = curl_multi_socket_action(
-      c->curlm, w->fd, (revents & EV_READ ? CURL_POLL_IN : 0) |
-                           (revents & EV_WRITE ? CURL_POLL_OUT : 0),
+      c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
+                           (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
       &c->still_running);
   if (rc != CURLM_OK) {
     FLOG("curl_multi_socket_action: %d", rc);
