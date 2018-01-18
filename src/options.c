@@ -25,7 +25,8 @@ void options_init(struct Options *opt) {
   opt->group = "nobody";
   opt->uid = -1;
   opt->gid = -1;
-  opt->bootstrap_dns = "8.8.8.8,8.8.4.4";
+  //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
+  opt->bootstrap_dns = "8.8.8.8,8.8.4.4,145.100.185.15,145.100.185.16,185.49.141.37,199.58.81.218,80.67.188.188"; 
   opt->curl_proxy = NULL;
   opt->use_http_1_1 = 0;
 }
