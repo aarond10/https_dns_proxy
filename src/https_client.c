@@ -231,6 +231,23 @@ static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
                          https_client_t *c, void *sockp) {
+#ifndef NO_LIBCURL_BUG_WORKAROUND
+  static int curl_bug = -1;
+  if (curl_bug == -1) {
+    if (what == CURL_POLL_IN)
+      curl_bug = 0;
+    else if (what == CURL_POLL_REMOVE) {
+      ELOG("libcurl bug detected: socket closed without ever being read.");
+      ELOG("Activating workaround.  PERFORMANCE WILL BE GREATLY DEGRADED!");
+      curl_bug = 1;
+    }
+  }
+  if (curl_bug == 1 && what == CURL_POLL_REMOVE && c != NULL) {
+    do {
+      curl_multi_perform(c->curlm, &c->still_running);
+    } while (c->still_running != 0);
+  }
+#endif
   if (what == CURL_POLL_REMOVE) {
     ev_io_stop(c->loop, &c->fd[sock]);
     c->fd[sock].fd = 0;
