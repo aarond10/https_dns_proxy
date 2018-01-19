@@ -234,9 +234,9 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
 #ifndef NO_LIBCURL_BUG_WORKAROUND
   static int curl_bug = -1;
   if (curl_bug == -1) {
-    if (what == CURL_POLL_IN)
+    if (what == CURL_POLL_IN) {
       curl_bug = 0;
-    else if (what == CURL_POLL_REMOVE) {
+    } else if (what == CURL_POLL_REMOVE) {
       ELOG("libcurl bug detected: socket closed without ever being read.");
       ELOG("Activating workaround.  PERFORMANCE WILL BE GREATLY DEGRADED!");
       curl_bug = 1;
