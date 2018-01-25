@@ -30,6 +30,11 @@ static const char *SeverityStr(int severity) {
   }
 }
 
+void logging_timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
+  if (logf)
+    fflush(logf);
+}
+
 void logging_init(int fd, int level) {
   if (logf)
     fclose(logf);

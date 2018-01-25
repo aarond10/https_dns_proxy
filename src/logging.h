@@ -1,12 +1,17 @@
 #ifndef _LOGGING_H_
 #define _LOGGING_H_
 
+#include <ev.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 // Initializes logging.
 // Writes logs to descriptor 'fd' for log levels above or equal to 'level'.
 void logging_init(int fd, int level);
+
+// Periodic timer to flush logs.
+void logging_timer_cb(struct ev_loop *loop, ev_timer *w, int revents);
 
 // Cleans up and flushes open logs.
 void logging_cleanup();
