@@ -75,7 +75,10 @@ Usage: https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -b dns_servers    Comma separated IPv4 address of DNS servers
                     to resolve dns.google.com. (8.8.8.8,8.8.4.4)
   -t proxy_server   Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
-                    (Initial DNS resolution can't be done over this.)
+                    Remote name resolution will be used if the protocol
+                    supports it (http, https, socks4a, socks5h), otherwise
+                    initial DNS resolution will still be done via the
+                    bootstrap DNS servers.
   -l logfile        Path to file to log to. (-)
   -v                Increase logging verbosity. (INFO)
 ```
