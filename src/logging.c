@@ -55,7 +55,7 @@ void logging_cleanup() {
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (severity < loglevel) {
     return;
-}
+  }
 
   if (!logf) {
     logf = fdopen(STDOUT_FILENO, "w");
@@ -68,7 +68,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   }
   if (*filename == '/') {
     filename++;
-}
+  }
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -83,8 +83,8 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   if (severity >= LOG_WARNING) {
     fflush(logf);
-}
+  }
   if (severity == LOG_FATAL) {
     exit(1);
-}
+  }
 }
