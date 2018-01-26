@@ -1,17 +1,17 @@
 #include <sys/types.h>
 
+#include <ares.h>
 #include <arpa/inet.h>
 #include <arpa/nameser.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <resolv.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include <ares.h>
 #include "json_to_dns.h"
 #include "logging.h"
-#include "nxjson.h"
+#include "nxjson/nxjson.h"
 
 // Writes a string out, pascal style. limited to 63 bytes$
 // (max length without compression for a domain segment).
@@ -19,8 +19,8 @@
 // Bytes consumed from source is always one less than that written.
 static int dn_write_name(const char *name, uint8_t *out, size_t outlen) {
   int namelen = 0;
-  while (name[namelen] && name[namelen] != '.') namelen++;
-  if (namelen > 63 || outlen < (namelen + 1)) return -1;
+  while (name[namelen] && name[namelen] != '.') { namelen++; }
+  if (namelen > 63 || outlen < (namelen + 1)) { return -1; }
   *out++ = namelen;
   memcpy(out, name, namelen);
   return namelen + 1;
@@ -46,11 +46,11 @@ static int dn_match(const char *str, const uint8_t *pos, const uint8_t *pkt_star
       // If domain is longer than the suffix we're checking, it's no match.
       return 0;
     }
-    if (memcmp(str, pos, len)) return 0;
+    if (memcmp(str, pos, len) != 0) { return 0; }
     str += len;
     pos += len;
     len = *pos;
-    if (*str && *str++ != '.') return 0;
+    if (*str && *str++ != '.') { return 0; }
   }
   int end_of_str = (!(*str));
   return end_of_str;
@@ -62,9 +62,9 @@ static int dn_match(const char *str, const uint8_t *pos, const uint8_t *pkt_star
 static int dn_suffix_match(const char *a, const uint8_t *b, const uint8_t *pkt_start) {
   const char *d = a;
   while (*d) {
-    if (dn_match(d, b, pkt_start)) return d - a;
-    while (*d && *d != '.') d++;
-    if (*d) d++;
+    if (dn_match(d, b, pkt_start)) { return d - a; }
+    while (*d && *d != '.') { d++; }
+    if (*d) { d++; }
   }
   return -1;
 }
@@ -88,8 +88,8 @@ static int dn_find_dnptr(const char *name,
       }
       d++;
     }
-    while (npos < nend && *npos != '.') npos++;
-    if (*npos) npos++;
+    while (npos < nend && *npos != '.') { npos++; }
+    if (*npos) { npos++; }
   }
   *pkt_ofs = 0;
   return nend - name;
@@ -110,25 +110,27 @@ int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
   uint8_t *end = out + outlen;
   while (npos < nend) {
     int r = dn_write_name(npos, pos, end - pos);
-    if (r < 0) return -1;
+    if (r < 0) { return -1; }
     pos += r;
     npos += r - 1;
-    if (*npos && *npos != '.') return -1;
+    if (*npos && *npos != '.') { return -1; }
     npos++;
   }
   if (out_ofs > 0) {
-    if (end - pos < 2) return -1;
+    if (end - pos < 2) { return -1; }
     *(uint16_t*)pos = htons(0xc000 | out_ofs); pos += 2;
   } else {
-    if (end - pos < 1) return -1;
+    if (end - pos < 1) { return -1; }
     *pos++ = 0;
   }
   if ((*out & 0xc0) != 0xc0) {  // Don't keep duplicate dnptrs.
     const uint8_t **d = &dnptrs[1];
-    while (*d && d < lastdnptr) d++;
+    while (*d && d < lastdnptr) {
+      d++;
+    }
     if (d < lastdnptr) {
       *d++ = out;
-      if (d < lastdnptr) *d = NULL;
+      if (d < lastdnptr) { *d = NULL; }
     }
   }
   return pos - out;
@@ -158,17 +160,20 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     break;
   }
   case ns_t_mx: {
-    if ((end - pos) < 2)
+    if ((end - pos) < 2) {
       return -1;
+    }
     char *saveptr = NULL;
     char *tok = strtok_r(data, " ", &saveptr);
-    if (!tok)
+    if (!tok) {
       return -1;
+    }
     uint16_t prio = atoi(tok);
     NS_PUT16(prio, pos);
     tok = strtok_r(NULL, " ", &saveptr);
-    if (!tok)
+    if (!tok) {
       return -1;
+    }
     int r = dn_name_compress(tok, pos, end - pos, dnptrs, lastdnptr);
     if (r < 0) {
       DLOG("Failed to compress name.");
@@ -205,12 +210,14 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
   }
   case ns_t_txt: {
     const char *s = data, *e = data + strlen(data);
-    if ((end - pos) < (e - s + 254) / 255 * 256)
+    if ((end - pos) < (e - s + 254) / 255 * 256) {
       return -1;
+    }
     while (s < e) {
       int l = e - s;
-      if (l > 255)
+      if (l > 255) {
         l = 255;
+      }
       *(u_char *)(pos++) = l;
       memcpy(pos, s, l);
       s += l;

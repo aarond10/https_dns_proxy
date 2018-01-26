@@ -92,7 +92,8 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
   }
   if (!strcmp(opt->logfile, "-")) {
     opt->logfd = STDOUT_FILENO;
-  } else if ((opt->logfd = open(opt->logfile, O_CREAT | O_WRONLY | O_APPEND,
+  } else if ((opt->logfd = open(opt->logfile, 
+                                O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC,
                                 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
     printf("Logfile '%s' is not writable.\n", opt->logfile);
   }
@@ -131,6 +132,7 @@ void options_show_usage(int argc, char **argv) {
 }
 
 void options_cleanup(struct Options *opt) {
-  if (opt->logfd > 0)
+  if (opt->logfd > 0) {
     close(opt->logfd);
+  }
 }

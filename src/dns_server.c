@@ -1,23 +1,23 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <ares.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <errno.h>
+#include <ev.h>
 #include <grp.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pwd.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
-#include <ares.h>
-#include <ev.h>
 #include "dns_server.h"
 #include "logging.h"
 

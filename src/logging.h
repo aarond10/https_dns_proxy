@@ -17,7 +17,7 @@ void logging_timer_cb(struct ev_loop *loop, ev_timer *w, int revents);
 void logging_cleanup();
 
 // Internal. Don't use.
-void _log(const char *filename, int line, int fd, const char *fmt, ...);
+void _log(const char *file, int line, int severity, const char *fmt, ...);
 #ifdef __cplusplus
 }
 #endif

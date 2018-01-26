@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <ares.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -8,7 +9,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <ares.h>
 #include "dns_poller.h"
 #include "logging.h"
 
@@ -57,8 +57,9 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns, const char *hostname,
                      int interval_seconds, dns_poller_cb cb, void *cb_data) {
   int i;
-  for (i = 0; i < FD_SETSIZE; i++)
+  for (i = 0; i < FD_SETSIZE; i++) {
     d->fd[i].fd = 0;
+  }
 
   int r;
   ares_library_init(ARES_LIB_INIT_ALL);

@@ -8,8 +8,8 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pwd.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -17,8 +17,8 @@
 
 #include "https_client.h"
 #include "json_to_dns.h"
-#include "options.h"
 #include "logging.h"
+#include "options.h"
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
@@ -252,7 +252,8 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
     ev_io_stop(c->loop, &c->fd[sock]);
     c->fd[sock].fd = 0;
     return 0;
-  } else if (c->fd[sock].fd) {
+  } 
+  if (c->fd[sock].fd) {
     ev_io_stop(c->loop, &c->fd[sock]);
   }
   ev_io_init(&c->fd[sock], sock_cb, sock,
@@ -283,8 +284,9 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
   c->fetches = NULL;
   c->timer.data = c;
 
-  for (i = 0; i < FD_SETSIZE; i++)
+  for (i = 0; i < FD_SETSIZE; i++) {
     c->fd[i].fd = 0;
+  }
 
   c->opt = opt;
 
@@ -322,8 +324,9 @@ void https_client_cleanup(https_client_t *c) {
   }
 
   for (i = 0; i < FD_SETSIZE; i++) {
-    if (c->fd[i].fd)
+    if (c->fd[i].fd) {
       ev_io_stop(c->loop, &c->fd[i]);
+    }
   }
   ev_timer_stop(c->loop, &c->timer);
   curl_multi_cleanup(c->curlm);

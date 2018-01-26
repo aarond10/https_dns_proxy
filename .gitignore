@@ -1,6 +1,7 @@
 CMakeCache.txt
 CMakeFiles/
 Makefile
+lib/*.a
 cmake_install.cmake  
 https_dns_proxy
 dns_packet_test

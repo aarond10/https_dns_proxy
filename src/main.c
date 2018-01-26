@@ -7,29 +7,29 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <ares.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <errno.h>
+#include <ev.h>
 #include <grp.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pwd.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
-#include <ares.h>
-#include <ev.h>
-#include "dns_server.h"
 #include "dns_poller.h"
+#include "dns_server.h"
 #include "https_client.h"
 #include "json_to_dns.h"
-#include "options.h"
 #include "logging.h"
+#include "options.h"
 
 // Holds app state required for dns_server_cb.
 typedef struct {
@@ -166,10 +166,12 @@ int main(int argc, char *argv[]) {
                   dns_server_cb, &app);
 
   if (opt.daemonize) {
-    if (setgid(opt.gid))
+    if (setgid(opt.gid)) {
       FLOG("Failed to set gid.");
-    if (setuid(opt.uid))
+    }
+    if (setuid(opt.uid)) {
       FLOG("Failed to set uid.");
+    }
     // daemon() is non-standard. If needed, see OpenSSH openbsd-compat/daemon.c
     daemon(0, 0);
   }

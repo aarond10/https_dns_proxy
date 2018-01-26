@@ -3,9 +3,10 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
 #include "logging.h"
 
 static FILE *logf = NULL;
@@ -31,37 +32,43 @@ static const char *SeverityStr(int severity) {
 }
 
 void logging_timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
-  if (logf)
+  if (logf) {
     fflush(logf);
+  }
 }
 
 void logging_init(int fd, int level) {
-  if (logf)
+  if (logf) {
     fclose(logf);
+  }
   logf = fdopen(fd, "a");
   loglevel = level;
 }
 
 void logging_cleanup() {
-  if (logf)
+  if (logf) {
     fclose(logf);
+  }
   logf = NULL;
 }
 
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
-  if (severity < loglevel)
+  if (severity < loglevel) {
     return;
+}
 
-  if (!logf)
+  if (!logf) {
     logf = fdopen(STDOUT_FILENO, "w");
+  }
 
   // We just want to log the filename, not the path.
   const char *filename = file + strlen(file);
   while (filename > file && *filename != '/') {
     filename--;
   }
-  if (*filename == '/')
+  if (*filename == '/') {
     filename++;
+}
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -74,8 +81,10 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   va_end(args);
   fprintf(logf, "\n");
 
-  if (severity >= LOG_WARNING)
+  if (severity >= LOG_WARNING) {
     fflush(logf);
-  if (severity == LOG_FATAL)
+}
+  if (severity == LOG_FATAL) {
     exit(1);
+}
 }
