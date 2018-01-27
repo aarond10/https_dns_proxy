@@ -10,8 +10,8 @@ extern "C" {
 // Writes logs to descriptor 'fd' for log levels above or equal to 'level'.
 void logging_init(int fd, int level);
 
-// Periodic timer to flush logs.
-void logging_timer_cb(struct ev_loop *loop, ev_timer *w, int revents);
+// Initialize periodic timer to flush logs.
+void logging_flush_init(struct ev_loop *loop);
 
 // Cleans up and flushes open logs.
 void logging_cleanup();

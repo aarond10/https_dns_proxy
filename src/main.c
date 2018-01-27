@@ -184,9 +184,7 @@ int main(int argc, char *argv[]) {
   ev_signal_init(&sigint, sigint_cb, SIGINT);
   ev_signal_start(loop, &sigint);
 
-  ev_timer logging_timer;
-  ev_timer_init(&logging_timer, logging_timer_cb, 0, 10);
-  ev_timer_start(loop, &logging_timer);
+  logging_flush_init(loop);
 
   dns_poller_t dns_poller;
   dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, "dns.google.com",
