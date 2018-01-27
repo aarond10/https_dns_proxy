@@ -22,6 +22,11 @@ Features:
 
 Depends on `c-ares`, `libcurl`, `libev`.
 
+On Debian-derived systems those are libc-ares-dev,
+libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
+On Redhat-derived systems those are c-ares-devel, libcurl-devel and
+libev-devel.
+
 ```
 $ cmake .
 $ make
