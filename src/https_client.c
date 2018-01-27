@@ -290,11 +290,14 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
 
   c->opt = opt;
 
+#if defined(CURLMOPT_PIPELINING) && defined(CURLPIPE_HTTP1) && \
+  defined(CURLPIPE_MULTIPLEX)
   if (c->opt->use_http_1_1) {
     curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1);
   } else {
     curl_multi_setopt(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
   }
+#endif
   curl_multi_setopt(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, 8);
   curl_multi_setopt(c->curlm, CURLMOPT_MAXCONNECTS, 8);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETDATA, c);
