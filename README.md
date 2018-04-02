@@ -62,6 +62,14 @@ You may also want to add the line:
 
 This prevents dnsmasq from using /etc/resolv.conf DNS servers, leaving only our proxy server.
 
+### archlinux package install
+
+There is also [AUR package](https://aur.archlinux.org/packages/https-dns-proxy-git/) for latest git version.
+You can install as follows:
+```
+user@arch:~# yaourt -S https-dns-proxy-git
+```
+
 ## Usage
 
 Just run it as a daemon and point traffic at it. Commandline flags are:
