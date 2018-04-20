@@ -124,6 +124,22 @@ static void dns_poll_cb(void *data, struct sockaddr_in *addr) {
   *resolv = curl_slist_append(NULL, buf);
 }
 
+static int proxy_supports_name_resolution(const char *proxy)
+{
+  int i;
+  const char *ptypes[] = {"http:", "https:", "socks4a:", "socks5h:"};
+
+  if (proxy == NULL) {
+    return 0;
+  }
+  for (i = 0; i < sizeof(ptypes) / sizeof(*ptypes); i++) {
+    if (strncasecmp(proxy, ptypes[i], strlen(ptypes[i])) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   struct Options opt;
   options_init(&opt);
@@ -188,17 +204,19 @@ int main(int argc, char *argv[]) {
   ev_signal_init(&sigint, sigint_cb, SIGINT);
   ev_signal_start(loop, &sigint);
 
-  ev_timer logging_timer;
-  ev_timer_init(&logging_timer, logging_timer_cb, 0, 10);
-  ev_timer_start(loop, &logging_timer);
+  logging_flush_init(loop);
 
   dns_poller_t dns_poller;
-  dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, "dns.google.com",
-                  120 /* seconds */, dns_poll_cb, &app.resolv);
+  if (!proxy_supports_name_resolution(opt.curl_proxy)) {
+    dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, "dns.google.com",
+                    120 /* seconds */, dns_poll_cb, &app.resolv);
+  }
 
   ev_run(loop, 0);
 
-  dns_poller_cleanup(&dns_poller);
+  if (!proxy_supports_name_resolution(opt.curl_proxy)) {
+    dns_poller_cleanup(&dns_poller);
+}
 
   curl_slist_free_all(app.resolv);
 

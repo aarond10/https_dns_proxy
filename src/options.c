@@ -133,9 +133,12 @@ void options_show_usage(int argc, char **argv) {
   printf("  -e subnet_addr         An edns-client-subnet to use such as "
                                   "\"203.31.0.0/16\". (%s)\n",
          defaults.edns_client_subnet);
-  printf("  -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
-  printf("                         (Initial DNS resolution can't be done over this.)\n");
-  printf("  -l logfile             Path to file to log to. (%s)\n",
+  printf("  -t proxy_server   Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
+  printf("                    Remote name resolution will be used if the protocol\n");
+  printf("                    supports it (http, https, socks4a, socks5h), otherwise\n");
+  printf("                    initial DNS resolution will still be done via the\n");
+  printf("                    bootstrap DNS servers.\n");
+  printf("  -l logfile        Path to file to log to. (%s)\n",
          defaults.logfile);
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl (false).\n");
