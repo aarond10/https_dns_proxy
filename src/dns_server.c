@@ -79,7 +79,6 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
   }
   p += enc_len;
   uint16_t type = ntohs(*(uint16_t *)p);
-  p += 2;
 
   d->cb(d, d->cb_data, raddr, tx_id, flags, domain_name, type);
 

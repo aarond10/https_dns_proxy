@@ -231,6 +231,12 @@ static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
                          https_client_t *c, void *sockp) {
+  if (!curl) {
+    FLOG("Unexpected NULL pointer for CURL");
+  }
+  if (!c) {
+    FLOG("Unexpected NULL pointer for https_client_t");
+  }
 #ifndef NO_LIBCURL_BUG_WORKAROUND
   static int curl_bug = -1;
   if (curl_bug == -1) {

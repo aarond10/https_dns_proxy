@@ -35,6 +35,9 @@ enum _LogSeverity {
 #define ILOG(...) _log(__FILE__, __LINE__, LOG_INFO, __VA_ARGS__)
 #define WLOG(...) _log(__FILE__, __LINE__, LOG_WARNING, __VA_ARGS__)
 #define ELOG(...) _log(__FILE__, __LINE__, LOG_ERROR, __VA_ARGS__)
-#define FLOG(...) _log(__FILE__, __LINE__, LOG_FATAL, __VA_ARGS__)
+#define FLOG(...) do { \
+  _log(__FILE__, __LINE__, LOG_FATAL, __VA_ARGS__); \
+  exit(1); \
+} while(0);
 
 #endif // _LOGGING_H_

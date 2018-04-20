@@ -35,6 +35,7 @@
 typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
+  const char *resolver_url_prefix;
   // currently only used for edns_client_subnet, if specified.
   const char *extra_request_args;
 } app_state_t;
@@ -96,13 +97,14 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   char *escaped_name = curl_escape(name, strlen(name));
   char url[1500] = "";
   snprintf(url, sizeof(url) - 1,
-           "https://dns.google.com/resolve?name=%s&type=%d%s%s",
-           escaped_name, type, cd_bit ? "&cd=true" : "",
+           "%sname=%s&type=%d%s%s",
+           app->resolver_url_prefix,
+           escaped_name, type, (cd_bit != 0) ? "&cd=true" : "",
            app->extra_request_args);
   curl_free(escaped_name);
 
   request_t *req = (request_t *)calloc(1, sizeof(request_t));
-  if (!req) {
+  if (req == NULL) {
     FLOG("Out of mem");
   }
   req->tx_id = tx_id;
@@ -151,6 +153,8 @@ int main(int argc, char *argv[]) {
   app_state_t app;
   app.https_client = &https_client;
   app.resolv = NULL;
+  app.resolver_url_prefix = opt.resolver_url_prefix;
+
   if (opt.edns_client_subnet[0]) {
     static char buf[200];
     memset(buf, 0, sizeof(buf));
