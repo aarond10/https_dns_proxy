@@ -10,6 +10,20 @@ service is default, but [Cloudflare's
 service](https://developers.cloudflare.com/1.1.1.1/dns-over-https/) also works
 with trivial commandline flag changes.
 
+### Using Google
+
+```bash
+# ./https_dns_proxy -u nobody -g nogroup -d -b 8.8.8.8,8.8.4.4 \
+    -r "https://dns.google.com/resolve?"
+```
+
+### Using Cloudflare
+
+```bash
+# ./https_dns_proxy -u nobody -g nogroup -d -b 1.1.1.1,1.0.0.1 \
+    -r "https://cloudflare-dns.com/dns-query?ct=application/dns-json&"
+```
+
 ## Why?
 
 Using DNS over HTTPS makes eavesdropping and spoofing of DNS traffic between you
@@ -25,7 +39,7 @@ only makes sense if you trust your DoH provider.
 * Designed to sit in front of dnsmasq or similar caching resolver for
   transparent use.
 
-## BUILD
+## Build
 
 Depends on `c-ares`, `libcurl`, `libev`.
 
@@ -37,10 +51,6 @@ $ make
 ## INSTALL
 
 There is no installer at this stage - just run it.
-
-```
-# ./https_dns_proxy -u nobody -g nogroup -d
-```
 
 ### OpenWRT package install
 
@@ -95,6 +105,19 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
 
 * Test coverage could be better.
 
-## AUTHORS
+## Alternative protocols
+
+The DoH standard is still evolving. Because responses are translated into
+JSON, there is room for error in encoding and parsing response types -
+particularly the less common ones.
+
+For this reason, I tend to believe [DNS-over-TLS](https://developers.cloudflare.com/1.1.1.1/dns-over-tls/) is a better
+long-term strategy for the industry, but proxy clients aren't yet
+readily available. 
+
+Note that fundamental differences (binary vs JSON encoding) mean this
+software does not and will not support DNS-over-TLS.
+
+## Authors
 
 * Aaron Drew (aarond10@gmail.com)
