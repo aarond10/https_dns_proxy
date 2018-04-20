@@ -48,6 +48,13 @@ libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
 On Redhat-derived systems those are c-ares-devel, libcurl-devel and
 libev-devel.
 
+On MacOS, you may run into issues with curl headers. Others have had success when first installing curl with brew.
+```
+brew install curl --with-openssl --with-c-ares --with-libssh2 --with-nghttp2 --with-gssapi --with-libmetalink
+brew link curl --force
+```
+
+If all pre-requisites are met, you should be able to build with:
 ```
 $ cmake .
 $ make
@@ -81,8 +88,7 @@ This prevents dnsmasq from using /etc/resolv.conf DNS servers, leaving only our 
 
 ### archlinux package install
 
-There is also [AUR package](https://aur.archlinux.org/packages/https-dns-proxy-git/) for latest git version.
-You can install as follows:
+There is also an externally maintained [AUR package](https://aur.archlinux.org/packages/https-dns-proxy-git/) for latest git version. You can install as follows:
 ```
 user@arch:~# yaourt -S https-dns-proxy-git
 ```
