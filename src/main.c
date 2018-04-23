@@ -7,8 +7,10 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+
 #include <ares.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <curl/curl.h>
 #include <errno.h>
 #include <ev.h>
@@ -45,6 +47,26 @@ typedef struct {
   struct sockaddr_in raddr;
   dns_server_t *dns_server;
 } request_t;
+
+// Very very basic hostname parsing.
+// Note: Performs basic checks to see if last digit is non-alpha.
+// Non-alpha hostnames are assumed to be IP addresses. e.g. foo.1
+// Returns non-zero on success, zero on failure.
+static int hostname_from_uri(const char* uri,
+                             char* hostname, int hostname_len) {
+  if (strncmp(uri, "https://", 8) != 0) { return 0; }  // not https://
+  uri += 8;
+  const char *end = uri;
+  while (*end && *end != '/') { end++; }
+  if (end - uri >= hostname_len) {
+    return 0;
+  }
+  if (end == uri) { return 0; }  // empty string.
+  if (!isalpha(*(end - 1))) { return 0; }  // last digit non-alpha.
+  strncpy(hostname, uri, end - uri);
+  hostname[end - uri] = 0;
+  return 1;
+}
 
 static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
   ev_break(loop, EVBREAK_ALL);
@@ -113,12 +135,14 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   https_client_fetch(app->https_client, url, app->resolv, https_resp_cb, req);
 }
 
-static void dns_poll_cb(void *data, struct sockaddr_in *addr) {
+static void dns_poll_cb(const char* hostname, void *data, struct sockaddr_in *addr) {
   struct curl_slist **resolv = (struct curl_slist **)data;
-  char buf[128] = "dns.google.com:443:";
-  char *end = &buf[128];
+  char buf[280];
+  memset(buf, 0, sizeof(buf));
+  if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
+  snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
   char *pos = buf + strlen(buf);
-  ares_inet_ntop(AF_INET, addr, pos, end - pos);
+  ares_inet_ntop(AF_INET, addr, pos, buf + sizeof(buf) - 1 - pos);
   DLOG("Received new IP '%s'", pos);
   curl_slist_free_all(*resolv);
   *resolv = curl_slist_append(NULL, buf);
@@ -207,9 +231,16 @@ int main(int argc, char *argv[]) {
   logging_flush_init(loop);
 
   dns_poller_t dns_poller;
+  char hostname[255];  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
-    dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, "dns.google.com",
-                    120 /* seconds */, dns_poll_cb, &app.resolv);
+    if (hostname_from_uri(opt.resolver_url_prefix, hostname, 254)) {
+      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
+                      120 /* seconds */, dns_poll_cb, &app.resolv);
+      ILOG("DNS polling initialized for '%s'", hostname);
+    } else {
+      ILOG("Resolver prefix '%s' doesn't appear to contain a "
+           "hostname. DNS polling disabled.", opt.resolver_url_prefix);
+    }
   }
 
   ev_run(loop, 0);

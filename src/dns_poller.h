@@ -5,7 +5,8 @@
 #include <ev.h>
 
 // Callback to be called periodically when we get a valid DNS response.
-typedef void (*dns_poller_cb)(void *data, struct sockaddr_in *addr);
+typedef void (*dns_poller_cb)(const char* hostname, void *data,
+                              struct sockaddr_in *addr);
 
 typedef struct {
   ares_channel ares;

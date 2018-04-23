@@ -44,7 +44,7 @@ static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
   } else if (!h || h->h_length < 1) {
     WLOG("No hosts.");
   } else {
-    d->cb(d->cb_data, (struct sockaddr_in *)h->h_addr_list[0]);
+    d->cb(d->hostname, d->cb_data, (struct sockaddr_in *)h->h_addr_list[0]);
   }
 }
 
