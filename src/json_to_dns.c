@@ -213,15 +213,28 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     if ((end - pos) < (e - s + 254) / 255 * 256) {
       return -1;
     }
+    // TODO: Check conformance with multiple strings:
+    // https://tools.ietf.org/html/rfc4408#section-3.1.3
     while (s < e) {
       int l = e - s;
       if (l > 255) {
         l = 255;
       }
-      *(u_char *)(pos++) = l;
-      memcpy(pos, s, l);
+      // Strip TXT quotes embedded in JSON responses.
+      if (s[0] == '"') {
+        if (s[l - 1] != '"') {
+          ELOG("TXT parsing error for '%s'\n", data);
+          return -1;
+        }
+        *(u_char *)(pos++) = l - 2;
+        memcpy(pos, s + 1, l - 2);
+        pos += l - 2;
+      } else {
+        *(u_char *)(pos++) = l;
+        memcpy(pos, s, l);
+        pos += l;
+      }
       s += l;
-      pos += l;
     }
     break;
   }
