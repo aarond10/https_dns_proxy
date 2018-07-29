@@ -84,7 +84,10 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
     }
     if (ares_inet_pton(AF_INET, ipstr, 
                        &options.servers[options.nservers++]) != 1) {
-      FLOG("Failed to parse '%s'", ipstr);
+      if (ares_inet_pton(AF_INET6, ipstr, 
+                         &options.servers[options.nservers++]) != 1) {
+        FLOG("Failed to parse '%s'", ipstr);
+      }
     }
     ipstr = strtok_r(NULL, ",", &last);
   }
