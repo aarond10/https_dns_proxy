@@ -136,6 +136,52 @@ int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
   return pos - out;
 }
 
+// Either does a strcpy (in the case of an unquoted string) or lightly
+// unescapes ('\' and '"' only) a quoted string.
+// Returns a pointer to the character immediately after the quoted string.
+// olen should contain the output buffer size and will be replaced with the
+// length of the unescaped string stored in 'out'.
+static const char* unescape(const char *in, char *out, size_t *olen) {
+  const char *s = in;
+  const char *e = s + strlen(in);
+  char *o = out;
+  char *oe = o + *olen;
+
+  if (*s != '"') {
+    // If unquoted, assume no escaping required. Return whole string.
+    if ((e - s) < *olen) { *olen = e - s; }
+    strncpy(o, s, *olen);
+    return e;
+  }
+  s++;  // Skip '"'
+
+  while (s < e && o < oe) {
+    switch(*s) {
+     case '\\':
+      s++;
+      if (s == e) {
+        FLOG("Trailing escape char in '%s'", in);
+      }
+      if (*s >= '0' && *s <= '9') { // Octal
+        FLOG("Octal sequence found. Implement me.");
+      } else {
+        *o++ = *s++;
+      }
+      break;
+    case '"':  // String closed. We're done.
+      *olen = o - out;
+      // cloudflare-dns.com delimits <character-string> with whitespace. Google
+      // doesn't so we just eat trailing whitespace as necessary.
+      s++;
+      while (*s == ' ') { s++; }
+      return s;
+    default:
+      *o++ = *s++;
+    }
+  }
+  FLOG("Unclosed quoted string '%s'", in);
+}
+
 int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
                   const uint8_t **dnptrs, const uint8_t **lastdnptr) {
   if ((end - pos) < 2) {
@@ -209,32 +255,35 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     break;
   }
   case ns_t_txt: {
+    // RFC1035 states:
+    //   <character-string> is treated as binary information, and can be up
+    //   to 256 characters in length (including the length octet).
+    // Also:
+    //   <character-string> is expressed in one or two ways: as a contiguous set
+    //   of characters without interior spaces, or as a string beginning with a
+    //   " and ending with a ".
+    //
+    // TXT records are made of one or more <character-string> in a DATA block.
+    // (https://tools.ietf.org/html/rfc4408#section-3.1.3)
+    //
+    // Google DNS looks like it escapes each TXT as if it were in the 'master
+    // files'.
+    // These strings are then concatenated (without delimiter) and escaped again
+    // as part of the JSON encoding process. Fun!
     const char *s = data, *e = data + strlen(data);
     if ((end - pos) < (e - s + 254) / 255 * 256) {
       return -1;
     }
-    // TODO: Check conformance with multiple strings:
-    // https://tools.ietf.org/html/rfc4408#section-3.1.3
     while (s < e) {
-      int l = e - s;
-      if (l > 255) {
-        l = 255;
+      size_t len = end - pos;
+      if (len > 255) { len = 255; }
+      const char *next_str = unescape(s, pos + 1, &len);
+      if (!next_str) {
+        FLOG("Expected unescape of '%s'", s);
       }
-      // Strip TXT quotes embedded in JSON responses.
-      if (s[0] == '"') {
-        if (s[l - 1] != '"') {
-          ELOG("TXT parsing error for '%s'\n", data);
-          return -1;
-        }
-        *(u_char *)(pos++) = l - 2;
-        memcpy(pos, s + 1, l - 2);
-        pos += l - 2;
-      } else {
-        *(u_char *)(pos++) = l;
-        memcpy(pos, s, l);
-        pos += l;
-      }
-      s += l;
+      *(u_char *)(pos++) = len;
+      pos += len;
+      s = next_str;
     }
     break;
   }
