@@ -20,8 +20,8 @@ void options_init(struct Options *opt) {
   opt->logfd = -1;
   opt->loglevel = LOG_ERROR;
   opt->daemonize = 0;
-  opt->user = "nobody";
-  opt->group = "nobody";
+  opt->user = NULL;
+  opt->group = NULL;
   opt->uid = -1;
   opt->gid = -1;
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
@@ -80,13 +80,15 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       exit(EXIT_FAILURE);
     }
   }
-  if (opt->daemonize) {
+  if (opt->user) {
     struct passwd *p;
     if (!(p = getpwnam(opt->user)) || !p->pw_uid) {
       printf("Username (%s) invalid.\n", opt->user);
       return -1;
     }
     opt->uid = p->pw_uid;
+  }
+  if (opt->group) {
     struct group *g;
     if (!(g = getgrnam(opt->group)) || !g->gr_gid) {
       printf("Group (%s) invalid.\n", opt->group);
@@ -121,10 +123,8 @@ void options_show_usage(int argc, char **argv) {
   printf("  -p listen_port         Local port to bind to. (%d)\n",
          defaults.listen_port);
   printf("  -d                     Daemonize.\n");
-  printf("  -u user                User to drop to launched as root. (%s)\n",
-         defaults.user);
-  printf("  -g group               Group to drop to launched as root. (%s)\n",
-         defaults.group);
+  printf("  -u user                Optional user to drop to if launched as root.\n");
+  printf("  -g group               Optional group to drop to if launched as root.\n");
   printf("  -b dns_servers         Comma separated IPv4 address of DNS servers\n");
   printf("                         to resolve resolver host (e.g. dns.google.com). (%s)\n",
          defaults.bootstrap_dns);
