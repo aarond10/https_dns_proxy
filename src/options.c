@@ -96,6 +96,14 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     }
     opt->gid = g->gr_gid;
   }
+  // Get noisy about bad security practices.
+  if (getuid() == 0 && (!opt->user || !opt->group)) {
+    printf("----------------------------\n"
+           "WARNING: Running as root without dropping priviledges "
+           "is NOT recommended.\n"
+           "----------------------------\n");
+    sleep(1);
+  }
   if (!strcmp(opt->logfile, "-")) {
     opt->logfd = STDOUT_FILENO;
   } else if ((opt->logfd = open(opt->logfile, 
