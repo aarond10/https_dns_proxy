@@ -82,6 +82,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
     if (!options.servers) {
       FLOG("Out of mem");
     }
+    DLOG("Adding DNS server '%s' for bootstrap resolution.", ipstr);
     if (ares_inet_pton(AF_INET, ipstr, 
                        &options.servers[options.nservers++]) != 1) {
       FLOG("Failed to parse '%s'", ipstr);
