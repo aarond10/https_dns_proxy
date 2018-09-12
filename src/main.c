@@ -38,6 +38,7 @@ typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
   const char *resolver_url_prefix;
+  uint8_t using_dns_poller;
   // currently only used for edns_client_subnet, if specified.
   const char *extra_request_args;
 } app_state_t;
@@ -113,6 +114,14 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
 
   DLOG("Received request for '%s' id: %04x, type %d, flags %04x", name, tx_id,
        type, flags);
+
+  // If we're not yet bootstrapped, don't answer. libcurl will fall back to
+  // gethostbyname() which can cause a DNS loop due to the nameserver listed
+  // in resolv.conf being or depending on https_dns_proxy itself.
+  if(app->using_dns_poller && (app->resolv == NULL || app->resolv->data == NULL)) {
+    WLOG("Query received before bootstrapping is completed, discarding.");
+    return;
+  }
 
   // Build URL
   int cd_bit = flags & (1 << 4);
@@ -194,6 +203,7 @@ int main(int argc, char *argv[]) {
   app.https_client = &https_client;
   app.resolv = NULL;
   app.resolver_url_prefix = opt.resolver_url_prefix;
+  app.using_dns_poller = 0;
 
   if (opt.edns_client_subnet[0]) {
     static char buf[200];
@@ -235,8 +245,9 @@ int main(int argc, char *argv[]) {
   char hostname[255];  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     if (hostname_from_uri(opt.resolver_url_prefix, hostname, 254)) {
+      app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
-                      120 /* seconds */, dns_poll_cb, &app.resolv);
+                      dns_poll_cb, &app.resolv);
       ILOG("DNS polling initialized for '%s'", hostname);
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "

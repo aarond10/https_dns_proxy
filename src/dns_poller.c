@@ -39,23 +39,40 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
 
 static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
   dns_poller_t *d = (dns_poller_t *)arg;
+  ev_tstamp interval;
+
   if (status != ARES_SUCCESS) {
-    WLOG("DNS lookup failed: %d", status);
+    interval = POLLER_INTVL_ERR;
+    WLOG("DNS lookup failed: %s", ares_strerror(status));
   } else if (!h || h->h_length < 1) {
+    interval = POLLER_INTVL_ERR;
     WLOG("No hosts.");
   } else {
+    interval = POLLER_INTVL_NORM;
     d->cb(d->hostname, d->cb_data, (struct sockaddr_in *)h->h_addr_list[0]);
+  }
+
+  if(interval != d->timer.repeat) {
+    DLOG("DNS poll interval changed from %.0lf -> %.0lf", d->timer.repeat, interval);
+    ev_timer_stop(d->loop, &d->timer);
+    ev_timer_set(&d->timer, interval, interval);
+    ev_timer_start(d->loop, &d->timer);
   }
 }
 
 static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
+  // Cancel any pending queries before making new ones. c-ares can't be depended on to
+  // execute ares_cb() even after the specified query timeout has been reached, e.g. if
+  // the packet was dropped without any response from the network. This also serves to
+  // free memory tied up by any "zombie" queries.
+  ares_cancel(d->ares);
   ares_gethostbyname(d->ares, d->hostname, AF_INET, ares_cb, d);
 }
 
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns, const char *hostname,
-                     int interval_seconds, dns_poller_cb cb, void *cb_data) {
+                     dns_poller_cb cb, void *cb_data) {
   int i;
   for (i = 0; i < FD_SETSIZE; i++) {
     d->fd[i].fd = 0;
@@ -104,7 +121,8 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->cb = cb;
   d->cb_data = cb_data;
 
-  ev_timer_init(&d->timer, timer_cb, 0, interval_seconds);
+  // Start with a shorter polling interval and switch after we've bootstrapped.
+  ev_timer_init(&d->timer, timer_cb, 0, POLLER_INTVL_ERR);
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);
 }
