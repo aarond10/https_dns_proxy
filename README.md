@@ -106,14 +106,17 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -a listen_addr         Local address to bind to. (127.0.0.1)
   -p listen_port         Local port to bind to. (5053)
   -d                     Daemonize.
-  -u user                User to drop to launched as root. (nobody)
-  -g group               Group to drop to launched as root. (nobody)
+  -u user                Optional user to drop to if launched as root.
+  -g group               Optional group to drop to if launched as root.
   -b dns_servers         Comma separated IPv4 address of DNS servers
                          to resolve resolver host (e.g. dns.google.com).  (8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
   -r resolver_url_prefix The HTTPS path to the JSON resolver URL.  (https://dns.google.com/resolve?)
   -e subnet_addr         An edns-client-subnet to use such as "203.31.0.0/16".  ()
   -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
-                         (Initial DNS resolution can't be done over this.)
+                         Remote name resolution will be used if the protocol
+                         supports it (http, https, socks4a, socks5h), otherwise
+                         initial DNS resolution will still be done via the
+                         bootstrap DNS servers.
   -l logfile             Path to file to log to. (-)
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl (false).
