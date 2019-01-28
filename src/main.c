@@ -124,7 +124,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   }
 
   // Build URL
-  int cd_bit = flags & (1 << 4);
+  uint16_t cd_bit = flags & (1 << 4);
   char *escaped_name = curl_escape(name, strlen(name));
   char url[1500] = "";
   snprintf(url, sizeof(url) - 1,
