@@ -1,3 +1,6 @@
+#define _XOPEN_SOURCE
+
+#include <sys/select.h>
 #include <sys/types.h>
 
 #include <ares.h>
@@ -8,6 +11,9 @@
 #include <resolv.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <time.h>
+
 
 #include "json_to_dns.h"
 #include "logging.h"
@@ -136,6 +142,30 @@ int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
   return pos - out;
 }
 
+// Encode null-terminated 'name' to 'out' buffer of at least 'outlen' length.
+// Does NOT use domain-name compression (back referencing). For use with
+// DNSSEC RRType only.
+// Returns length of encoded name.
+int dn_name_nocompress(char *name, uint8_t *out, size_t outlen) {
+  char *savedptr = NULL;
+  char *name_component = strtok_r(name, ".", &savedptr);
+  char *pos = (char *)out;
+  char *end = pos + outlen;
+  while(name_component && name_component[0]) {
+    if (end - pos < strlen(name_component) + 1) {
+      ELOG("Buffer too small.");
+      return -1;
+    }
+    size_t l = strlen(name_component);
+    *pos++ = l;
+    memcpy(pos, name_component, l);
+    pos += l;
+    name_component = strtok_r(NULL, ".", &savedptr);
+  }
+  *pos++ = 0;
+  return pos - (char *)out;
+}
+
 // Either does a strcpy (in the case of an unquoted string) or lightly
 // unescapes ('\' and '"' only) a quoted string.
 // Returns a pointer to the character immediately after the quoted string.
@@ -180,6 +210,205 @@ static const char* unescape(const char *in, char *out, size_t *olen) {
     }
   }
   FLOG("Unclosed quoted string '%s'", in);
+}
+
+// Takes the string version of an RRTYPE and returns it's integer ID.
+// Returns -1 if string does not correspond to a known type.
+int str_to_rrtype(const char* str) {
+  if (!strcasecmp(str, "A6")) { return ns_t_a6; }
+  if (!strcasecmp(str, "A")) { return ns_t_a; }
+  if (!strcasecmp(str, "AAAA")) { return ns_t_aaaa; }
+  if (!strcasecmp(str, "AFSDB")) { return ns_t_afsdb; }
+  if (!strcasecmp(str, "ANY")) { return ns_t_any; }
+  if (!strcasecmp(str, "APL")) { return ns_t_apl; }
+  if (!strcasecmp(str, "ATMA")) { return ns_t_atma; }
+  if (!strcasecmp(str, "AXFR")) { return ns_t_axfr; }
+  if (!strcasecmp(str, "CERT")) { return ns_t_cert; }
+  if (!strcasecmp(str, "CNAME")) { return ns_t_cname; }
+  if (!strcasecmp(str, "DNAME")) { return ns_t_dname; }
+  if (!strcasecmp(str, "DNSKEY")) { return ns_t_dnskey; }
+  if (!strcasecmp(str, "DS")) { return ns_t_ds; }
+  if (!strcasecmp(str, "EID")) { return ns_t_eid; }
+  if (!strcasecmp(str, "GPOS")) { return ns_t_gpos; }
+  if (!strcasecmp(str, "HINFO")) { return ns_t_hinfo; }
+  if (!strcasecmp(str, "ISDN")) { return ns_t_isdn; }
+  if (!strcasecmp(str, "IXFR")) { return ns_t_ixfr; }
+  if (!strcasecmp(str, "KEY")) { return ns_t_key; }
+  if (!strcasecmp(str, "KX")) { return ns_t_kx; }
+  if (!strcasecmp(str, "LOC")) { return ns_t_loc; }
+  if (!strcasecmp(str, "MAILA")) { return ns_t_maila; }
+  if (!strcasecmp(str, "MAILB")) { return ns_t_mailb; }
+  if (!strcasecmp(str, "MB")) { return ns_t_mb; }
+  if (!strcasecmp(str, "MD")) { return ns_t_md; }
+  if (!strcasecmp(str, "MF")) { return ns_t_mf; }
+  if (!strcasecmp(str, "MG")) { return ns_t_mg; }
+  if (!strcasecmp(str, "MINFO")) { return ns_t_minfo; }
+  if (!strcasecmp(str, "MR")) { return ns_t_mr; }
+  if (!strcasecmp(str, "MX")) { return ns_t_mx; }
+  if (!strcasecmp(str, "NAPTR")) { return ns_t_naptr; }
+  if (!strcasecmp(str, "NIMLOC")) { return ns_t_nimloc; }
+  if (!strcasecmp(str, "NS")) { return ns_t_ns; }
+  if (!strcasecmp(str, "NSAP")) { return ns_t_nsap; }
+  if (!strcasecmp(str, "NSAP_PTR")) { return ns_t_nsap_ptr; }
+  if (!strcasecmp(str, "NSEC")) { return ns_t_nsec; }
+  if (!strcasecmp(str, "NSEC3")) { return ns_t_nsec3; }
+  if (!strcasecmp(str, "NULL")) { return ns_t_null; }
+  if (!strcasecmp(str, "NXT")) { return ns_t_nxt; }
+  if (!strcasecmp(str, "OPT")) { return ns_t_opt; }
+  if (!strcasecmp(str, "PTR")) { return ns_t_ptr; }
+  if (!strcasecmp(str, "PX")) { return ns_t_px; }
+  if (!strcasecmp(str, "RP")) { return ns_t_rp; }
+  if (!strcasecmp(str, "RRSIG")) { return ns_t_rrsig; }
+  if (!strcasecmp(str, "RT")) { return ns_t_rt; }
+  if (!strcasecmp(str, "SIG")) { return ns_t_sig; }
+  if (!strcasecmp(str, "SINK")) { return ns_t_sink; }
+  if (!strcasecmp(str, "SOA")) { return ns_t_soa; }
+  if (!strcasecmp(str, "SRV")) { return ns_t_srv; }
+  if (!strcasecmp(str, "SSHFP")) { return ns_t_sshfp; }
+  if (!strcasecmp(str, "TKEY")) { return ns_t_tkey; }
+  if (!strcasecmp(str, "TSIG")) { return ns_t_tsig; }
+  if (!strcasecmp(str, "TXT")) { return ns_t_txt; }
+  if (!strcasecmp(str, "WKS")) { return ns_t_wks; }
+  if (!strcasecmp(str, "X25")) { return ns_t_x25; }
+  if (!strcasecmp(str, "MAX")) { return ns_t_max; }
+  WLOG("Unknown rrtype '%s'", str);
+  return -1;
+}
+
+// Decodes YYYYmmddHHMMSS to a unix timestamp.
+uint32_t parse_time(const char *timestr) {
+  struct tm tm;
+  if (strptime(timestr, "%Y%m%d%H%M%S%Z", &tm) == NULL) {
+    return 0;
+  }
+  tzset();
+  // TODO: Confirm this is reasonable to do. Negative seconds work for me
+  // but man page doesn't state whether this is allowed.
+  tm.tm_sec -= timezone;
+  time_t t = mktime(&tm);
+  return t;
+}
+
+// Compact b64 char decode.
+int b64_char(char in) {
+  if (in == '+') { return 62; }
+  if (in == '/') { return 63; }
+  if (in < '0') { return -1; }
+  if (in <= '9') { return in - '0' + 52; }
+  if (in < 'A') { return -1; }
+  if (in <= 'Z') { return in - 'A'; }
+  if (in < 'a') { return -1; }
+  if (in <= 'z') { return in - 'a' + 26; }
+  return -1;
+}
+
+// In-place base64 decoder.
+// returns the length of the decoded string.
+int b64dec(const char *buf, uint8_t *out, int outlen) {
+  int len = strlen(buf);
+  if (len % 4) {
+    WLOG("Invalid b64 string.");
+    return -1;
+  }
+  const char *s = buf;
+  const char *e = s + len;
+  uint8_t *pos = out;
+  while (e > s) {
+    int tmp[4];
+    for (int i = 0; i < 4; i++) {
+      tmp[i] = b64_char(s[i]);
+      if (tmp[i] < 0 && s[i] != '=') {
+        WLOG("Invalid character 0x%x", s[i]);
+        return -1;
+      }
+    }
+    *pos++ = tmp[0] << 2 | tmp[1] >> 4;
+    if (s[2] == '=') { break; }
+    *pos++ = tmp[1] << 4 | tmp[2] >> 2;
+    if (s[3] == '=') { break; }
+    *pos++ = tmp[2] << 6 | tmp[3];
+    s += 4;
+  }
+  *pos = 0;
+  return pos - out;
+}
+
+int hex_char(char ch) {
+  if (ch < '0') { return -1; }
+  if (ch <= '9') { return ch - '0'; }
+  if (ch < 'A') { return -1; }
+  if (ch <= 'Z') { return ch - 'A'; }
+  if (ch < 'a') { return -1; }
+  if (ch <= 'z') { return ch - 'a'; }
+  return -1;
+}
+
+// in-place decode of hex string to raw values.
+// returns length of decoded string.
+int hexdec(const char *buf, uint8_t *out, int outlen) {
+  int len = strlen(buf);
+  if (len % 2) {
+    WLOG("Invalid hex byte string.");
+    return -1;
+  }
+  if (outlen < len / 2) {
+    WLOG("Out buffer too small.");
+    return -1;
+  }
+  const char *s = buf;
+  const char *e = s + len;
+  uint8_t *pos = out;
+  while (e > s) {
+    int tmp[2];
+    for (int i = 0; i < 2; i++) {
+      tmp[i] = hex_char(s[i]);
+      if (tmp[i] < 0) {
+        WLOG("Invalid hex char 0x%x", s[i]);
+        return -1;
+      }
+    }
+    *pos++ = tmp[0] << 4 | tmp[1];
+    s += 2;
+  }
+  return pos - out;
+}
+
+// Type bitmaps are defined in https://www.ietf.org/rfc/rfc4034.txt
+// This function parses presentation format from 'buf' and writes
+// out wire format to 'out'. Returns the number of bytes written.
+int type_bitmap_dec(char *buf, uint8_t *out, int outlen) {
+  uint8_t bits[65536 / 8]; // one bit per rrtype.
+  uint8_t window_len[256]; // one len per low 8-bit.
+  char *saveptr = NULL;
+  char *rrtype_str = strtok_r(buf, " ", &saveptr);
+  uint8_t *pos = out;
+  const uint8_t *end = pos + outlen;
+  memset(&bits[0], 0, sizeof(bits));
+  memset(&window_len[0], 0, sizeof(window_len));
+  while (rrtype_str) {
+    int rrtype = str_to_rrtype(rrtype_str);
+    if (rrtype < 0) {
+      DLOG("Ignoring unknown rrtype '%s'", rrtype_str);
+      continue;
+    }
+    bits[rrtype / 8] |= (0x80 >> (rrtype % 8));
+    if (((rrtype % 256) / 8 + 1) > window_len[rrtype / 256]) {
+      window_len[rrtype / 256] = (rrtype % 256) / 8 + 1;
+    }
+    rrtype_str = strtok_r(NULL, " ", &saveptr);
+  }
+  for (int i = 0; i < 256; i++) {
+    if (window_len[i] == 0) { continue; }
+    if (end - pos < window_len[i] + 2) {
+      DLOG("Out of buffer space.");
+      return -1;
+    }
+    *pos++ = i;
+    *pos++ = window_len[i];
+    memcpy(pos, &bits[i * 256 / 8], window_len[i]);
+    pos += window_len[i];
+  }
+  return pos - out;
 }
 
 int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
@@ -277,11 +506,11 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     while (s < e) {
       size_t len = end - pos;
       if (len > 255) { len = 255; }
-      const char *next_str = unescape(s, pos + 1, &len);
+      const char *next_str = unescape(s, (char *)pos + 1, &len);
       if (!next_str) {
         FLOG("Expected unescape of '%s'", s);
       }
-      *(u_char *)(pos++) = len;
+      *(pos++) = len;
       pos += len;
       s = next_str;
     }
@@ -323,6 +552,82 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
                          lastdnptr);
     if (r < 0) {
       DLOG("Failed to compress rname.");
+      return -1;
+    }
+    pos += r;
+    break;
+  }
+  case ns_t_rrsig: {
+    // See https://www.ietf.org/rfc/rfc4034.txt
+    char *saveptr = NULL;
+    NS_PUT16(str_to_rrtype(strtok_r(data, " ", &saveptr)), pos); // type
+    *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // algo
+    *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // labels
+    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // orig_ttl
+    NS_PUT32(parse_time(strtok_r(NULL, " ", &saveptr)), pos); // sig_expiration
+    NS_PUT32(parse_time(strtok_r(NULL, " ", &saveptr)), pos); // sig_inception
+    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // key_tag
+    // signer
+    int r = dn_name_nocompress(strtok_r(NULL, " ", &saveptr), pos, end - pos);
+    if (r < 0) {
+      DLOG("Failed to encode signer.");
+      return -1;
+    }
+    pos += r;
+    // signature
+    r = b64dec(strtok_r(NULL, " ", &saveptr), pos, end - pos);
+    if (r < 0) {
+      DLOG("Failed to encode signature.");
+      return -1;
+    }
+    pos += r;
+    break;
+  }
+  case ns_t_nsec: {
+    // See https://www.ietf.org/rfc/rfc4034.txt
+    // next domain name.
+    char *saveptr = NULL;
+    int r = dn_name_nocompress(strtok_r(data, " ", &saveptr), pos, end - pos);
+    if (r < 0) {
+      DLOG("Failed to encode next domain name.");
+      return -1;
+    }
+    pos += r;
+    // type bit map encoding
+    r = type_bitmap_dec(strtok_r(NULL, "", &saveptr), pos, end - pos);
+    if (r < 0) {
+      DLOG("Failed type bitmap decode.");
+      return -1;
+    }
+    pos += r;
+    break;
+  }
+  case ns_t_nsec3: {
+    // See https://tools.ietf.org/html/rfc5155
+    char *saveptr = NULL;
+    *pos++ = atoi(strtok_r(data, " ", &saveptr)); // hash algo
+    *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // flags
+    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // iterations
+    char *salt = strtok_r(NULL, " ", &saveptr);
+    *pos++ = strlen(salt) / 2;  // salt length
+    int r = hexdec(salt, pos, end - pos);  // salt
+    if (r < 0) {
+      DLOG("Failed hex decode.");
+      return -1;
+    }
+    pos += r;
+    char *hash = strtok_r(NULL, " ", &saveptr);
+    *pos++ = strlen(hash) / 2;  // hash length
+    r = hexdec(hash, pos, end - pos);  // hash
+    if (r < 0) {
+      DLOG("Failed hex decode.");
+      return -1;
+    }
+    pos += r;
+    // type bit map encoding
+    r = type_bitmap_dec(strtok_r(NULL, "", &saveptr), pos, end - pos);
+    if (r < 0) {
+      DLOG("Failed type bitmap decode.");
       return -1;
     }
     pos += r;
