@@ -1,11 +1,10 @@
-#define _XOPEN_SOURCE
+#define _XOPEN_SOURCE       /* See feature_test_macros(7) */
 
 #include <sys/select.h>
 #include <sys/types.h>
 
 #include <ares.h>
 #include <arpa/inet.h>
-#include <arpa/nameser.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <resolv.h>
@@ -14,10 +13,23 @@
 #include <strings.h>
 #include <time.h>
 
-
 #include "json_to_dns.h"
 #include "logging.h"
 #include "nxjson/nxjson.h"
+
+static inline size_t _ns_put16(uint16_t s, uint8_t *buf) {
+  *buf++ = s >> 8;
+  *buf++ = s;
+  return 2;
+}
+
+static inline size_t _ns_put32(uint32_t s, uint8_t *buf) {
+  *buf++ = s >> 24;
+  *buf++ = s >> 16;
+  *buf++ = s >> 8;
+  *buf++ = s >> 0;
+  return 4;
+}
 
 // Writes a string out, pascal style. limited to 63 bytes$
 // (max length without compression for a domain segment).
@@ -420,7 +432,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
 
   // Write a placeholder for length until we know it.
   uint8_t *enc_len_pos = pos;
-  NS_PUT16(0xffff, pos);
+  pos += _ns_put16(0xffff, pos);
 
   switch (type) {
   case ns_t_cname:
@@ -444,7 +456,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
       return -1;
     }
     uint16_t prio = atoi(tok);
-    NS_PUT16(prio, pos);
+    pos += _ns_put16(prio, pos);
     tok = strtok_r(NULL, " ", &saveptr);
     if (!tok) {
       return -1;
@@ -536,18 +548,18 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
       DLOG("Buffer too small: %d < 20", end - pos);
       return -1;
     }
-    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // serial
-    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // refresh
-    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // retry
-    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // expire
-    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // min
+    pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // serial
+    pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // refresh
+    pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // retry
+    pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // expire
+    pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // min
     break;
   }
   case ns_t_srv: {
     char *saveptr = NULL;
-    NS_PUT16(atoi(strtok_r(data, " ", &saveptr)), pos); // prio
-    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // weight
-    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // port
+    pos += _ns_put16(atoi(strtok_r(data, " ", &saveptr)), pos); // prio
+    pos += _ns_put16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // weight
+    pos += _ns_put16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // port
     int r = dn_name_compress(strtok_r(NULL, " ", &saveptr), pos, end - pos, dnptrs,
                          lastdnptr);
     if (r < 0) {
@@ -560,13 +572,13 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
   case ns_t_rrsig: {
     // See https://www.ietf.org/rfc/rfc4034.txt
     char *saveptr = NULL;
-    NS_PUT16(str_to_rrtype(strtok_r(data, " ", &saveptr)), pos); // type
+    pos += _ns_put16(str_to_rrtype(strtok_r(data, " ", &saveptr)), pos); // type
     *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // algo
     *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // labels
-    NS_PUT32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // orig_ttl
-    NS_PUT32(parse_time(strtok_r(NULL, " ", &saveptr)), pos); // sig_expiration
-    NS_PUT32(parse_time(strtok_r(NULL, " ", &saveptr)), pos); // sig_inception
-    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // key_tag
+    pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // orig_ttl
+    pos += _ns_put32(parse_time(strtok_r(NULL, " ", &saveptr)), pos); // sig_expiration
+    pos += _ns_put32(parse_time(strtok_r(NULL, " ", &saveptr)), pos); // sig_inception
+    pos += _ns_put16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // key_tag
     // signer
     int r = dn_name_nocompress(strtok_r(NULL, " ", &saveptr), pos, end - pos);
     if (r < 0) {
@@ -607,7 +619,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     char *saveptr = NULL;
     *pos++ = atoi(strtok_r(data, " ", &saveptr)); // hash algo
     *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // flags
-    NS_PUT16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // iterations
+    pos += _ns_put16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // iterations
     char *salt = strtok_r(NULL, " ", &saveptr);
     *pos++ = strlen(salt) / 2;  // salt length
     int r = hexdec(salt, pos, end - pos);  // salt
@@ -638,8 +650,8 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     return -1;
   };
   size_t r = pos - enc_len_pos - 2;
-  NS_PUT16(r, enc_len_pos);
-  return r + 2;
+  pos += _ns_put16(r, enc_len_pos);
+  return pos - enc_len_pos - 2;
 }
 
 int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
@@ -662,12 +674,12 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
   uint8_t *pos = out;
   uint8_t *end = out + olen;
 
-  NS_PUT16(tx_id, pos);
-  NS_PUT16(flags, pos);
-  NS_PUT16(nx_json_get(json, "Question")->length, pos);
-  NS_PUT16(nx_json_get(json, "Answer")->length, pos);
-  NS_PUT16(nx_json_get(json, "Authority")->length, pos);
-  NS_PUT16(nx_json_get(json, "Additional")->length, pos);
+  pos += _ns_put16(tx_id, pos);
+  pos += _ns_put16(flags, pos);
+  pos += _ns_put16(nx_json_get(json, "Question")->length, pos);
+  pos += _ns_put16(nx_json_get(json, "Answer")->length, pos);
+  pos += _ns_put16(nx_json_get(json, "Authority")->length, pos);
+  pos += _ns_put16(nx_json_get(json, "Additional")->length, pos);
 
   const uint8_t *dnptrs[256];
   const uint8_t **lastdnptr = &dnptrs[256];
@@ -688,8 +700,8 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
       DLOG("Insufficient space for question.");
       return -1;
     }
-    NS_PUT16(nx_json_get(subobj, "type")->int_value, pos);
-    NS_PUT16(ns_c_in, pos);
+    pos += _ns_put16(nx_json_get(subobj, "type")->int_value, pos);
+    pos += _ns_put16(ns_c_in, pos);
   }
   const char *rr_keys[] = {"Answer", "Authority", "Additional", NULL};
   for (i = 0; rr_keys[i]; i++) {
@@ -711,9 +723,9 @@ int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
           return -1;
         }
         uint16_t type = nx_json_get(subobj, "type")->int_value;
-        NS_PUT16(type, pos);
-        NS_PUT16(ns_c_in, pos);
-        NS_PUT32(nx_json_get(subobj, "TTL")->int_value, pos);
+        pos += _ns_put16(type, pos);
+        pos += _ns_put16(ns_c_in, pos);
+        pos += _ns_put32(nx_json_get(subobj, "TTL")->int_value, pos);
         // TODO: Don't drop const? This is probably safe but bad form.
         r = json_to_rdata(type, (char *)nx_json_get(subobj, "data")->text_value,
                           pos, end, dnptrs, lastdnptr);
