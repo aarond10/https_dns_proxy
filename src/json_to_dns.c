@@ -1,5 +1,3 @@
-#define _XOPEN_SOURCE       /* See feature_test_macros(7) */
-
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -13,16 +11,19 @@
 #include <strings.h>
 #include <time.h>
 
+#include "constants.h"
 #include "json_to_dns.h"
 #include "logging.h"
 #include "nxjson/nxjson.h"
 
+// Simple htons with write to '*buf'.
 static inline size_t _ns_put16(uint16_t s, uint8_t *buf) {
   *buf++ = s >> 8;
   *buf++ = s;
   return 2;
 }
 
+// Simple htonl with write to '*buf'.
 static inline size_t _ns_put32(uint32_t s, uint8_t *buf) {
   *buf++ = s >> 24;
   *buf++ = s >> 16;
@@ -227,62 +228,63 @@ static const char* unescape(const char *in, char *out, size_t *olen) {
 // Takes the string version of an RRTYPE and returns it's integer ID.
 // Returns -1 if string does not correspond to a known type.
 int str_to_rrtype(const char* str) {
-  if (!strcasecmp(str, "A6")) { return ns_t_a6; }
-  if (!strcasecmp(str, "A")) { return ns_t_a; }
-  if (!strcasecmp(str, "AAAA")) { return ns_t_aaaa; }
-  if (!strcasecmp(str, "AFSDB")) { return ns_t_afsdb; }
-  if (!strcasecmp(str, "ANY")) { return ns_t_any; }
-  if (!strcasecmp(str, "APL")) { return ns_t_apl; }
-  if (!strcasecmp(str, "ATMA")) { return ns_t_atma; }
-  if (!strcasecmp(str, "AXFR")) { return ns_t_axfr; }
-  if (!strcasecmp(str, "CERT")) { return ns_t_cert; }
-  if (!strcasecmp(str, "CNAME")) { return ns_t_cname; }
-  if (!strcasecmp(str, "DNAME")) { return ns_t_dname; }
-  if (!strcasecmp(str, "DNSKEY")) { return ns_t_dnskey; }
-  if (!strcasecmp(str, "DS")) { return ns_t_ds; }
-  if (!strcasecmp(str, "EID")) { return ns_t_eid; }
-  if (!strcasecmp(str, "GPOS")) { return ns_t_gpos; }
-  if (!strcasecmp(str, "HINFO")) { return ns_t_hinfo; }
-  if (!strcasecmp(str, "ISDN")) { return ns_t_isdn; }
-  if (!strcasecmp(str, "IXFR")) { return ns_t_ixfr; }
-  if (!strcasecmp(str, "KEY")) { return ns_t_key; }
-  if (!strcasecmp(str, "KX")) { return ns_t_kx; }
-  if (!strcasecmp(str, "LOC")) { return ns_t_loc; }
-  if (!strcasecmp(str, "MAILA")) { return ns_t_maila; }
-  if (!strcasecmp(str, "MAILB")) { return ns_t_mailb; }
-  if (!strcasecmp(str, "MB")) { return ns_t_mb; }
-  if (!strcasecmp(str, "MD")) { return ns_t_md; }
-  if (!strcasecmp(str, "MF")) { return ns_t_mf; }
-  if (!strcasecmp(str, "MG")) { return ns_t_mg; }
-  if (!strcasecmp(str, "MINFO")) { return ns_t_minfo; }
-  if (!strcasecmp(str, "MR")) { return ns_t_mr; }
-  if (!strcasecmp(str, "MX")) { return ns_t_mx; }
-  if (!strcasecmp(str, "NAPTR")) { return ns_t_naptr; }
-  if (!strcasecmp(str, "NIMLOC")) { return ns_t_nimloc; }
-  if (!strcasecmp(str, "NS")) { return ns_t_ns; }
-  if (!strcasecmp(str, "NSAP")) { return ns_t_nsap; }
-  if (!strcasecmp(str, "NSAP_PTR")) { return ns_t_nsap_ptr; }
-  if (!strcasecmp(str, "NSEC")) { return ns_t_nsec; }
-  if (!strcasecmp(str, "NSEC3")) { return ns_t_nsec3; }
-  if (!strcasecmp(str, "NULL")) { return ns_t_null; }
-  if (!strcasecmp(str, "NXT")) { return ns_t_nxt; }
-  if (!strcasecmp(str, "OPT")) { return ns_t_opt; }
-  if (!strcasecmp(str, "PTR")) { return ns_t_ptr; }
-  if (!strcasecmp(str, "PX")) { return ns_t_px; }
-  if (!strcasecmp(str, "RP")) { return ns_t_rp; }
-  if (!strcasecmp(str, "RRSIG")) { return ns_t_rrsig; }
-  if (!strcasecmp(str, "RT")) { return ns_t_rt; }
-  if (!strcasecmp(str, "SIG")) { return ns_t_sig; }
-  if (!strcasecmp(str, "SINK")) { return ns_t_sink; }
-  if (!strcasecmp(str, "SOA")) { return ns_t_soa; }
-  if (!strcasecmp(str, "SRV")) { return ns_t_srv; }
-  if (!strcasecmp(str, "SSHFP")) { return ns_t_sshfp; }
-  if (!strcasecmp(str, "TKEY")) { return ns_t_tkey; }
-  if (!strcasecmp(str, "TSIG")) { return ns_t_tsig; }
-  if (!strcasecmp(str, "TXT")) { return ns_t_txt; }
-  if (!strcasecmp(str, "WKS")) { return ns_t_wks; }
-  if (!strcasecmp(str, "X25")) { return ns_t_x25; }
-  if (!strcasecmp(str, "MAX")) { return ns_t_max; }
+  if (!strcasecmp(str, "A6")) { return dns_t_a6; }
+  if (!strcasecmp(str, "A")) { return dns_t_a; }
+  if (!strcasecmp(str, "AAAA")) { return dns_t_aaaa; }
+  if (!strcasecmp(str, "AFSDB")) { return dns_t_afsdb; }
+  if (!strcasecmp(str, "ANY")) { return dns_t_any; }
+  if (!strcasecmp(str, "APL")) { return dns_t_apl; }
+  if (!strcasecmp(str, "ATMA")) { return dns_t_atma; }
+  if (!strcasecmp(str, "AXFR")) { return dns_t_axfr; }
+  if (!strcasecmp(str, "CERT")) { return dns_t_cert; }
+  if (!strcasecmp(str, "CNAME")) { return dns_t_cname; }
+  if (!strcasecmp(str, "DNAME")) { return dns_t_dname; }
+  if (!strcasecmp(str, "DNSKEY")) { return dns_t_dnskey; }
+  if (!strcasecmp(str, "DS")) { return dns_t_ds; }
+  if (!strcasecmp(str, "EID")) { return dns_t_eid; }
+  if (!strcasecmp(str, "GPOS")) { return dns_t_gpos; }
+  if (!strcasecmp(str, "HINFO")) { return dns_t_hinfo; }
+  if (!strcasecmp(str, "ISDN")) { return dns_t_isdn; }
+  if (!strcasecmp(str, "IXFR")) { return dns_t_ixfr; }
+  if (!strcasecmp(str, "KEY")) { return dns_t_key; }
+  if (!strcasecmp(str, "KX")) { return dns_t_kx; }
+  if (!strcasecmp(str, "LOC")) { return dns_t_loc; }
+  if (!strcasecmp(str, "MAILA")) { return dns_t_maila; }
+  if (!strcasecmp(str, "MAILB")) { return dns_t_mailb; }
+  if (!strcasecmp(str, "MB")) { return dns_t_mb; }
+  if (!strcasecmp(str, "MD")) { return dns_t_md; }
+  if (!strcasecmp(str, "MF")) { return dns_t_mf; }
+  if (!strcasecmp(str, "MG")) { return dns_t_mg; }
+  if (!strcasecmp(str, "MINFO")) { return dns_t_minfo; }
+  if (!strcasecmp(str, "MR")) { return dns_t_mr; }
+  if (!strcasecmp(str, "MX")) { return dns_t_mx; }
+  if (!strcasecmp(str, "NAPTR")) { return dns_t_naptr; }
+  if (!strcasecmp(str, "NIMLOC")) { return dns_t_nimloc; }
+  if (!strcasecmp(str, "NS")) { return dns_t_ns; }
+  if (!strcasecmp(str, "NSAP")) { return dns_t_nsap; }
+  if (!strcasecmp(str, "NSAP_PTR")) { return dns_t_nsap_ptr; }
+  if (!strcasecmp(str, "NSEC")) { return dns_t_nsec; }
+  if (!strcasecmp(str, "NSEC3")) { return dns_t_nsec3; }
+  if (!strcasecmp(str, "NSEC3PARAM")) { return dns_t_nsec3param; }
+  if (!strcasecmp(str, "NULL")) { return dns_t_null; }
+  if (!strcasecmp(str, "NXT")) { return dns_t_nxt; }
+  if (!strcasecmp(str, "OPT")) { return dns_t_opt; }
+  if (!strcasecmp(str, "PTR")) { return dns_t_ptr; }
+  if (!strcasecmp(str, "PX")) { return dns_t_px; }
+  if (!strcasecmp(str, "RP")) { return dns_t_rp; }
+  if (!strcasecmp(str, "RRSIG")) { return dns_t_rrsig; }
+  if (!strcasecmp(str, "RT")) { return dns_t_rt; }
+  if (!strcasecmp(str, "SIG")) { return dns_t_sig; }
+  if (!strcasecmp(str, "SINK")) { return dns_t_sink; }
+  if (!strcasecmp(str, "SOA")) { return dns_t_soa; }
+  if (!strcasecmp(str, "SRV")) { return dns_t_srv; }
+  if (!strcasecmp(str, "SSHFP")) { return dns_t_sshfp; }
+  if (!strcasecmp(str, "TKEY")) { return dns_t_tkey; }
+  if (!strcasecmp(str, "TSIG")) { return dns_t_tsig; }
+  if (!strcasecmp(str, "TXT")) { return dns_t_txt; }
+  if (!strcasecmp(str, "WKS")) { return dns_t_wks; }
+  if (!strcasecmp(str, "X25")) { return dns_t_x25; }
+  if (!strcasecmp(str, "MAX")) { return dns_t_max; }
   WLOG("Unknown rrtype '%s'", str);
   return -1;
 }
@@ -290,10 +292,15 @@ int str_to_rrtype(const char* str) {
 // Decodes YYYYmmddHHMMSS to a unix timestamp.
 uint32_t parse_time(const char *timestr) {
   struct tm tm;
-  if (strptime(timestr, "%Y%m%d%H%M%S%Z", &tm) == NULL) {
+  memset(&tm, 0, sizeof(tm));
+  if (sscanf(timestr, "%04d%02d%02d%02d%02d%02d",
+          &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+          &tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 6) {
     return 0;
   }
   tzset();
+  tm.tm_year -= 1900;
+  tm.tm_mon -= 1;
   // TODO: Confirm this is reasonable to do. Negative seconds work for me
   // but man page doesn't state whether this is allowed.
   tm.tm_sec -= timezone;
@@ -301,17 +308,57 @@ uint32_t parse_time(const char *timestr) {
   return t;
 }
 
+// Compact base32hex char decode.
+// Returns zero for invalid chars.
+uint8_t b32h_char(char in) {
+  if (in < '0') { return 0; }
+  if (in <= '9') { return in - '0'; } // [0..10)
+  if (in < 'A') { return 0; }
+  if (in <= 'V') { return in - 'A' + 10; }  // [10..32)
+  if (in < 'a') { return 0; }
+  if (in <= 'v') { return in - 'a' + 10; }  // [10..32)
+  return 0;
+}
+
+// In-place base32hex (RFC4648) decoder. Padding optional.
+// returns the length of the decoded string.
+int b32hexdec(const char *buf, uint8_t *out, int outlen) {
+  const char *s = buf;
+  const char *e = s + strlen(buf);
+  uint8_t *pos = out;
+  while (e > (s + 1)) {
+    // 5 + 3
+    *pos++ = b32h_char(s[0]) << 3 | b32h_char(s[1]) >> 2;
+    s += 1; if ((s + 2) >= e || s[1] == '=' || s[2] == '=') { break; }
+    // 2 + 5 + 1
+    *pos++ = b32h_char(s[0]) << 6 | b32h_char(s[1]) << 1 | b32h_char(s[2]) >> 4;
+    s += 2; if ((s + 1) >= e || s[1] == '=') { break; }
+    // 4 + 4
+    *pos++ = b32h_char(s[0]) << 4 | b32h_char(s[1]) >> 1;
+    s += 1; if ((s + 2) >= e || s[1] == '=' || s[2] == '=') { break; }
+    // 1 + 5 + 2
+    *pos++ = b32h_char(s[0]) << 7 | b32h_char(s[1]) << 2 | b32h_char(s[2]) >> 3;
+    s += 2; if ((s + 1) >= e || s[1] == '=') { break; }
+    // 3 + 5
+    *pos++ = b32h_char(s[0]) << 5 | b32h_char(s[1]);
+    s += 2;
+  }
+  *pos = 0;
+  return pos - out;
+}
+
 // Compact b64 char decode.
-int b64_char(char in) {
+// Returns zero for invalid chars.
+uint8_t b64_char(char in) {
   if (in == '+') { return 62; }
   if (in == '/') { return 63; }
-  if (in < '0') { return -1; }
-  if (in <= '9') { return in - '0' + 52; }
-  if (in < 'A') { return -1; }
-  if (in <= 'Z') { return in - 'A'; }
-  if (in < 'a') { return -1; }
-  if (in <= 'z') { return in - 'a' + 26; }
-  return -1;
+  if (in < '0') { return 0; }
+  if (in <= '9') { return in - '0' + 52; }  // [52..62)
+  if (in < 'A') { return 0; }
+  if (in <= 'Z') { return in - 'A'; }  // [0..26)
+  if (in < 'a') { return 0; }
+  if (in <= 'z') { return in - 'a' + 26; } // [26..52)
+  return 0;
 }
 
 // In-place base64 decoder.
@@ -325,23 +372,15 @@ int b64dec(const char *buf, uint8_t *out, int outlen) {
   const char *s = buf;
   const char *e = s + len;
   uint8_t *pos = out;
-  while (e > s) {
-    int tmp[4];
-    for (int i = 0; i < 4; i++) {
-      tmp[i] = b64_char(s[i]);
-      if (tmp[i] < 0 && s[i] != '=') {
-        WLOG("Invalid character 0x%x", s[i]);
-        return -1;
-      }
-    }
-    *pos++ = tmp[0] << 2 | tmp[1] >> 4;
-    if (s[2] == '=') { break; }
-    *pos++ = tmp[1] << 4 | tmp[2] >> 2;
-    if (s[3] == '=') { break; }
-    *pos++ = tmp[2] << 6 | tmp[3];
-    s += 4;
+  while (e > (s + 1)) {
+    *pos++ = b64_char(s[0]) << 2 | b64_char(s[1]) >> 4;
+    s += 1; if (e <= (s + 1) || s[1] == '=') { break; }
+    *pos++ = b64_char(s[0]) << 4 | b64_char(s[1]) >> 2;
+    s += 1; if (e <= (s + 1) || s[1] == '=') { break; }
+    *pos++ = b64_char(s[0]) << 6 | b64_char(s[1]);
+    s += 2;
   }
-  *pos = 0;
+  //*pos = 0;
   return pos - out;
 }
 
@@ -349,9 +388,9 @@ int hex_char(char ch) {
   if (ch < '0') { return -1; }
   if (ch <= '9') { return ch - '0'; }
   if (ch < 'A') { return -1; }
-  if (ch <= 'Z') { return ch - 'A'; }
+  if (ch <= 'Z') { return ch - 'A' + 10; }
   if (ch < 'a') { return -1; }
-  if (ch <= 'z') { return ch - 'a'; }
+  if (ch <= 'z') { return ch - 'a' + 10; }
   return -1;
 }
 
@@ -370,7 +409,7 @@ int hexdec(const char *buf, uint8_t *out, int outlen) {
   const char *s = buf;
   const char *e = s + len;
   uint8_t *pos = out;
-  while (e > s) {
+  while (e > (s + 1)) {
     int tmp[2];
     for (int i = 0; i < 2; i++) {
       tmp[i] = hex_char(s[i]);
@@ -401,11 +440,11 @@ int type_bitmap_dec(char *buf, uint8_t *out, int outlen) {
     int rrtype = str_to_rrtype(rrtype_str);
     if (rrtype < 0) {
       DLOG("Ignoring unknown rrtype '%s'", rrtype_str);
-      continue;
-    }
-    bits[rrtype / 8] |= (0x80 >> (rrtype % 8));
-    if (((rrtype % 256) / 8 + 1) > window_len[rrtype / 256]) {
-      window_len[rrtype / 256] = (rrtype % 256) / 8 + 1;
+    } else {
+      bits[rrtype / 8] |= (0x80 >> (rrtype % 8));
+      if (((rrtype % 256) / 8 + 1) > window_len[rrtype / 256]) {
+        window_len[rrtype / 256] = (rrtype % 256) / 8 + 1;
+      }
     }
     rrtype_str = strtok_r(NULL, " ", &saveptr);
   }
@@ -435,9 +474,9 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
   pos += _ns_put16(0xffff, pos);
 
   switch (type) {
-  case ns_t_cname:
-  case ns_t_ns:
-  case ns_t_ptr: {
+  case dns_t_cname:
+  case dns_t_ns:
+  case dns_t_ptr: {
     int r = dn_name_compress(data, pos, end - pos, dnptrs, lastdnptr);
     if (r < 0) {
       DLOG("Failed to compress name.");
@@ -446,7 +485,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_mx: {
+  case dns_t_mx: {
     if ((end - pos) < 2) {
       return -1;
     }
@@ -469,7 +508,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_a: {
+  case dns_t_a: {
     size_t r = sizeof(struct in_addr);
     if (pos + r > end) {
       DLOG("%p > %p", pos + r, end);
@@ -482,7 +521,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_aaaa: {
+  case dns_t_aaaa: {
     size_t r = sizeof(struct in6_addr);
     if (pos + r > end) {
       DLOG("%p > %p", pos + r, end);
@@ -495,7 +534,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_txt: {
+  case dns_t_txt: {
     // RFC1035 states:
     //   <character-string> is treated as binary information, and can be up
     //   to 256 characters in length (including the length octet).
@@ -528,7 +567,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     }
     break;
   }
-  case ns_t_soa: {
+  case dns_t_soa: {
     char *saveptr = NULL;
     int r = dn_name_compress(strtok_r(data, " ", &saveptr), pos, end - pos,
                              dnptrs, lastdnptr);
@@ -555,7 +594,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += _ns_put32(atoi(strtok_r(NULL, " ", &saveptr)), pos); // min
     break;
   }
-  case ns_t_srv: {
+  case dns_t_srv: {
     char *saveptr = NULL;
     pos += _ns_put16(atoi(strtok_r(data, " ", &saveptr)), pos); // prio
     pos += _ns_put16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // weight
@@ -569,7 +608,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_rrsig: {
+  case dns_t_rrsig: {
     // See https://www.ietf.org/rfc/rfc4034.txt
     char *saveptr = NULL;
     pos += _ns_put16(str_to_rrtype(strtok_r(data, " ", &saveptr)), pos); // type
@@ -595,7 +634,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_nsec: {
+  case dns_t_nsec: {
     // See https://www.ietf.org/rfc/rfc4034.txt
     // next domain name.
     char *saveptr = NULL;
@@ -614,7 +653,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
-  case ns_t_nsec3: {
+  case dns_t_nsec3: {
     // See https://tools.ietf.org/html/rfc5155
     char *saveptr = NULL;
     *pos++ = atoi(strtok_r(data, " ", &saveptr)); // hash algo
@@ -622,19 +661,24 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += _ns_put16(atoi(strtok_r(NULL, " ", &saveptr)), pos); // iterations
     char *salt = strtok_r(NULL, " ", &saveptr);
     *pos++ = strlen(salt) / 2;  // salt length
-    int r = hexdec(salt, pos, end - pos);  // salt
-    if (r < 0) {
-      DLOG("Failed hex decode.");
-      return -1;
+    if (salt[0] == '-' && salt[1] == 0) {
+      // No salt.
+    } else {
+      int r = hexdec(salt, pos, end - pos);  // salt
+      if (r < 0) {
+        DLOG("Failed hex decode.");
+        return -1;
+      }
+      pos += r;
     }
-    pos += r;
     char *hash = strtok_r(NULL, " ", &saveptr);
-    *pos++ = strlen(hash) / 2;  // hash length
-    r = hexdec(hash, pos, end - pos);  // hash
+    uint8_t *plen = pos++;  // hash length
+    int r = b32hexdec(hash, pos, end - pos);  // hash
     if (r < 0) {
       DLOG("Failed hex decode.");
       return -1;
     }
+    *plen = r;
     pos += r;
     // type bit map encoding
     r = type_bitmap_dec(strtok_r(NULL, "", &saveptr), pos, end - pos);
