@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <time.h>
 
 #include "constants.h"
 #include "json_to_dns.h"
@@ -291,20 +290,23 @@ int str_to_rrtype(const char* str) {
 
 // Decodes YYYYmmddHHMMSS to a unix timestamp.
 uint32_t parse_time(const char *timestr) {
-  struct tm tm;
-  memset(&tm, 0, sizeof(tm));
+  int year, mon, mday, hour, min, sec;
   if (sscanf(timestr, "%04d%02d%02d%02d%02d%02d",
-          &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
-          &tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 6) {
+          &year, &mon, &mday, &hour, &min, &sec) != 6) {
     return 0;
   }
-  tzset();
-  tm.tm_year -= 1900;
-  tm.tm_mon -= 1;
-  // TODO: Confirm this is reasonable to do. Negative seconds work for me
-  // but man page doesn't state whether this is allowed.
-  tm.tm_sec -= timezone;
-  time_t t = mktime(&tm);
+  // We don't want leap seconds. mktime() complicates things with
+  // DST and timezones as well so we just calculate this timestamp
+  // ourselves.
+  int mdays[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+  int leap_days = (year - 1968) / 4;
+  year -= 1970;
+  mon -= 1;
+  if (mon < 0) { mon = 0; }
+  if (mon > 11) { mon = 11; }
+  time_t t = (
+      year * 365 + mdays[mon] + mday + leap_days) * 86400 +
+      hour * 3600 + min * 60 + sec;
   return t;
 }
 
@@ -380,7 +382,6 @@ int b64dec(const char *buf, uint8_t *out, int outlen) {
     *pos++ = b64_char(s[0]) << 6 | b64_char(s[1]);
     s += 2;
   }
-  //*pos = 0;
   return pos - out;
 }
 
