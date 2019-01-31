@@ -104,14 +104,16 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
            "----------------------------\n");
     sleep(1);
   }
-  if (!strcmp(opt->logfile, "-")) {
+  if (opt->logfile == NULL ||
+      !strcmp(opt->logfile, "-")) {
     opt->logfd = STDOUT_FILENO;
   } else if ((opt->logfd = open(opt->logfile, 
                                 O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC,
                                 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
     printf("Logfile '%s' is not writable.\n", opt->logfile);
   }
-  if (strncmp(opt->resolver_url_prefix, "https://", 8) != 0) {
+  if (opt->resolver_url_prefix == NULL ||
+      strncmp(opt->resolver_url_prefix, "https://", 8) != 0) {
     printf("Resolver prefix (%s) must be a https:// address.\n",
            opt->resolver_url_prefix);
     return -1;
