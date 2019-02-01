@@ -260,6 +260,20 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     pos += r;
     break;
   }
+  case dns_t_ds: {
+    // See https://www.ietf.org/rfc/rfc3658.txt
+    char *saveptr = NULL;
+    pos += _ns_put16(atoi(strtok_r(data, " ", &saveptr)), pos); // key_tag
+    *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // algorithm
+    *pos++ = atoi(strtok_r(NULL, " ", &saveptr)); // digest_type
+    int r = hexdec(strtok_r(NULL, "", &saveptr), pos, end - pos);  // digest
+    if (r < 0) {
+      DLOG("Failed decode.");
+      return -1;
+    }
+    pos += r;
+    break;
+  }
   default:
     DLOG("Unexpected RR type: %d", type);
     return -1;
