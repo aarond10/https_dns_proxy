@@ -266,7 +266,12 @@ int str_to_rrtype(const char* str) {
 
 // Decodes YYYYmmddHHMMSS to a unix timestamp.
 uint32_t parse_time(const char *timestr) {
-  int year, mon, mday, hour, min, sec;
+  int year;
+  int mon;
+  int mday;
+  int hour;
+  int min;
+  int sec;
   if (sscanf(timestr, "%04d%02d%02d%02d%02d%02d",
           &year, &mon, &mday, &hour, &min, &sec) != 6) {
     return 0;

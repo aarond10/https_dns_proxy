@@ -121,7 +121,8 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
     // files'.
     // These strings are then concatenated (without delimiter) and escaped again
     // as part of the JSON encoding process. Fun!
-    const char *s = data, *e = data + strlen(data);
+    const char *s = data;
+    const char *e = data + strlen(data);
     if ((end - pos) < (e - s + 254) / 255 * 256) {
       return -1;
     }
@@ -285,7 +286,8 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
 
 int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
   const nx_json *json = nx_json_parse_utf8(in);
-  int i, j;
+  int i;
+  int j;
 
   if (!json) {
     DLOG("Parser fail.");

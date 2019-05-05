@@ -148,8 +148,12 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
         }
 #endif
 
-        double namelookup_time, connect_time, appconnect_time, pretransfer_time;
-        double starttransfer_time, total_time;
+        double namelookup_time;
+        double connect_time;
+        double appconnect_time;
+        double pretransfer_time;
+        double starttransfer_time;
+        double total_time;
         if (curl_easy_getinfo(ctx->curl,
                               CURLINFO_NAMELOOKUP_TIME, &namelookup_time) != CURLE_OK ||
             curl_easy_getinfo(ctx->curl,
