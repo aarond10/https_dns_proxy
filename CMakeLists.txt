@@ -22,7 +22,7 @@ if(NOT CLANG_TIDY_EXE)
   message(STATUS "clang-tidy not found.")
 else()
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-  set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-checks=*,-clang-analyzer-alpha.*,-misc-unused-parameters,-cert-err34-c,-google-readability-todo,-hicpp-signed-bitwise")
+  set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-checks=*,-clang-analyzer-alpha.*,-misc-unused-parameters,-cert-err34-c,-google-readability-todo,-hicpp-signed-bitwise,-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers")
 endif()
 
 # The main binary
