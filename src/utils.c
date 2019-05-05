@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "constants.h"
 #include "logging.h"
@@ -407,7 +408,8 @@ int hexdec(const char *buf, uint8_t *out, int outlen) {
   uint8_t *pos = out;
   while (e > (s + 1)) {
     int tmp[2];
-    for (int i = 0; i < 2; i++) {
+    int i;
+    for (i = 0; i < 2; i++) {
       tmp[i] = hex_char(s[i]);
       if (tmp[i] < 0) {
         WLOG("Invalid hex char 0x%x", s[i]);
@@ -444,7 +446,8 @@ int type_bitmap_dec(char *buf, uint8_t *out, int outlen) {
     }
     rrtype_str = strtok_r(NULL, " ", &saveptr);
   }
-  for (int i = 0; i < 256; i++) {
+  int i;
+  for (i = 0; i < 256; i++) {
     if (window_len[i] == 0) { continue; }
     if (end - pos < window_len[i] + 2) {
       DLOG("Out of buffer space.");
