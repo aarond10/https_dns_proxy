@@ -47,8 +47,8 @@ if(CLANG_TIDY_EXE)
   )
 endif()
 
-find_path(GTEST_HEADER gtest/gtest.h)
-if (GTEST_HEADER)
+find_package(GTest)
+if (GTEST_FOUND)
   message(STATUS "gtest found. Enabling tests.")
   enable_testing()
   
