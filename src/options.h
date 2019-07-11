@@ -25,7 +25,7 @@ struct Options {
   uid_t uid;
   gid_t gid;
 
-  // DNS servers to look up resolver host (e.g. dns.google.com)
+  // DNS servers to look up resolver host (e.g. dns.google)
   const char *bootstrap_dns;
 
   // Resolver URL prefix to use. Must start with https://.

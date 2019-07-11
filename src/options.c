@@ -26,7 +26,7 @@ void options_init(struct Options *opt) {
   opt->gid = -1;
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
-  opt->resolver_url_prefix = "https://dns.google.com/resolve?";
+  opt->resolver_url_prefix = "https://dns.google/resolve?";
   opt->edns_client_subnet = "";
   opt->curl_proxy = NULL;
   opt->use_http_1_1 = 0;
@@ -136,7 +136,7 @@ void options_show_usage(int argc, char **argv) {
   printf("  -u user                Optional user to drop to if launched as root.\n");
   printf("  -g group               Optional group to drop to if launched as root.\n");
   printf("  -b dns_servers         Comma separated IPv4 address of DNS servers\n");
-  printf("                         to resolve resolver host (e.g. dns.google.com). (%s)\n",
+  printf("                         to resolve resolver host (e.g. dns.google). (%s)\n",
          defaults.bootstrap_dns);
   printf("  -r resolver_url_prefix The HTTPS path to the JSON resolver URL. (%s)\n",
          defaults.resolver_url_prefix);
