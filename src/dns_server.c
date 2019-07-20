@@ -61,6 +61,11 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
     return;
   }
 
+  if (len < sizeof(uint16_t) * 3) {
+    DLOG("Malformed request received (too short).");
+    return;
+  }
+
   unsigned char *p = buf;
   uint16_t tx_id = ntohs(next_uint16(&p));
   uint16_t flags = ntohs(next_uint16(&p));
