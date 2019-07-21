@@ -40,6 +40,13 @@ static int get_listen_sock(const char *listen_addr, int listen_port) {
   return sock;
 }
 
+static uint16_t next_uint16(unsigned char **const p) {
+  uint16_t u;
+  memcpy(&u, *p, sizeof(u));
+  *p += sizeof(u);
+  return u;
+}
+
 static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
   dns_server_t *d = (dns_server_t *)w->data;
 
@@ -54,19 +61,21 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
     return;
   }
 
+  if (len < sizeof(uint16_t) * 3) {
+    DLOG("Malformed request received (too short).");
+    return;
+  }
+
   unsigned char *p = buf;
-  uint16_t tx_id = ntohs(*(uint16_t *)p);
-  p += 2;
-  uint16_t flags = ntohs(*(uint16_t *)p);
-  p += 2;
-  uint16_t num_q = ntohs(*(uint16_t *)p);
-  p += 2;
-  //uint16_t num_rr = ntohs(*(uint16_t *)p);
-  p += 2;
-  //uint16_t num_arr = ntohs(*(uint16_t *)p);
-  p += 2;
-  //uint16_t num_xrr = ntohs(*(uint16_t *)p);
-  p += 2;
+  uint16_t tx_id = ntohs(next_uint16(&p));
+  uint16_t flags = ntohs(next_uint16(&p));
+  uint16_t num_q = ntohs(next_uint16(&p));
+  //uint16_t num_rr = ntohs(next_uint16(&p));
+  next_uint16(&p);
+  //uint16_t num_arr = ntohs(next_uint16(&p));
+  next_uint16(&p);
+  //uint16_t num_xrr = ntohs(next_uint16(&p));
+  next_uint16(&p);
   if (num_q != 1) {
     DLOG("Malformed request received.");
     return;
@@ -78,7 +87,7 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
     return;
   }
   p += enc_len;
-  uint16_t type = ntohs(*(uint16_t *)p);
+  uint16_t type = ntohs(next_uint16(&p));
 
   d->cb(d, d->cb_data, raddr, tx_id, flags, domain_name, type);
 
