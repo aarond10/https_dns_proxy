@@ -45,7 +45,7 @@ typedef struct {
 
 typedef struct {
   uint16_t tx_id;
-  struct sockaddr_in raddr;
+  struct sockaddr raddr;
   dns_server_t *dns_server;
 } request_t;
 
@@ -108,7 +108,7 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
 }
 
 static void dns_server_cb(dns_server_t *dns_server, void *data,
-                          struct sockaddr_in addr, uint16_t tx_id,
+                          struct sockaddr addr, uint16_t tx_id,
                           uint16_t flags, const char *name, int type) {
   app_state_t *app = (app_state_t *)data;
 

@@ -23,18 +23,37 @@
 
 // Creates and bind a listening UDP socket for incoming requests.
 static int get_listen_sock(const char *listen_addr, int listen_port) {
-  struct sockaddr_in laddr;
-  memset(&laddr, 0, sizeof(laddr));
-  laddr.sin_family = AF_INET;
-  laddr.sin_port = htons(listen_port);
-  laddr.sin_addr.s_addr = inet_addr(listen_addr);
-  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  struct addrinfo *ai = NULL;
+  struct addrinfo hints;
+  struct sockaddr laddr;
+  memset(&laddr, 0, sizeof(struct sockaddr));
+  memset(&hints, 0, sizeof(struct addrinfo));
+  /* prevent DNS lookups if leakage is our worry */
+  hints.ai_flags = AI_NUMERICHOST;
+
+  int res = getaddrinfo(listen_addr, NULL, &hints, &ai);
+  if(res != 0) {
+    FLOG("Error parsing listen address %s:%d (getaddrinfo): %s", listen_addr, listen_port,
+          gai_strerror(res));
+    if(ai) {
+      freeaddrinfo(ai);
+    }
+    return -1;
+  }
+
+  struct sockaddr_in *saddr = (struct sockaddr_in*) &laddr;
+  memcpy(&laddr, ai->ai_addr, sizeof(struct sockaddr));
+  saddr->sin_port = htons(listen_port);
+
+  int sock = socket(saddr->sin_family, SOCK_DGRAM, 0);
   if (sock < 0) {
     FLOG("Error creating socket");
   }
-  if (bind(sock, (struct sockaddr *)&laddr, sizeof(laddr)) < 0) {
+  if (bind(sock, &laddr, sizeof(struct sockaddr)) < 0) {
     FLOG("Error binding %s:%d", listen_addr, listen_port);
   }
+
+  freeaddrinfo(ai);
 
   ILOG("Listening on %s:%d", listen_addr, listen_port);
   return sock;
@@ -52,9 +71,9 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
 
   // A default MTU. We don't do TCP so any bigger is likely a waste.
   unsigned char buf[1500];
-  struct sockaddr_in raddr;
+  struct sockaddr raddr;
   socklen_t raddr_size = sizeof(raddr);
-  int len = recvfrom(w->fd, buf, sizeof(buf), 0, (struct sockaddr *)&raddr,
+  int len = recvfrom(w->fd, buf, sizeof(buf), 0, &raddr,
                      &raddr_size);
   if (len < 0) {
     WLOG("recvfrom failed: %s", strerror(errno));
@@ -107,9 +126,9 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
   ev_io_start(d->loop, &d->watcher);
 }
 
-void dns_server_respond(dns_server_t *d, struct sockaddr_in raddr, char *buf,
+void dns_server_respond(dns_server_t *d, struct sockaddr raddr, char *buf,
                         int blen) {
-  sendto(d->sock, buf, blen, 0, (struct sockaddr *)&raddr, sizeof(raddr));
+int i =  sendto(d->sock, buf, blen, 0, &raddr, sizeof(struct sockaddr));
 }
 
 void dns_server_cleanup(dns_server_t *d) {
