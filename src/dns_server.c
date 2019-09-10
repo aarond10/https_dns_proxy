@@ -22,19 +22,38 @@
 #include "logging.h"
 
 // Creates and bind a listening UDP socket for incoming requests.
-static int get_listen_sock(const char *listen_addr, int listen_port) {
-  struct sockaddr_in laddr;
-  memset(&laddr, 0, sizeof(laddr));
-  laddr.sin_family = AF_INET;
-  laddr.sin_port = htons(listen_port);
-  laddr.sin_addr.s_addr = inet_addr(listen_addr);
-  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+static int get_listen_sock(const char *listen_addr, int listen_port, int *addrlen) {
+  struct addrinfo *ai = NULL;
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(struct addrinfo));
+  /* prevent DNS lookups if leakage is our worry */
+  hints.ai_flags = AI_NUMERICHOST;
+
+  int res = getaddrinfo(listen_addr, NULL, &hints, &ai);
+  if(res != 0) {
+    FLOG("Error parsing listen address %s:%d (getaddrinfo): %s", listen_addr, listen_port,
+          gai_strerror(res));
+    if(ai) {
+      freeaddrinfo(ai);
+    }
+    return -1;
+  }
+
+  struct sockaddr_in *saddr = (struct sockaddr_in*) ai->ai_addr;
+
+  *addrlen = ai->ai_addrlen;
+  saddr->sin_port = htons(listen_port);
+
+  int sock = socket(ai->ai_family, SOCK_DGRAM, 0);
   if (sock < 0) {
     FLOG("Error creating socket");
   }
-  if (bind(sock, (struct sockaddr *)&laddr, sizeof(laddr)) < 0) {
-    FLOG("Error binding %s:%d", listen_addr, listen_port);
+
+  if ((res = bind(sock, (struct sockaddr*)ai->ai_addr, ai->ai_addrlen)) < 0) {
+    FLOG("Error binding %s:%d: %s", listen_addr, listen_port, strerror(res));
   }
+
+  freeaddrinfo(ai);
 
   ILOG("Listening on %s:%d", listen_addr, listen_port);
   return sock;
@@ -52,10 +71,11 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
 
   // A default MTU. We don't do TCP so any bigger is likely a waste.
   unsigned char buf[1500];
-  struct sockaddr_in raddr;
-  socklen_t raddr_size = sizeof(raddr);
-  int len = recvfrom(w->fd, buf, sizeof(buf), 0, (struct sockaddr *)&raddr,
-                     &raddr_size);
+  struct sockaddr_storage raddr;
+  /* recvfrom can write to addrlen */
+  socklen_t tmp_addrlen = d->addrlen;
+  int len = recvfrom(w->fd, buf, sizeof(buf), 0, (struct sockaddr*)&raddr,
+                     &tmp_addrlen);
   if (len < 0) {
     WLOG("recvfrom failed: %s", strerror(errno));
     return;
@@ -76,6 +96,7 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
   next_uint16(&p);
   //uint16_t num_xrr = ntohs(next_uint16(&p));
   next_uint16(&p);
+
   if (num_q != 1) {
     DLOG("Malformed request received.");
     return;
@@ -89,7 +110,7 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
   p += enc_len;
   uint16_t type = ntohs(next_uint16(&p));
 
-  d->cb(d, d->cb_data, raddr, tx_id, flags, domain_name, type);
+  d->cb(d, d->cb_data, (struct sockaddr*)&raddr, tx_id, flags, domain_name, type);
 
   ares_free_string(domain_name);
 }
@@ -98,7 +119,7 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
                      const char *listen_addr, int listen_port,
                      dns_req_received_cb cb, void *data) {
   d->loop = loop;
-  d->sock = get_listen_sock(listen_addr, listen_port);
+  d->sock = get_listen_sock(listen_addr, listen_port, &d->addrlen);
   d->cb = cb;
   d->cb_data = data;
 
@@ -107,9 +128,12 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
   ev_io_start(d->loop, &d->watcher);
 }
 
-void dns_server_respond(dns_server_t *d, struct sockaddr_in raddr, char *buf,
+void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
                         int blen) {
-  sendto(d->sock, buf, blen, 0, (struct sockaddr *)&raddr, sizeof(raddr));
+  size_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
+  if(len == -1) {
+    DLOG("sendto failed: %s", strerror(errno));
+  }
 }
 
 void dns_server_cleanup(dns_server_t *d) {

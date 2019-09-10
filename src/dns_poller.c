@@ -49,7 +49,7 @@ static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
     WLOG("No hosts.");
   } else {
     interval = POLLER_INTVL_NORM;
-    d->cb(d->hostname, d->cb_data, (struct sockaddr_in *)h->h_addr_list[0]);
+    d->cb(d->hostname, d->cb_data, h->h_addr_list[0], h->h_addrtype);
   }
 
   if(interval != d->timer.repeat) {
@@ -67,7 +67,7 @@ static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
   // the packet was dropped without any response from the network. This also serves to
   // free memory tied up by any "zombie" queries.
   ares_cancel(d->ares);
-  ares_gethostbyname(d->ares, d->hostname, AF_INET, ares_cb, d);
+  ares_gethostbyname(d->ares, d->hostname, AF_UNSPEC, ares_cb, d);
 }
 
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
@@ -85,36 +85,14 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   options.sock_state_cb = sock_state_cb;
   options.sock_state_cb_data = d;
 
-  options.servers = NULL;
-  options.nservers = 0;
-  char *csv = strdup(bootstrap_dns);
-  if (!csv) {
-    FLOG("Out of mem");
-  }
-  char *last = NULL;
-  char *ipstr = strtok_r(csv, ",", &last);
-  while (ipstr) {
-    options.servers = (struct in_addr *)realloc(
-        options.servers, sizeof(struct in_addr)*(options.nservers + 1));
-    if (!options.servers) {
-      FLOG("Out of mem");
-    }
-    DLOG("Adding DNS server '%s' for bootstrap resolution.", ipstr);
-    if (ares_inet_pton(AF_INET, ipstr, 
-                       &options.servers[options.nservers++]) != 1) {
-      FLOG("Failed to parse '%s'", ipstr);
-    }
-    ipstr = strtok_r(NULL, ",", &last);
-  }
-  free(csv);
-
   if ((r = ares_init_options(
-      &d->ares, &options, 
-      ARES_OPT_SOCK_STATE_CB | ARES_OPT_SERVERS)) != ARES_SUCCESS) {
+      &d->ares, &options, ARES_OPT_SOCK_STATE_CB)) != ARES_SUCCESS) {
     FLOG("ares_init_options error: %s", ares_strerror(r));
   }
 
-  free(options.servers);
+  if((r = ares_set_servers_ports_csv(d->ares, bootstrap_dns)) != ARES_SUCCESS) {
+    FLOG("ares_set_servers_ports_csv error: %s", ares_strerror(r));
+  }
 
   d->loop = loop;
   d->hostname = hostname;

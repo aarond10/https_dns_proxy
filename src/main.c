@@ -45,7 +45,7 @@ typedef struct {
 
 typedef struct {
   uint16_t tx_id;
-  struct sockaddr_in raddr;
+  struct sockaddr_storage raddr;
   dns_server_t *dns_server;
 } request_t;
 
@@ -101,14 +101,14 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
                        (unsigned char *)obuf, obuf_size)) <= 0) {
     ELOG("Failed to decode JSON.");
   } else {
-    dns_server_respond(req->dns_server, req->raddr, obuf, r);
+    dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, obuf, r);
   }
   free(bufcpy);
   free(req);
 }
 
 static void dns_server_cb(dns_server_t *dns_server, void *data,
-                          struct sockaddr_in addr, uint16_t tx_id,
+                          struct sockaddr* addr, uint16_t tx_id,
                           uint16_t flags, const char *name, int type) {
   app_state_t *app = (app_state_t *)data;
 
@@ -139,19 +139,20 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     FLOG("Out of mem");
   }
   req->tx_id = tx_id;
-  req->raddr = addr;
+  memcpy(&req->raddr, addr, dns_server->addrlen);
   req->dns_server = dns_server;
   https_client_fetch(app->https_client, url, app->resolv, https_resp_cb, req);
 }
 
-static void dns_poll_cb(const char* hostname, void *data, struct sockaddr_in *addr) {
+static void dns_poll_cb(const char* hostname, void *data,
+                        const void* addr, const int af) {
   struct curl_slist **resolv = (struct curl_slist **)data;
   char buf[280];
   memset(buf, 0, sizeof(buf));
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
   char *pos = buf + strlen(buf);
-  ares_inet_ntop(AF_INET, addr, pos, buf + sizeof(buf) - 1 - pos);
+  ares_inet_ntop(af, addr, pos, buf + sizeof(buf) - 1 - pos);
   DLOG("Received new IP '%s'", pos);
   curl_slist_free_all(*resolv);
   *resolv = curl_slist_append(NULL, buf);

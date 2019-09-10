@@ -67,8 +67,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       opt->logfile = optarg;
       break;
     case 'v': // verbose
-      if (opt->loglevel)
-	      opt->loglevel--;
+      if (opt->loglevel) {
+        opt->loglevel--;
+      }
       break;
     case 'x': // http/1.1
       opt->use_http_1_1 = 1;
@@ -129,30 +130,32 @@ void options_show_usage(int argc, char **argv) {
   printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
   printf("        [-r <resolver_url_prefix>] [-e <subnet_addr>]\n");
   printf("        [-t <proxy_server>] [-l <logfile>] [-x] [-v]+\n\n");
-  printf("  -a listen_addr         Local address to bind to. (%s)\n",
+  printf("  -a listen_addr         Local IPv4/v6 address to bind to. (%s)\n",
          defaults.listen_addr);
   printf("  -p listen_port         Local port to bind to. (%d)\n",
          defaults.listen_port);
   printf("  -d                     Daemonize.\n");
   printf("  -u user                Optional user to drop to if launched as root.\n");
   printf("  -g group               Optional group to drop to if launched as root.\n");
-  printf("  -b dns_servers         Comma separated IPv4 address of DNS servers\n");
-  printf("                         to resolve resolver host (e.g. dns.google). (%s)\n",
+  printf("  -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)\n");
+  printf("                         of DNS servers to resolve resolver host (e.g. dns.google).\n"\
+         "                         When specifying a port for IPv6, enclose the address in [].\n"\
+         "                         (%s)\n",
          defaults.bootstrap_dns);
-  printf("  -r resolver_url_prefix The HTTPS path to the JSON resolver URL. (%s)\n",
+  printf("  -r resolver_url_prefix The HTTPS path to the JSON resolver URL. default: %s\n",
          defaults.resolver_url_prefix);
-  printf("  -e subnet_addr         An edns-client-subnet to use such as "
-                                  "\"203.31.0.0/16\". (%s)\n",
+  printf("  -e subnet_addr         An edns-client-subnet to use such as \"203.31.0.0/16\".\n"\
+         "                         (\"%s\")\n",
          defaults.edns_client_subnet);
-  printf("  -t proxy_server   Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
-  printf("                    Remote name resolution will be used if the protocol\n");
-  printf("                    supports it (http, https, socks4a, socks5h), otherwise\n");
-  printf("                    initial DNS resolution will still be done via the\n");
-  printf("                    bootstrap DNS servers.\n");
-  printf("  -l logfile        Path to file to log to. (%s)\n",
+  printf("  -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
+  printf("                         Remote name resolution will be used if the protocol\n");
+  printf("                         supports it (http, https, socks4a, socks5h), otherwise\n");
+  printf("                         initial DNS resolution will still be done via the\n");
+  printf("                         bootstrap DNS servers.\n");
+  printf("  -l logfile             Path to file to log to. (\"%s\")\n",
          defaults.logfile);
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
-         "                         or limited builds of libcurl (false).\n");
+         "                         or limited builds of libcurl. (false)\n");
   printf("  -v                     Increase logging verbosity. (INFO)\n");
   options_cleanup(&defaults);
 }
