@@ -144,14 +144,15 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   https_client_fetch(app->https_client, url, app->resolv, https_resp_cb, req);
 }
 
-static void dns_poll_cb(const char* hostname, void *data, struct sockaddr_in *addr) {
+static void dns_poll_cb(const char* hostname, void *data,
+                        const void* addr, const int af) {
   struct curl_slist **resolv = (struct curl_slist **)data;
   char buf[280];
   memset(buf, 0, sizeof(buf));
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
   char *pos = buf + strlen(buf);
-  ares_inet_ntop(AF_INET, addr, pos, buf + sizeof(buf) - 1 - pos);
+  ares_inet_ntop(af, addr, pos, buf + sizeof(buf) - 1 - pos);
   DLOG("Received new IP '%s'", pos);
   curl_slist_free_all(*resolv);
   *resolv = curl_slist_append(NULL, buf);
@@ -241,7 +242,6 @@ int main(int argc, char *argv[]) {
   ev_signal_start(loop, &sigint);
 
   logging_flush_init(loop);
-
   dns_poller_t dns_poller;
   char hostname[255];  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
