@@ -26,6 +26,7 @@ void options_init(struct Options *opt) {
   opt->gid = -1;
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
+  opt->ipv4 = 0;
   opt->resolver_url_prefix = "https://dns.google/resolve?";
   opt->edns_client_subnet = "";
   opt->curl_proxy = NULL;
@@ -34,7 +35,7 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "a:p:du:g:b:r:e:t:l:vx")) != -1) {
+  while ((c = getopt(argc, argv, "a:p:du:g:b:4r:e:t:l:vx")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -53,6 +54,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'b': // bootstrap dns servers
       opt->bootstrap_dns = optarg;
+      break;
+    case '4': // ipv4 mode - don't use v6 addresses.
+      opt->ipv4 = 1;
       break;
     case 'r': // resolver url prefix
       opt->resolver_url_prefix = optarg;
@@ -142,6 +146,7 @@ void options_show_usage(int argc, char **argv) {
          "                         When specifying a port for IPv6, enclose the address in [].\n"\
          "                         (%s)\n",
          defaults.bootstrap_dns);
+  printf("  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.\n");
   printf("  -r resolver_url_prefix The HTTPS path to the JSON resolver URL. default: %s\n",
          defaults.resolver_url_prefix);
   printf("  -e subnet_addr         An edns-client-subnet to use such as \"203.31.0.0/16\".\n"\

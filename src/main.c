@@ -125,7 +125,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
 
   // Build URL
   uint16_t cd_bit = flags & (1 << 4);
-  char *escaped_name = curl_escape(name, strlen(name));
+  char *escaped_name = curl_escape(name, (int)strlen(name));
   char url[1500] = "";
   snprintf(url, sizeof(url) - 1,
            "%sname=%s&type=%d%s%s",
@@ -160,7 +160,7 @@ static void dns_poll_cb(const char* hostname, void *data,
 
 static int proxy_supports_name_resolution(const char *proxy)
 {
-  int i;
+  size_t i;
   const char *ptypes[] = {"http:", "https:", "socks4a:", "socks5h:"};
 
   if (proxy == NULL) {
@@ -249,6 +249,7 @@ int main(int argc, char *argv[]) {
     if (hostname_from_uri(opt.resolver_url_prefix, hostname, 254)) {
       app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
+                      opt.ipv4 ? AF_INET : AF_UNSPEC,
                       dns_poll_cb, &app.resolv);
       ILOG("DNS polling initialized for '%s'", hostname);
     } else {

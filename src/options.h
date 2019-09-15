@@ -28,6 +28,8 @@ struct Options {
   // DNS servers to look up resolver host (e.g. dns.google)
   const char *bootstrap_dns;
 
+  int ipv4;  // if non-zero, will only use AF_INET addresses.
+
   // Resolver URL prefix to use. Must start with https://.
   const char *resolver_url_prefix;
 

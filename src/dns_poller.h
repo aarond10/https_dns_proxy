@@ -18,8 +18,10 @@ typedef struct {
   ares_channel ares;
   struct ev_loop *loop;
   const char *hostname;
+  int family;  // AF_UNSPEC for IPv4 or IPv6, AF_INET for IPv4 only.
   dns_poller_cb cb;
   void *cb_data;
+
 
   ev_timer timer;
   // Lazy approach. FD_SETSIZE is 1k under linux. sizeof(ev_io) is 48 bytes.
@@ -30,12 +32,13 @@ typedef struct {
 // provided ev_loop. `bootstrap_dns` is a comma-separated list of DNS servers to
 // use for the lookup `hostname` every `interval_seconds`. For each successful
 // lookup, `cb` will be called with the resolved address.
+// `family` should be AF_INET for IPv4 or AF_UNSPEC for both IPv4 and IPv6.
 //
 // Note: hostname *not* copied. It should remain valid until
 // dns_poller_cleanup called.
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns, const char *hostname,
-                     dns_poller_cb cb, void *cb_data);
+                     int family, dns_poller_cb cb, void *cb_data);
 
 // Tears down timer and frees resources associated with a dns poller.
 void dns_poller_cleanup(dns_poller_t *d);

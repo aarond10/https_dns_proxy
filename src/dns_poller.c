@@ -67,12 +67,12 @@ static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
   // the packet was dropped without any response from the network. This also serves to
   // free memory tied up by any "zombie" queries.
   ares_cancel(d->ares);
-  ares_gethostbyname(d->ares, d->hostname, AF_UNSPEC, ares_cb, d);
+  ares_gethostbyname(d->ares, d->hostname, d->family, ares_cb, d);
 }
 
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns, const char *hostname,
-                     dns_poller_cb cb, void *cb_data) {
+                     int family, dns_poller_cb cb, void *cb_data) {
   int i;
   for (i = 0; i < FD_SETSIZE; i++) {
     d->fd[i].fd = 0;
@@ -96,6 +96,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
 
   d->loop = loop;
   d->hostname = hostname;
+  d->family = family;
   d->cb = cb;
   d->cb_data = cb_data;
 
