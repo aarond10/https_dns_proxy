@@ -53,7 +53,7 @@ int dn_match(const char *str, const uint8_t *pos, const uint8_t *pkt_start) {
 // Returns offset in 'a' at which string 'a' matches an encoded domain 'b'.
 // Returns -1 if they don't match. Only checks '.' boundaries. i.e.
 // aa.b.c and a.b.c match at offset of b.c, not a.b.c.
-int dn_suffix_match(const char *a, const uint8_t *b, const uint8_t *pkt_start) {
+ssize_t dn_suffix_match(const char *a, const uint8_t *b, const uint8_t *pkt_start) {
   const char *d = a;
   while (*d) {
     if (dn_match(d, b, pkt_start)) { return d - a; }
@@ -67,9 +67,9 @@ int dn_suffix_match(const char *a, const uint8_t *b, const uint8_t *pkt_start) {
 // Returns the offset into 'name' at which the suffix starts, or strlen(name)$
 // if no suffix found. *pkt_ofs points at the offset of the suffix from the$
 // start of the packet if found, 0 otherwise.
-int dn_find_dnptr(const char *name,
-                         const uint8_t **dnptrs, const uint8_t **lastdnptr,
-                         uint16_t *pkt_ofs) {
+ssize_t dn_find_dnptr(const char *name,
+                      const uint8_t **dnptrs, const uint8_t **lastdnptr,
+                      uint16_t *pkt_ofs) {
   const char *npos = name;
   const char *nend = name + strlen(name);
   while (npos < nend) {
@@ -93,8 +93,8 @@ int dn_find_dnptr(const char *name,
 // dnptrs[0] should point to the start of the packet. dnptrs[1-n] point at$
 // previous domain names. dnptrs[n] should be NULL. lastdnptr should be$
 // &dnptrs[m] where m > n.
-int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
-                     const uint8_t **dnptrs, const uint8_t **lastdnptr) {
+ssize_t dn_name_compress(const char *name, uint8_t *out, size_t outlen,
+                        const uint8_t **dnptrs, const uint8_t **lastdnptr) {
   uint16_t out_ofs;
   uint16_t name_ofs = dn_find_dnptr(name, dnptrs, lastdnptr, &out_ofs);
 
@@ -134,7 +134,7 @@ int dn_name_compress(const char *name, uint8_t *out, size_t outlen,
 // Does NOT use domain-name compression (back referencing). For use with
 // DNSSEC RRType only.
 // Returns length of encoded name.
-int dn_name_nocompress(char *name, uint8_t *out, size_t outlen) {
+ssize_t dn_name_nocompress(char *name, uint8_t *out, size_t outlen) {
   size_t name_len = strlen(name);
   char *savedptr = NULL;
   char *name_component = strtok_r(name, ".", &savedptr);
@@ -320,7 +320,7 @@ uint8_t b32h_char(char in) {
 
 // In-place base32hex (RFC4648) decoder. Padding optional.
 // returns the length of the decoded string.
-int b32hexdec(const char *buf, uint8_t *out, int outlen) {
+ssize_t b32hexdec(const char *buf, uint8_t *out, ssize_t outlen) {
   const char *s = buf;
   const char *e = s + strlen(buf);
   uint8_t *pos = out;
@@ -361,8 +361,8 @@ uint8_t b64_char(char in) {
 
 // In-place base64 decoder.
 // returns the length of the decoded string.
-int b64dec(const char *buf, uint8_t *out, int outlen) {
-  int len = strlen(buf);
+ssize_t b64dec(const char *buf, uint8_t *out, ssize_t outlen) {
+  size_t len = strlen(buf);
   if (len % 4) {
     WLOG("Invalid b64 string.");
     return -1;
@@ -393,8 +393,8 @@ int hex_char(char ch) {
 
 // in-place decode of hex string to raw values.
 // returns length of decoded string.
-int hexdec(const char *buf, uint8_t *out, int outlen) {
-  int len = strlen(buf);
+ssize_t hexdec(const char *buf, uint8_t *out, ssize_t outlen) {
+  size_t len = strlen(buf);
   if (len % 2) {
     WLOG("Invalid hex byte string.");
     return -1;
@@ -425,7 +425,7 @@ int hexdec(const char *buf, uint8_t *out, int outlen) {
 // Type bitmaps are defined in https://www.ietf.org/rfc/rfc4034.txt
 // This function parses presentation format from 'buf' and writes
 // out wire format to 'out'. Returns the number of bytes written.
-int type_bitmap_dec(char *buf, uint8_t *out, int outlen) {
+ssize_t type_bitmap_dec(char *buf, uint8_t *out, ssize_t outlen) {
   uint8_t bits[65536 / 8]; // one bit per rrtype.
   uint8_t window_len[256]; // one len per low 8-bit.
   char *saveptr = NULL;

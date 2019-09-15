@@ -33,8 +33,8 @@ static inline size_t _ns_put32(uint32_t s, uint8_t *buf) {
 }
 
 
-int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
-                  const uint8_t **dnptrs, const uint8_t **lastdnptr) {
+ssize_t json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
+                      const uint8_t **dnptrs, const uint8_t **lastdnptr) {
   if ((end - pos) < 2) {
     DLOG("Out of buffer space in json_to_rdata.");
     return -1;
@@ -284,7 +284,7 @@ int json_to_rdata(uint16_t type, char *data, uint8_t *pos, uint8_t *end,
   return pos - enc_len_pos - 2;
 }
 
-int json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
+ssize_t json_to_dns(uint16_t tx_id, char *in, uint8_t *out, int olen) {
   const nx_json *json = nx_json_parse_utf8(in);
   int i;
   int j;

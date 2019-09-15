@@ -22,7 +22,8 @@
 #include "logging.h"
 
 // Creates and bind a listening UDP socket for incoming requests.
-static int get_listen_sock(const char *listen_addr, int listen_port, int *addrlen) {
+static int get_listen_sock(const char *listen_addr, int listen_port,
+                           unsigned int *addrlen) {
   struct addrinfo *ai = NULL;
   struct addrinfo hints;
   memset(&hints, 0, sizeof(struct addrinfo));
@@ -49,7 +50,7 @@ static int get_listen_sock(const char *listen_addr, int listen_port, int *addrle
     FLOG("Error creating socket");
   }
 
-  if ((res = bind(sock, (struct sockaddr*)ai->ai_addr, ai->ai_addrlen)) < 0) {
+  if ((res = bind(sock, ai->ai_addr, ai->ai_addrlen)) < 0) {
     FLOG("Error binding %s:%d: %s", listen_addr, listen_port, strerror(res));
   }
 
