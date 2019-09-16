@@ -175,14 +175,14 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
 
       }
       curl_easy_cleanup(ctx->curl);
-      ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
-      free(ctx->buf);
-
+      cur->cb(cur->cb_data, cur->buf, cur->buflen);
+      free(cur->buf);
       if (last) {
         last->next = cur->next;
       } else {
         client->fetches = cur->next;
       }
+      free(cur);
       return;
     }
     last = cur;
@@ -199,7 +199,6 @@ static void check_multi_info(https_client_t *c) {
       while (n) {
         if (n->curl == msg->easy_handle) {
           https_fetch_ctx_cleanup(c, n);
-          free(n);
           break;
         }
         n = n->next;
@@ -215,7 +214,7 @@ static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
   }
   CURLMcode rc = curl_multi_socket_action(
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
-                           (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
+                       (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
       &c->still_running);
   if (rc != CURLM_OK) {
     FLOG("curl_multi_socket_action: %d", rc);
@@ -331,9 +330,7 @@ void https_client_cleanup(https_client_t *c) {
   int i;
 
   while (c->fetches) {
-    struct https_fetch_ctx *n = c->fetches;
-    https_fetch_ctx_cleanup(c, n);
-    free(n);
+    https_fetch_ctx_cleanup(c, c->fetches);
   }
 
   for (i = 0; i < FD_SETSIZE; i++) {
