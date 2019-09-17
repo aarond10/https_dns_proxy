@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 // Write null-terminated 'name' to 'out' buffer of at least 'outlen' length.
 // dnptrs[0] should point to the start of the packet. dnptrs[1-n] point at$
