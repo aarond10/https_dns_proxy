@@ -43,7 +43,7 @@ only makes sense if you trust your DoH provider.
 
 ## Build
 
-Depends on `c-ares`, `libcurl`, `libev`.
+Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.66.0)`, `libev (>=4.25)`.
 
 On Debian-derived systems those are libc-ares-dev,
 libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
