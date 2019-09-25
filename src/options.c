@@ -13,6 +13,11 @@
 #include "logging.h"
 #include "options.h"
 
+// Hack for platforms that don't support O_CLOEXEC.
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
