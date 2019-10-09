@@ -55,6 +55,11 @@ brew install curl --with-openssl --with-c-ares --with-libssh2 --with-nghttp2 --w
 brew link curl --force
 ```
 
+On Ubuntu
+```
+apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev
+```
+
 If all pre-requisites are met, you should be able to build with:
 ```
 $ cmake .
@@ -144,3 +149,4 @@ software does not and will not support DNS-over-TLS.
 ## Authors
 
 * Aaron Drew (aarond10@gmail.com)
+
