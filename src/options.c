@@ -32,7 +32,7 @@ void options_init(struct Options *opt) {
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
   opt->ipv4 = 0;
-  opt->resolver_url_prefix = "https://dns.google/dns-query";
+  opt->resolver_url = "https://dns.google/dns-query";
   opt->edns_client_subnet = "";
   opt->curl_proxy = NULL;
   opt->use_http_1_1 = 0;
@@ -64,7 +64,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       opt->ipv4 = 1;
       break;
     case 'r': // resolver url prefix
-      opt->resolver_url_prefix = optarg;
+      opt->resolver_url = optarg;
       break;
     case 'e': // edns_client_subnet
       opt->edns_client_subnet = optarg;
@@ -123,10 +123,10 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
                                 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
     printf("Logfile '%s' is not writable.\n", opt->logfile);
   }
-  if (opt->resolver_url_prefix == NULL ||
-      strncmp(opt->resolver_url_prefix, "https://", 8) != 0) {
+  if (opt->resolver_url == NULL ||
+      strncmp(opt->resolver_url, "https://", 8) != 0) {
     printf("Resolver prefix (%s) must be a https:// address.\n",
-           opt->resolver_url_prefix);
+           opt->resolver_url);
     return -1;
   }
   return 0;
@@ -137,7 +137,7 @@ void options_show_usage(int argc, char **argv) {
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);
   printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
-  printf("        [-r <resolver_url_prefix>] [-e <subnet_addr>]\n");
+  printf("        [-r <resolver_url>] [-e <subnet_addr>]\n");
   printf("        [-t <proxy_server>] [-l <logfile>] [-x] [-v]+\n\n");
   printf("  -a listen_addr         Local IPv4/v6 address to bind to. (%s)\n",
          defaults.listen_addr);
@@ -152,8 +152,8 @@ void options_show_usage(int argc, char **argv) {
          "                         (%s)\n",
          defaults.bootstrap_dns);
   printf("  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.\n");
-  printf("  -r resolver_url_prefix The HTTPS path to the JSON resolver URL. default: %s\n",
-         defaults.resolver_url_prefix);
+  printf("  -r resolver_url        The HTTPS path to the resolver URL. default: %s\n",
+         defaults.resolver_url);
   printf("  -e subnet_addr         An edns-client-subnet to use such as \"203.31.0.0/16\".\n"\
          "                         (\"%s\")\n",
          defaults.edns_client_subnet);

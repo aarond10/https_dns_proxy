@@ -36,7 +36,7 @@
 typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
-  const char *resolver_url_prefix;
+  const char *resolver_url;
   uint8_t using_dns_poller;
   // currently only used for edns_client_subnet, if specified.
   const char *extra_request_args;
@@ -114,7 +114,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   memcpy(&req->raddr, addr, dns_server->addrlen);
   req->dns_server = dns_server;
   req->dns_req = dns_req; // To free buffer after https request is complete.
-  https_client_fetch(app->https_client, app->resolver_url_prefix,
+  https_client_fetch(app->https_client, app->resolver_url,
                      dns_req, dns_req_len, app->resolv, https_resp_cb, req);
 }
 
@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
   app_state_t app;
   app.https_client = &https_client;
   app.resolv = NULL;
-  app.resolver_url_prefix = opt.resolver_url_prefix;
+  app.resolver_url = opt.resolver_url;
   app.using_dns_poller = 0;
 
   if (opt.edns_client_subnet[0]) {
@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
   dns_poller_t dns_poller;
   char hostname[255];  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
-    if (hostname_from_uri(opt.resolver_url_prefix, hostname, 254)) {
+    if (hostname_from_uri(opt.resolver_url, hostname, 254)) {
       app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
       ILOG("DNS polling initialized for '%s'", hostname);
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "
-           "hostname. DNS polling disabled.", opt.resolver_url_prefix);
+           "hostname. DNS polling disabled.", opt.resolver_url);
     }
   }
 
