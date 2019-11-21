@@ -66,6 +66,10 @@ void logging_cleanup() {
   logf = NULL;
 }
 
+int logging_debug_enabled() {
+  return LOG_DEBUG >= loglevel;
+}
+
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (severity < loglevel) {
     return;

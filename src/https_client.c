@@ -59,6 +59,9 @@ static void https_fetch_ctx_init(https_client_t *client,
                    client->opt->use_http_1_1 ?
                    CURL_HTTP_VERSION_1_1 :
                    CURL_HTTP_VERSION_2_0);
+  if (logging_debug_enabled()) {
+    curl_easy_setopt(ctx->curl, CURLOPT_VERBOSE, 1L);
+  }
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);
