@@ -29,7 +29,6 @@
 #include "dns_poller.h"
 #include "dns_server.h"
 #include "https_client.h"
-#include "json_to_dns.h"
 #include "logging.h"
 #include "options.h"
 
