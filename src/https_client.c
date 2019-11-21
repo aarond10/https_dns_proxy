@@ -21,7 +21,7 @@
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
-  unsigned char *new_buf = (unsigned char *)realloc(
+  char *new_buf = (char *)realloc(
       ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
     ELOG("Out of memory!");

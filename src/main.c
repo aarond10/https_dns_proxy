@@ -77,7 +77,7 @@ static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
-static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
+static void https_resp_cb(void *data, char *buf, size_t buflen) {
   DLOG("buflen %u\n", buflen);
   if (buf == NULL) { // Timeout, DNS failure, or something similar.
     return;
