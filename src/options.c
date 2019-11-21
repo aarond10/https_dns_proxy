@@ -32,7 +32,7 @@ void options_init(struct Options *opt) {
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
   opt->ipv4 = 0;
-  opt->resolver_url_prefix = "https://dns.google/resolve?";
+  opt->resolver_url_prefix = "https://dns.google/dns-query";
   opt->edns_client_subnet = "";
   opt->curl_proxy = NULL;
   opt->use_http_1_1 = 0;

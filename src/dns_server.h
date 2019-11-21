@@ -9,7 +9,7 @@ struct dns_server_s;
 
 typedef void (*dns_req_received_cb)(struct dns_server_s *dns_server, void *data,
                                     struct sockaddr* addr, uint16_t tx_id,
-                                    uint16_t flags, const char *name, int type);
+                                    char *dns_req, size_t dns_req_len);
 
 typedef struct dns_server_s {
   struct ev_loop *loop;
