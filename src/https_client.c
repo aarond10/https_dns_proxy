@@ -185,7 +185,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
       }
       curl_easy_cleanup(ctx->curl);
       cur->cb(cur->cb_data, cur->buf, cur->buflen);
-      free(cur->header_list);
+      curl_slist_free_all(cur->header_list);
       free(cur->buf);
       if (last) {
         last->next = cur->next;
