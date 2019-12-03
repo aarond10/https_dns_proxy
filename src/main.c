@@ -29,7 +29,6 @@
 #include "dns_poller.h"
 #include "dns_server.h"
 #include "https_client.h"
-#include "json_to_dns.h"
 #include "logging.h"
 #include "options.h"
 
@@ -37,7 +36,7 @@
 typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
-  const char *resolver_url_prefix;
+  const char *resolver_url;
   uint8_t using_dns_poller;
   // currently only used for edns_client_subnet, if specified.
   const char *extra_request_args;
@@ -47,6 +46,7 @@ typedef struct {
   uint16_t tx_id;
   struct sockaddr_storage raddr;
   dns_server_t *dns_server;
+  char* dns_req;
 } request_t;
 
 // Very very basic hostname parsing.
@@ -77,7 +77,7 @@ static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
-static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
+static void https_resp_cb(void *data, char *buf, size_t buflen) {
   DLOG("buflen %u\n", buflen);
   if (buf == NULL) { // Timeout, DNS failure, or something similar.
     return;
@@ -86,34 +86,17 @@ static void https_resp_cb(void *data, unsigned char *buf, unsigned int buflen) {
   if (req == NULL) {
     FLOG("data NULL");
   }
-  char *bufcpy = (char *)calloc(1, buflen + 1);
-  if (bufcpy == NULL) {
-    FLOG("Out of mem");
-  }
-  memcpy(bufcpy, buf, buflen);
-
-  DLOG("Received response for id %04x: %.*s", req->tx_id, buflen, bufcpy);
-
-  const int obuf_size = 1500;
-  char obuf[obuf_size];
-  int r;
-  if ((r = json_to_dns(req->tx_id, bufcpy,
-                       (unsigned char *)obuf, obuf_size)) <= 0) {
-    ELOG("Failed to decode JSON.");
-  } else {
-    dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, obuf, r);
-  }
-  free(bufcpy);
+  free((void*)req->dns_req);
+  dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
   free(req);
 }
 
 static void dns_server_cb(dns_server_t *dns_server, void *data,
                           struct sockaddr* addr, uint16_t tx_id,
-                          uint16_t flags, const char *name, int type) {
+                          char *dns_req, size_t dns_req_len) {
   app_state_t *app = (app_state_t *)data;
 
-  DLOG("Received request for '%s' id: %04x, type %d, flags %04x", name, tx_id,
-       type, flags);
+  DLOG("Received request for id: %04x, len: %d", tx_id, dns_req_len);
 
   // If we're not yet bootstrapped, don't answer. libcurl will fall back to
   // gethostbyname() which can cause a DNS loop due to the nameserver listed
@@ -123,17 +106,6 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     return;
   }
 
-  // Build URL
-  uint16_t cd_bit = flags & (1 << 4);
-  char *escaped_name = curl_escape(name, (int)strlen(name));
-  char url[1500] = "";
-  snprintf(url, sizeof(url) - 1,
-           "%sname=%s&type=%d%s%s",
-           app->resolver_url_prefix,
-           escaped_name, type, (cd_bit != 0) ? "&cd=true" : "",
-           app->extra_request_args);
-  curl_free(escaped_name);
-
   request_t *req = (request_t *)calloc(1, sizeof(request_t));
   if (req == NULL) {
     FLOG("Out of mem");
@@ -141,7 +113,9 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   req->tx_id = tx_id;
   memcpy(&req->raddr, addr, dns_server->addrlen);
   req->dns_server = dns_server;
-  https_client_fetch(app->https_client, url, app->resolv, https_resp_cb, req);
+  req->dns_req = dns_req; // To free buffer after https request is complete.
+  https_client_fetch(app->https_client, app->resolver_url,
+                     dns_req, dns_req_len, app->resolv, https_resp_cb, req);
 }
 
 static void dns_poll_cb(const char* hostname, void *data,
@@ -203,7 +177,7 @@ int main(int argc, char *argv[]) {
   app_state_t app;
   app.https_client = &https_client;
   app.resolv = NULL;
-  app.resolver_url_prefix = opt.resolver_url_prefix;
+  app.resolver_url = opt.resolver_url;
   app.using_dns_poller = 0;
 
   if (opt.edns_client_subnet[0]) {
@@ -246,7 +220,7 @@ int main(int argc, char *argv[]) {
   dns_poller_t dns_poller;
   char hostname[255];  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
-    if (hostname_from_uri(opt.resolver_url_prefix, hostname, 254)) {
+    if (hostname_from_uri(opt.resolver_url, hostname, 254)) {
       app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
@@ -254,7 +228,7 @@ int main(int argc, char *argv[]) {
       ILOG("DNS polling initialized for '%s'", hostname);
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "
-           "hostname. DNS polling disabled.", opt.resolver_url_prefix);
+           "hostname. DNS polling disabled.", opt.resolver_url);
     }
   }
 

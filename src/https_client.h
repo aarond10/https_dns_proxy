@@ -9,16 +9,18 @@
 #include "options.h"
 
 // Callback type for receiving data when a transfer finishes.
-typedef void (*https_response_cb)(void *data, uint8_t *buf, uint32_t buflen);
+typedef void (*https_response_cb)(void *data, char *buf, size_t buflen);
 
 // Internal: Holds state on an individual transfer.
 struct https_fetch_ctx {
   CURL *curl;
+  struct curl_slist *header_list;
+
   https_response_cb cb;
   void *cb_data;
 
-  uint8_t *buf;
-  uint32_t buflen;
+  char *buf;
+  size_t buflen;
 
   struct https_fetch_ctx *next;
 };
@@ -45,6 +47,7 @@ typedef struct {
 void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop);
 
 void https_client_fetch(https_client_t *c, const char *url,
+                        const char* postdata, size_t postdata_len,
                         struct curl_slist *resolv, https_response_cb cb,
                         void *data);
 

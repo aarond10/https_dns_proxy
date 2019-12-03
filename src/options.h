@@ -31,7 +31,7 @@ struct Options {
   int ipv4;  // if non-zero, will only use AF_INET addresses.
 
   // Resolver URL prefix to use. Must start with https://.
-  const char *resolver_url_prefix;
+  const char *resolver_url;
 
   // Google DNS can accept an edns_client_subnet option.
   // (https://tools.ietf.org/html/draft-ietf-dnsop-edns-client-subnet-08)

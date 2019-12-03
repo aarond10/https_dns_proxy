@@ -1,29 +1,29 @@
 # https-dns-proxy
 
 `https_dns_proxy` is a light-weight DNS&lt;--&gt;HTTPS, non-caching translation
-proxy for the emerging [DoH][doh-wg] DNS-over-HTTPS standard. It receives
-regular (UDP) DNS requests and issues them via DoH (JSON).
+proxy for the [RFC 8484][rfc-8484] DNS-over-HTTPS standard. It receives
+regular (UDP) DNS requests and issues them via DoH.
 
-[Google's DNS-over-HTTPS][google-json] service is default, but
-[Cloudflare's service][cloudflare-json] also works with trivial commandline flag
+[Google's DNS-over-HTTPS][google-doh] service is default, but
+[Cloudflare's service][cloudflare-doh] also works with trivial commandline flag
 changes.
 
-[cloudflare-json]: https://developers.cloudflare.com/1.1.1.1/dns-over-https/json-format/
-[doh-wg]: https://datatracker.ietf.org/wg/doh/about/
-[google-json]: https://developers.google.com/speed/public-dns/docs/doh/json
+[cloudflare-doh]: https://developers.cloudflare.com/1.1.1.1/dns-over-https/wireformat/
+[rfc-8484]: https://tools.ietf.org/html/rfc8484
+[google-doh]: https://developers.google.com/speed/public-dns/docs/doh
 
 ### Using Google
 
 ```bash
 # ./https_dns_proxy -u nobody -g nogroup -d -b 8.8.8.8,8.8.4.4 \
-    -r "https://dns.google/resolve?"
+    -r "https://dns.google/dns-query"
 ```
 
 ### Using Cloudflare
 
 ```bash
 # ./https_dns_proxy -u nobody -g nogroup -d -b 1.1.1.1,1.0.0.1 \
-    -r "https://cloudflare-dns.com/dns-query?ct=application/dns-json&"
+    -r "https://cloudflare-dns.com/dns-query"
 ```
 
 ## Why?
@@ -106,47 +106,39 @@ Just run it as a daemon and point traffic at it. Commandline flags are:
 ```
 Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
         [-d] [-u <user>] [-g <group>] [-b <dns_servers>]
-        [-r <resolver_url_prefix>] [-e <subnet_addr>]
+        [-r <resolver_url>] [-e <subnet_addr>]
         [-t <proxy_server>] [-l <logfile>] [-x] [-v]+
 
-  -a listen_addr         Local address to bind to. (127.0.0.1)
+  -a listen_addr         Local IPv4/v6 address to bind to. (127.0.0.1)
   -p listen_port         Local port to bind to. (5053)
   -d                     Daemonize.
   -u user                Optional user to drop to if launched as root.
   -g group               Optional group to drop to if launched as root.
-  -b dns_servers         Comma separated IPv4 address of DNS servers
-                         to resolve resolver host (e.g. dns.google).  (8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
-  -r resolver_url_prefix The HTTPS path to the JSON resolver URL.  (https://dns.google/resolve?)
-  -e subnet_addr         An edns-client-subnet to use such as "203.31.0.0/16".  ()
+  -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)
+                         of DNS servers to resolve resolver host (e.g. dns.google).
+                         When specifying a port for IPv6, enclose the address in [].
+                         (8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
+  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.
+  -r resolver_url        The HTTPS path to the resolver URL. default: https://dns.google/dns-query
+  -e subnet_addr         An edns-client-subnet to use such as "203.31.0.0/16".
+                         ("")
   -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
                          Remote name resolution will be used if the protocol
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
-  -l logfile             Path to file to log to. (-)
+  -l logfile             Path to file to log to. ("-")
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
-                         or limited builds of libcurl (false).
+                         or limited builds of libcurl. (false)
   -v                     Increase logging verbosity. (INFO)
 ```
 
 ## TODO
 
-* Test coverage could be better.
-
-## Alternative protocols
-
-The DoH standard is still evolving. Because responses are translated into
-JSON, there is room for error in encoding and parsing response types -
-particularly the less common ones.
-
-For this reason, I tend to believe [DNS-over-TLS](https://developers.cloudflare.com/1.1.1.1/dns-over-tls/) is a better
-long-term strategy for the industry, but proxy clients aren't yet
-readily available. 
-
-Note that fundamental differences (binary vs JSON encoding) mean this
-software does not and will not support DNS-over-TLS.
+* Add some tests.
 
 ## Authors
 
-* Aaron Drew (aarond10@gmail.com)
+* Aaron Drew (aarond10@gmail.com): Original https_dns_proxy.
+* Soumya ([github.com/soumya92](https://github.com/soumya92)): RFC 8484 implementation.
 

@@ -11,7 +11,7 @@ find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
 find_path(LIBEV_INCLUDE_DIR ev.h)
 include_directories(
   ${LIBCARES_INCLUDE_DIR} ${LIBCURL_INCLUDE_DIR}
-  ${LIBEV_INCLUDE_DIR} ${NXJSON_DIR} src lib)
+  ${LIBEV_INCLUDE_DIR} src)
 
 find_program(
   CLANG_TIDY_EXE
@@ -30,8 +30,7 @@ set(TARGET_NAME "https_dns_proxy")
 aux_source_directory(src SRC_LIST)
 set(SRC_LIST ${SRC_LIST})
 add_executable(${TARGET_NAME} ${SRC_LIST})
-add_subdirectory(lib)
-set(LIBS ${LIBS} cares curl ev resolv nxjson)
+set(LIBS ${LIBS} cares curl ev resolv)
 target_link_libraries(${TARGET_NAME} ${LIBS})
 
 # clang-tidy

@@ -16,13 +16,12 @@
 #include <unistd.h>
 
 #include "https_client.h"
-#include "json_to_dns.h"
 #include "logging.h"
 #include "options.h"
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
-  unsigned char *new_buf = (unsigned char *)realloc(
+  char *new_buf = (char *)realloc(
       ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
     ELOG("Out of memory!");
@@ -38,9 +37,11 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
 
 static void https_fetch_ctx_init(https_client_t *client,
                                  struct https_fetch_ctx *ctx, const char *url,
+                                 const char* data, size_t datalen,
                                  struct curl_slist *resolv,
                                  https_response_cb cb, void *cb_data) {
   ctx->curl = curl_easy_init();
+  ctx->header_list = NULL;
   ctx->cb = cb;
   ctx->cb_data = cb_data;
   ctx->buf = NULL;
@@ -59,7 +60,15 @@ static void https_fetch_ctx_init(https_client_t *client,
                    client->opt->use_http_1_1 ?
                    CURL_HTTP_VERSION_1_1 :
                    CURL_HTTP_VERSION_2_0);
+  if (logging_debug_enabled()) {
+    curl_easy_setopt(ctx->curl, CURLOPT_VERBOSE, 1L);
+  }
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
+  ctx->header_list = curl_slist_append(ctx->header_list, "Accept: application/dns-message");
+  ctx->header_list = curl_slist_append(ctx->header_list, "Content-Type: application/dns-message");
+  curl_easy_setopt(ctx->curl, CURLOPT_HTTPHEADER, ctx->header_list);
+  curl_easy_setopt(ctx->curl, CURLOPT_POSTFIELDSIZE, datalen);
+  curl_easy_setopt(ctx->curl, CURLOPT_POSTFIELDS, data);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);
   curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
@@ -176,6 +185,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
       }
       curl_easy_cleanup(ctx->curl);
       cur->cb(cur->cb_data, cur->buf, cur->buflen);
+      free(cur->header_list);
       free(cur->buf);
       if (last) {
         last->next = cur->next;
@@ -316,6 +326,7 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
 }
 
 void https_client_fetch(https_client_t *c, const char *url,
+                        const char* postdata, size_t postdata_len,
                         struct curl_slist *resolv, https_response_cb cb,
                         void *data) {
   struct https_fetch_ctx *new_ctx =
@@ -323,7 +334,7 @@ void https_client_fetch(https_client_t *c, const char *url,
   if (!new_ctx) {
     FLOG("Out of mem");
   }
-  https_fetch_ctx_init(c, new_ctx, url, resolv, cb, data);
+  https_fetch_ctx_init(c, new_ctx, url, postdata, postdata_len, resolv, cb, data);
 }
 
 void https_client_cleanup(https_client_t *c) {
