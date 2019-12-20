@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
   if (opt.edns_client_subnet[0]) {
     static char buf[200];
     memset(buf, 0, sizeof(buf));
-    snprintf(buf, sizeof(buf)-1, "&edns_client_subnet=%s",
+    snprintf(buf, sizeof(buf)-1, "?edns_client_subnet=%s",
              opt.edns_client_subnet);
     app.extra_request_args = buf;
   } else {
