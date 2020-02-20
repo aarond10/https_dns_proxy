@@ -33,7 +33,6 @@ void options_init(struct Options *opt) {
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
   opt->ipv4 = 0;
   opt->resolver_url = "https://dns.google/dns-query";
-  opt->edns_client_subnet = "";
   opt->curl_proxy = NULL;
   opt->use_http_1_1 = 0;
 }
@@ -65,9 +64,6 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'r': // resolver url prefix
       opt->resolver_url = optarg;
-      break;
-    case 'e': // edns_client_subnet
-      opt->edns_client_subnet = optarg;
       break;
     case 't': // curl http proxy
       opt->curl_proxy = optarg;
@@ -154,9 +150,6 @@ void options_show_usage(int argc, char **argv) {
   printf("  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.\n");
   printf("  -r resolver_url        The HTTPS path to the resolver URL. default: %s\n",
          defaults.resolver_url);
-  printf("  -e subnet_addr         An edns-client-subnet to use such as \"203.31.0.0/16\".\n"\
-         "                         (\"%s\")\n",
-         defaults.edns_client_subnet);
   printf("  -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
   printf("                         Remote name resolution will be used if the protocol\n");
   printf("                         supports it (http, https, socks4a, socks5h), otherwise\n");

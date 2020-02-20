@@ -38,8 +38,6 @@ typedef struct {
   struct curl_slist *resolv;
   const char *resolver_url;
   uint8_t using_dns_poller;
-  // currently only used for edns_client_subnet, if specified.
-  const char *extra_request_args;
 } app_state_t;
 
 typedef struct {
@@ -103,6 +101,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
   // in resolv.conf being or depending on https_dns_proxy itself.
   if(app->using_dns_poller && (app->resolv == NULL || app->resolv->data == NULL)) {
     WLOG("Query received before bootstrapping is completed, discarding.");
+    free(dns_req);
     return;
   }
 
@@ -179,16 +178,6 @@ int main(int argc, char *argv[]) {
   app.resolv = NULL;
   app.resolver_url = opt.resolver_url;
   app.using_dns_poller = 0;
-
-  if (opt.edns_client_subnet[0]) {
-    static char buf[200];
-    memset(buf, 0, sizeof(buf));
-    snprintf(buf, sizeof(buf)-1, "?edns_client_subnet=%s",
-             opt.edns_client_subnet);
-    app.extra_request_args = buf;
-  } else {
-    app.extra_request_args = "";
-  }
 
   dns_server_t dns_server;
   dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,

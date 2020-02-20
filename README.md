@@ -120,8 +120,6 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          (8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
   -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.
   -r resolver_url        The HTTPS path to the resolver URL. default: https://dns.google/dns-query
-  -e subnet_addr         An edns-client-subnet to use such as "203.31.0.0/16".
-                         ("")
   -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
                          Remote name resolution will be used if the protocol
                          supports it (http, https, socks4a, socks5h), otherwise
