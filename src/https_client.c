@@ -50,6 +50,11 @@ static void https_fetch_ctx_init(https_client_t *client,
   client->fetches = ctx;
 
   CURLcode res;
+  
+  //set new ca path
+  curl_easy_setopt(ctx->curl, CURLOPT_CAPATH, "/mnt/jffs2/app/doh/etc/ssl/certs/");
+  
+  // 
   if ((res = curl_easy_setopt(ctx->curl, CURLOPT_RESOLVE, resolv)) !=
       CURLE_OK) {
     FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
