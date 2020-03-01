@@ -71,9 +71,9 @@ int logging_debug_enabled() {
 }
 
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
-  if (severity < loglevel) {
-    return;
-  }
+  //if (severity < loglevel) {
+  //  return;
+//  }
 
   if (!logf) {
     logf = fdopen(STDOUT_FILENO, "w");
