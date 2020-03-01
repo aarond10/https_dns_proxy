@@ -20,10 +20,10 @@
 
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
-  opt->listen_port = 5053;
+  opt->listen_port = 5300;
   opt->logfile = "-";
   opt->logfd = -1;
-  opt->loglevel = LOG_DEBUG;
+  opt->loglevel = LOG_ERROR;
   opt->daemonize = 0;
   opt->user = NULL;
   opt->group = NULL;
