@@ -13,7 +13,7 @@
 #define LOG_FLUSH_LEVEL LOG_WARNING
 
 static FILE *logf = NULL;
-static int loglevel = LOG_DEBUG;
+static int loglevel = LOG_ERROR;
 static ev_timer logging_timer;
 
 // Renders a severity as a short string.
