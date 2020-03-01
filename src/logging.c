@@ -13,7 +13,7 @@
 #define LOG_FLUSH_LEVEL LOG_WARNING
 
 static FILE *logf = NULL;
-static int loglevel = LOG_ERROR;
+static int loglevel = LOG_DEBUG;
 static ev_timer logging_timer;
 
 // Renders a severity as a short string.
@@ -71,9 +71,9 @@ int logging_debug_enabled() {
 }
 
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
-  //if (severity < loglevel) {
-  //  return;
-//  }
+  if (severity < loglevel) {
+    return;
+  }
 
   if (!logf) {
     logf = fdopen(STDOUT_FILENO, "w");
