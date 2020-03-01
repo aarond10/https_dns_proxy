@@ -51,7 +51,7 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
   }
 
   if ((res = bind(sock, ai->ai_addr, ai->ai_addrlen)) < 0) {
-    FLOG("Error binding %s:%d: %s", listen_addr, listen_port, strerror(res));
+    FLOG("Error binding %s:%d: %s", listen_addr, listen_port, strerror(errno));
   }
 
   freeaddrinfo(ai);
