@@ -72,9 +72,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       opt->logfile = optarg;
       break;
     case 'v': // verbose
-      if (opt->loglevel) {
-        opt->loglevel--;
-      }
+   //   if (opt->loglevel) {
+        opt->loglevel = LOG_DEBUG;
+   //   }
       break;
     case 'x': // http/1.1
       opt->use_http_1_1 = 1;
