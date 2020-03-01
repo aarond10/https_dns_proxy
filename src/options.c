@@ -23,7 +23,7 @@ void options_init(struct Options *opt) {
   opt->listen_port = 5053;
   opt->logfile = "-";
   opt->logfd = -1;
-  opt->loglevel = LOG_ERROR;
+  opt->loglevel = LOG_DEBUG;
   opt->daemonize = 0;
   opt->user = NULL;
   opt->group = NULL;
