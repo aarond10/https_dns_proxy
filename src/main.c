@@ -77,15 +77,14 @@ static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
 
 static void https_resp_cb(void *data, char *buf, size_t buflen) {
   DLOG("buflen %u\n", buflen);
-  if (buf == NULL) { // Timeout, DNS failure, or something similar.
-    return;
-  }
   request_t *req = (request_t *)data;
   if (req == NULL) {
     FLOG("data NULL");
   }
   free((void*)req->dns_req);
-  dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+  if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
+    dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+  }
   free(req);
 }
 
