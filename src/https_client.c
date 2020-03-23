@@ -318,7 +318,6 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
   }
 #endif
   curl_multi_setopt(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, 8);
-  curl_multi_setopt(c->curlm, CURLMOPT_MAXCONNECTS, 8);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETDATA, c);
   curl_multi_setopt(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   curl_multi_setopt(c->curlm, CURLMOPT_TIMERDATA, c);
