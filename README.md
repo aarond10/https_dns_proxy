@@ -57,7 +57,7 @@ brew link curl --force
 
 On Ubuntu
 ```
-apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev
+apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential
 ```
 
 If all pre-requisites are met, you should be able to build with:
