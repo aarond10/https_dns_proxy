@@ -125,6 +125,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
+  -c dscp_codepoint      Optional DSCP codepoint[0-63] to set on upstream DNS server
+                         connections.
   -l logfile             Path to file to log to. ("-")
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)

@@ -30,6 +30,8 @@ struct Options {
 
   int ipv4;  // if non-zero, will only use AF_INET addresses.
 
+  int dscp; // mark packet with DSCP
+
   // Resolver URL prefix to use. Must start with https://.
   const char *resolver_url;
 
