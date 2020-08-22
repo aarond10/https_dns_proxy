@@ -25,6 +25,7 @@ void options_init(struct Options *opt) {
   opt->logfd = -1;
   opt->loglevel = LOG_ERROR;
   opt->daemonize = 0;
+  opt->dscp = 0;
   opt->user = NULL;
   opt->group = NULL;
   opt->uid = -1;
@@ -38,11 +39,14 @@ void options_init(struct Options *opt) {
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
-  int c = 0;
-  while ((c = getopt(argc, argv, "a:p:du:g:b:4r:e:t:l:vx")) != -1) {
+  int c;
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:4r:e:t:l:vx")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
+      break;
+    case 'c': // DSCP codepoint
+      opt->dscp = atoi(optarg);
       break;
     case 'p': // listen_port
       opt->listen_port = atoi(optarg);
@@ -103,6 +107,11 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     }
     opt->gid = g->gr_gid;
   }
+  if (opt->dscp < 0 || opt->dscp >63) {
+      printf("DSCP code (%d) invalid:[0-63]\n", opt->dscp);
+      return -1;
+  }
+  opt->dscp <<= 2;
   // Get noisy about bad security practices.
   if (getuid() == 0 && (!opt->user || !opt->group)) {
     printf("----------------------------\n"
@@ -134,7 +143,8 @@ void options_show_usage(int argc, char **argv) {
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);
   printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
   printf("        [-r <resolver_url>] [-e <subnet_addr>]\n");
-  printf("        [-t <proxy_server>] [-l <logfile>] [-x] [-v]+\n\n");
+  printf("        [-t <proxy_server>] [-l <logfile>] -c <dscp_codepoint>\n");
+  printf("        [-x] [-v]+\n\n");
   printf("  -a listen_addr         Local IPv4/v6 address to bind to. (%s)\n",
          defaults.listen_addr);
   printf("  -p listen_port         Local port to bind to. (%d)\n",
@@ -157,6 +167,8 @@ void options_show_usage(int argc, char **argv) {
   printf("                         bootstrap DNS servers.\n");
   printf("  -l logfile             Path to file to log to. (\"%s\")\n",
          defaults.logfile);
+  printf("  -c dscp_codepoint      Optional DSCP codepoint[0-63] to set on upstream DNS server\n");
+  printf("                         connections.\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl. (false)\n");
   printf("  -v                     Increase logging verbosity. (INFO)\n");

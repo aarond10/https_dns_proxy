@@ -57,7 +57,7 @@ brew link curl --force
 
 On Ubuntu
 ```
-apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev
+apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential
 ```
 
 If all pre-requisites are met, you should be able to build with:
@@ -125,6 +125,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
+  -c dscp_codepoint      Optional DSCP codepoint[0-63] to set on upstream DNS server
+                         connections.
   -l logfile             Path to file to log to. ("-")
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)
