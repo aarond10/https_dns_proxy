@@ -17,6 +17,7 @@
 
 #include "https_client.h"
 #include "logging.h"
+#include "math.h"
 #include "options.h"
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
@@ -49,7 +50,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ctx->next = client->fetches;
   client->fetches = ctx;
 
-  CURLcode res;
+  CURLcode res = 0;
   if ((res = curl_easy_setopt(ctx->curl, CURLOPT_RESOLVE, resolv)) !=
       CURLE_OK) {
     FLOG("CURLOPT_RESOLV error: %s", curl_easy_strerror(res));
@@ -74,7 +75,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
   curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
   curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
-  curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, 2 /* seconds */);
+  curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, 10 /* seconds */);
   // We know Google supports this, so force it.
   curl_easy_setopt(ctx->curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
   if (client->opt->curl_proxy) {
@@ -95,7 +96,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
     if (cur == ctx) {
       curl_multi_remove_handle(client->curlm, ctx->curl);
       if (client->opt->loglevel <= LOG_DEBUG) {
-        CURLcode res;
+        CURLcode res = 0;
         long long_resp = 0;
         char *str_resp = NULL;
         if ((res = curl_easy_getinfo(
@@ -157,12 +158,12 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
         }
 #endif
 
-        double namelookup_time;
-        double connect_time;
-        double appconnect_time;
-        double pretransfer_time;
-        double starttransfer_time;
-        double total_time;
+        double namelookup_time = NAN;
+        double connect_time = NAN;
+        double appconnect_time = NAN;
+        double pretransfer_time = NAN;
+        double starttransfer_time = NAN;
+        double total_time = NAN;
         if (curl_easy_getinfo(ctx->curl,
                               CURLINFO_NAMELOOKUP_TIME, &namelookup_time) != CURLE_OK ||
             curl_easy_getinfo(ctx->curl,
@@ -201,8 +202,8 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
 }
 
 static void check_multi_info(https_client_t *c) {
-  CURLMsg *msg;
-  int msgs_left;
+  CURLMsg *msg = NULL;
+  int msgs_left = 0;
   while ((msg = curl_multi_info_read(c->curlm, &msgs_left))) {
     if (msg->msg == CURLMSG_DONE) {
       struct https_fetch_ctx *n = c->fetches;
@@ -336,8 +337,15 @@ void https_client_fetch(https_client_t *c, const char *url,
   https_fetch_ctx_init(c, new_ctx, url, postdata, postdata_len, resolv, cb, data);
 }
 
+void https_client_reset(https_client_t *c) {
+  options_t *opt = c->opt;
+  struct ev_loop *loop = c->loop;
+  https_client_cleanup(c);
+  https_client_init(c, opt, loop);
+}
+
 void https_client_cleanup(https_client_t *c) {
-  int i;
+  int i = 0;
 
   while (c->fetches) {
     https_fetch_ctx_cleanup(c, c->fetches);

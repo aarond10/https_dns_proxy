@@ -51,6 +51,10 @@ void https_client_fetch(https_client_t *c, const char *url,
                         struct curl_slist *resolv, https_response_cb cb,
                         void *data);
 
+// Used to reset state of libcurl because streaming connections + IP changes
+// seem to cause curl to flip out.
+void https_client_reset(https_client_t *c);
+
 void https_client_cleanup(https_client_t *c);
 
 #endif // _HTTPS_CLIENT_H_

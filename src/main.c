@@ -118,21 +118,30 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
 
 static void dns_poll_cb(const char* hostname, void *data,
                         const void* addr, const int af) {
-  struct curl_slist **resolv = (struct curl_slist **)data;
+  app_state_t *app = (app_state_t *)data;
   char buf[280];
   memset(buf, 0, sizeof(buf));
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
   char *pos = buf + strlen(buf);
   ares_inet_ntop(af, addr, pos, buf + sizeof(buf) - 1 - pos);
-  DLOG("Received new IP '%s'", pos);
-  curl_slist_free_all(*resolv);
-  *resolv = curl_slist_append(NULL, buf);
+  if (app->resolv &&
+      app->resolv->data &&
+      !strcmp(app->resolv->data, buf)) {
+    DLOG("DNS server IP address unchanged (%s).", pos);
+    return;
+  }
+  DLOG("Received new DNS server IP '%s'", pos);
+  curl_slist_free_all(app->resolv);
+  app->resolv = curl_slist_append(NULL, buf);
+  // Resets curl or it gets in a mess due to IP of streaming connection not
+  // matching that of configured DNS. 
+  https_client_reset(app->https_client);
 }
 
 static int proxy_supports_name_resolution(const char *proxy)
 {
-  size_t i;
+  size_t i = 0;
   const char *ptypes[] = {"http:", "https:", "socks4a:", "socks5h:"};
 
   if (proxy == NULL) {
@@ -212,7 +221,7 @@ int main(int argc, char *argv[]) {
       app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
-                      dns_poll_cb, &app.resolv);
+                      dns_poll_cb, &app);
       ILOG("DNS polling initialized for '%s'", hostname);
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "

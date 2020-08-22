@@ -38,7 +38,7 @@ void options_init(struct Options *opt) {
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
-  int c;
+  int c = 0;
   while ((c = getopt(argc, argv, "a:p:du:g:b:4r:e:t:l:vx")) != -1) {
     switch (c) {
     case 'a': // listen_addr
@@ -88,7 +88,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     }
   }
   if (opt->user) {
-    struct passwd *p;
+    struct passwd *p = NULL;
     if (!(p = getpwnam(opt->user)) || !p->pw_uid) {
       printf("Username (%s) invalid.\n", opt->user);
       return -1;
@@ -96,7 +96,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     opt->uid = p->pw_uid;
   }
   if (opt->group) {
-    struct group *g;
+    struct group *g = NULL;
     if (!(g = getgrnam(opt->group)) || !g->gr_gid) {
       printf("Group (%s) invalid.\n", opt->group);
       return -1;

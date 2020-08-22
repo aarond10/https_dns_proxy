@@ -85,7 +85,7 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
     return;
   }
 
-  uint16_t net_tx_id;
+  uint16_t net_tx_id = 0;
   memcpy(&net_tx_id, buf, sizeof(net_tx_id));
   uint16_t tx_id = ntohs(net_tx_id);
   d->cb(d, d->cb_data, (struct sockaddr*)&raddr, tx_id, buf, len);

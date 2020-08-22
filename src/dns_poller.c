@@ -11,6 +11,7 @@
 
 #include "dns_poller.h"
 #include "logging.h"
+#include "math.h"
 
 static void sock_cb(struct ev_loop *loop, ev_io *w, int revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
@@ -39,7 +40,7 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
 
 static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
   dns_poller_t *d = (dns_poller_t *)arg;
-  ev_tstamp interval;
+  ev_tstamp interval = NAN;
 
   if (status != ARES_SUCCESS) {
     interval = POLLER_INTVL_ERR;
@@ -73,12 +74,12 @@ static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns, const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
-  int i;
+  int i = 0;
   for (i = 0; i < FD_SETSIZE; i++) {
     d->fd[i].fd = 0;
   }
 
-  int r;
+  int r = 0;
   ares_library_init(ARES_LIB_INIT_ALL);
 
   struct ares_options options;
