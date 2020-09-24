@@ -72,25 +72,25 @@ There is no installer at this stage - just run it.
 
 ### OpenWRT package install
 
-I maintain a package in the [OpenWRT packages](https://github.com/openwrt/packages) repository as well.
+There is a package in the [OpenWRT packages](https://github.com/openwrt/packages) repository as well.
 You can install as follows:
 
 ```
 root@OpenWrt:~# opkg update
-root@OpenWrt:~# opkg install https_dns_proxy
-root@OpenWrt:~# /etc/init.d/https_dns_proxy enable
-root@OpenWrt:~# /etc/init.d/https_dns_proxy start
+root@OpenWrt:~# opkg install https-dns-proxy
+root@OpenWrt:~# /etc/init.d/https-dns-proxy enable
+root@OpenWrt:~# /etc/init.d/https-dns-proxy start
 ```
 
-Replace any 'list server' lines in `/etc/config/dhcp` with:
+OpenWrt's init script automatically updates the `dnsmasq` config to include only DoH servers on its start and restores old settings on stop. Additional information on OpenWrt-specific configuration is available at the [README](https://github.com/openwrt/packages/blob/master/net/https-dns-proxy/files/README.md).
 
-`list server '127.0.0.1#5053'`
+If you are using any other resolver on your router you will need to manually replace any previously used servers with entries like:
 
-You may also want to add the line:
+`127.0.0.1#5053`
 
-`noresolv '1'`
+You may also want to prevent your resolver from using /etc/resolv.conf DNS servers, leaving only our proxy server.
 
-This prevents dnsmasq from using /etc/resolv.conf DNS servers, leaving only our proxy server.
+There's also a WebUI package available for OpenWrt (`luci-app-https-dns-proxy`) which contains the list of supported and tested DoH providers.
 
 ### archlinux package install
 
