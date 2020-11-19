@@ -1,22 +1,22 @@
-#include <sys/socket.h>
-#include <sys/types.h>
+#include <sys/socket.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/types.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 
-#include <ares.h>
-#include <arpa/inet.h>
-#include <curl/curl.h>
-#include <errno.h>
-#include <ev.h>
-#include <grp.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <pwd.h>
-#include <signal.h>
+#include <ares.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <arpa/inet.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <curl/curl.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <errno.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ev.h>             // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <grp.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netdb.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/in.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <pwd.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <signal.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
+#include <stdio.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdlib.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <time.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_server.h"
 #include "logging.h"
@@ -26,6 +26,7 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
                            unsigned int *addrlen) {
   struct addrinfo *ai = NULL;
   struct addrinfo hints;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(&hints, 0, sizeof(struct addrinfo));
   /* prevent DNS lookups if leakage is our worry */
   hints.ai_flags = AI_NUMERICHOST;
@@ -51,7 +52,8 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
   }
 
   if ((res = bind(sock, ai->ai_addr, ai->ai_addrlen)) < 0) {
-    FLOG("Error binding %s:%d: %s", listen_addr, listen_port, strerror(errno));
+    FLOG("Error binding %s:%d: %s (%d)", listen_addr, listen_port,
+         strerror(errno), res);
   }
 
   freeaddrinfo(ai);
@@ -86,6 +88,7 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
   }
 
   uint16_t net_tx_id = 0;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memcpy(&net_tx_id, buf, sizeof(net_tx_id));
   uint16_t tx_id = ntohs(net_tx_id);
   d->cb(d, d->cb_data, (struct sockaddr*)&raddr, tx_id, buf, len);
@@ -99,6 +102,7 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
   d->cb = cb;
   d->cb_data = data;
 
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(&d->watcher, watcher_cb, d->sock, EV_READ);
   d->watcher.data = d;
   ev_io_start(d->loop, &d->watcher);
