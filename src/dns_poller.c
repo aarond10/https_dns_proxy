@@ -1,17 +1,16 @@
-#include <sys/socket.h>
-#include <sys/types.h>
-
-#include <ares.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <ares.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <arpa/inet.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <math.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netdb.h>       // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/in.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdlib.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/socket.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/types.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_poller.h"
 #include "logging.h"
-#include "math.h"
 
 static void sock_cb(struct ev_loop *loop, ev_io *w, int revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
@@ -26,11 +25,13 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
     d->fd[fd].fd = 0;
   } else if (d->fd[fd].fd != 0) {
     ev_io_stop(d->loop, &d->fd[fd]);
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     ev_io_init(&d->fd[fd], sock_cb, fd,
                (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
     d->fd[fd].data = d;
     ev_io_start(d->loop, &d->fd[fd]);
   } else {
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     ev_io_init(&d->fd[fd], sock_cb, fd,
                (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
     d->fd[fd].data = d;
@@ -102,6 +103,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->cb_data = cb_data;
 
   // Start with a shorter polling interval and switch after we've bootstrapped.
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_timer_init(&d->timer, timer_cb, 0, POLLER_INTVL_ERR);
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);
