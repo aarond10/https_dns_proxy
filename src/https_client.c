@@ -1,24 +1,24 @@
-#include <sys/socket.h>
-#include <sys/types.h>
+#include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 
-#include <arpa/inet.h>
-#include <curl/curl.h>
-#include <errno.h>
-#include <grp.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <pwd.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
+#include <arpa/inet.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <curl/curl.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netdb.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/ip.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdint.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <time.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "https_client.h"
 #include "logging.h"
-#include "math.h"
 #include "options.h"
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
@@ -30,6 +30,7 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
     return 0;
   }
   ctx->buf = new_buf;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memcpy(&(ctx->buf[ctx->buflen]), buf, size * nmemb);
   ctx->buflen += size * nmemb;
   // We always expect to receive valid non-null ASCII but just to be safe...
@@ -39,12 +40,13 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
 
 #if defined(IP_TOS)
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, struct curl_sockaddr *addr) {
-  curl_socket_t sock;
+  curl_socket_t sock = 0;
 
   sock=socket(addr->family, addr->socktype, addr->protocol);
 
-  if (purpose != CURLSOCKTYPE_IPCXN)
+  if (purpose != CURLSOCKTYPE_IPCXN) {
 	return sock;
+  }
 
   if (sock != -1) {
 	if (addr->family == AF_INET) {
@@ -303,10 +305,11 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
     ev_io_stop(c->loop, &c->fd[sock]);
     c->fd[sock].fd = 0;
     return 0;
-  } 
+  }
   if (c->fd[sock].fd) {
     ev_io_stop(c->loop, &c->fd[sock]);
   }
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(&c->fd[sock], sock_cb, sock,
              ((what & CURL_POLL_IN) ? EV_READ : 0) |
                  ((what & CURL_POLL_OUT) ? EV_WRITE : 0));
@@ -318,6 +321,7 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
 static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms > 0) {
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     ev_timer_init(&c->timer, timer_cb, timeout_ms / 1000.0, 0);
     ev_timer_start(c->loop, &c->timer);
   } else {
@@ -329,6 +333,7 @@ static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
 void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) {
   int i = 0;
 
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(c, 0, sizeof(*c));
   c->loop = loop;
   c->curlm = curl_multi_init();
