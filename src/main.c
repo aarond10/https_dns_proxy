@@ -1,30 +1,25 @@
 // Simple UDP-to-HTTPS DNS Proxy
-//
 // (C) 2016 Aaron Drew
-//
-// Intended for use with Google's Public-DNS over HTTPS service
-// (https://developers.google.com/speed/public-dns/docs/dns-over-https)
-#include <sys/socket.h>
-#include <sys/types.h>
 
+#include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 
-#include <ares.h>
-#include <arpa/inet.h>
-#include <ctype.h>
-#include <curl/curl.h>
-#include <errno.h>
-#include <ev.h>
-#include <grp.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <pwd.h>
-#include <signal.h>
+#include <ares.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <arpa/inet.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <curl/curl.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netdb.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
+#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <time.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+
 
 #include "dns_poller.h"
 #include "dns_server.h"
@@ -62,7 +57,17 @@ static int hostname_from_uri(const char* uri,
   }
   if (end == uri) { return 0; }  // empty string.
   if (!isalpha(*(end - 1))) { return 0; }  // last digit non-alpha.
-  strncpy(hostname, uri, end - uri);
+
+  // If using basic authentication in URL, chop off prefix.
+  char *tmp = NULL;
+  if ((tmp = strchr(uri, '@'))) {
+    tmp++;
+    if (tmp < end) {
+      uri = tmp;
+    }
+  }
+
+  strncpy(hostname, uri, end - uri); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   hostname[end - uri] = 0;
   return 1;
 }
@@ -109,7 +114,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     FLOG("Out of mem");
   }
   req->tx_id = tx_id;
-  memcpy(&req->raddr, addr, dns_server->addrlen);
+  memcpy(&req->raddr, addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   req->dns_server = dns_server;
   req->dns_req = dns_req; // To free buffer after https request is complete.
   https_client_fetch(app->https_client, app->resolver_url,
@@ -120,9 +125,9 @@ static void dns_poll_cb(const char* hostname, void *data,
                         const void* addr, const int af) {
   app_state_t *app = (app_state_t *)data;
   char buf[280];
-  memset(buf, 0, sizeof(buf));
+  memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
-  snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
+  snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   char *pos = buf + strlen(buf);
   ares_inet_ntop(af, addr, pos, buf + sizeof(buf) - 1 - pos);
   if (app->resolv &&
@@ -205,10 +210,12 @@ int main(int argc, char *argv[]) {
   }
 
   ev_signal sigpipe;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_signal_init(&sigpipe, sigpipe_cb, SIGPIPE);
   ev_signal_start(loop, &sigpipe);
 
   ev_signal sigint;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_signal_init(&sigint, sigint_cb, SIGINT);
   ev_signal_start(loop, &sigint);
 
@@ -247,5 +254,5 @@ int main(int argc, char *argv[]) {
   logging_cleanup();
   options_cleanup(&opt);
 
-  return EXIT_SUCCESS;
+  return 0;
 }
