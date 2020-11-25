@@ -1,20 +1,17 @@
-#include <sys/time.h>
-#include <sys/types.h>
-
 #include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/time.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "logging.h"
 
 /* logs of this severity or higher are flushed immediately after write */
 #define LOG_FLUSH_LEVEL LOG_WARNING
 
-static FILE *logf = NULL;
-static int loglevel = LOG_ERROR;
-static ev_timer logging_timer;
+static FILE *logf = NULL;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static int loglevel = LOG_ERROR; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static ev_timer logging_timer;   // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 // Renders a severity as a short string.
 static const char *SeverityStr(int severity) {
@@ -47,6 +44,7 @@ void logging_flush_init(struct ev_loop *loop) {
     return;
   }
   DLOG("initializing periodic log flush timer");
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_timer_init(&logging_timer, logging_timer_cb, 0, 10);
   ev_timer_start(loop, &logging_timer);
 }
