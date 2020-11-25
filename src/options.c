@@ -1,14 +1,13 @@
-#include <sys/stat.h>
-#include <sys/types.h>
-
-#include <ctype.h>
-#include <fcntl.h>
-#include <grp.h>
-#include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <fcntl.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/stat.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "logging.h"
 #include "options.h"
@@ -39,7 +38,7 @@ void options_init(struct Options *opt) {
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
-  int c;
+  int c = 0;
   while ((c = getopt(argc, argv, "a:c:p:du:g:b:4r:e:t:l:vx")) != -1) {
     switch (c) {
     case 'a': // listen_addr
