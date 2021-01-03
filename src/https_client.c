@@ -117,7 +117,12 @@ static void https_fetch_ctx_init(https_client_t *client,
   curl_easy_setopt(ctx->curl, CURLOPT_POSTFIELDS, data);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);
-  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
+#ifdef CURLOPT_MAXAGE_CONN
+  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 1L);
+  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPIDLE, 50L);
+  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPINTVL, 50L);
+  curl_easy_setopt(ctx->curl, CURLOPT_MAXAGE_CONN, 300L);
+#endif
   curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
   curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
   curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, 10 /* seconds */);
