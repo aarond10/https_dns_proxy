@@ -9,9 +9,12 @@
 // queries are cancelled and treated as if they've failed.
 #define POLLER_INTVL_ERR 5
 
+// enough for minimum 64 pcs IPv4 address or 25 pcs IPv6
+#define POLLER_ADDR_LIST_SIZE 1024
+
 // Callback to be called periodically when we get a valid DNS response.
 typedef void (*dns_poller_cb)(const char* hostname, void *data,
-                              const void *addr, const int af);
+                              const char *addr_list);
 
 typedef struct {
   ares_channel ares;

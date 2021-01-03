@@ -40,6 +40,29 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
   }
 }
 
+static char *get_addr_listing(char** addr_list, const int af) {
+  char *list = (char *)calloc(1, POLLER_ADDR_LIST_SIZE), *pos = list;
+  if (list == NULL) {
+    FLOG("Out of mem");
+  }
+  for (int i = 0; addr_list[i]; i++) {
+    const char *res = ares_inet_ntop(af, addr_list[i], pos,
+                                     list + POLLER_ADDR_LIST_SIZE - 1 - pos);
+    if (res != NULL) {
+      pos += strlen(pos);
+      *pos = ',';
+      pos++;
+    }
+  }
+  if (pos == list) {
+    free((void*)list);
+    list = NULL;
+  } else {
+    *(pos-1) = '\0';
+  }
+  return list;
+}
+
 static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
                     struct hostent *h) {
   dns_poller_t *d = (dns_poller_t *)arg;
@@ -53,7 +76,7 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
     WLOG("No hosts.");
   } else {
     interval = d->polling_interval;
-    d->cb(d->hostname, d->cb_data, h->h_addr_list[0], h->h_addrtype);
+    d->cb(d->hostname, d->cb_data, get_addr_listing(h->h_addr_list, h->h_addrtype));
   }
 
   if(interval != d->timer.repeat) {

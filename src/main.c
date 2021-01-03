@@ -125,22 +125,50 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
                      dns_req, dns_req_len, app->resolv, https_resp_cb, req);
 }
 
+static int addr_list_reduced(const char* full_list, const char* list) {
+  const char *pos = list;
+  const char *end = list + strlen(list);
+  while (pos < end) {
+    char current[50];
+    const char *comma = strchr(pos, ',');
+    int ip_len = comma ? comma - pos : end - pos;
+    strncpy(current, pos, ip_len);
+    current[ip_len] = '\0';
+
+    const char *match_begin = strstr(full_list, current);
+    if (!match_begin ||
+        !(match_begin == full_list || *(match_begin - 1) == ',') ||
+        !(*(match_begin + ip_len) == ',' || *(match_begin + ip_len) == '\0')) {
+      DLOG("IP address missing: %s", current);
+      return 1;
+    }
+
+    pos += ip_len + 1;
+  }
+  return 0;
+}
+
 static void dns_poll_cb(const char* hostname, void *data,
-                        const void* addr, const int af) {
+                        const char* addr_list) {
   app_state_t *app = (app_state_t *)data;
-  char buf[280];
+  char buf[255 + (sizeof(":443:") - 1) + POLLER_ADDR_LIST_SIZE];
   memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
-  snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  char *pos = buf + strlen(buf);
-  ares_inet_ntop(af, addr, pos, buf + sizeof(buf) - 1 - pos);
-  if (app->resolv &&
-      app->resolv->data &&
-      !strcmp(app->resolv->data, buf)) {
-    DLOG("DNS server IP address unchanged (%s).", pos);
-    return;
+  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list);
+  if (app->resolv && app->resolv->data) {
+    char * old_addr_list = strstr(app->resolv->data, ":443:");
+    if (old_addr_list) {
+      old_addr_list += sizeof(":443:") - 1;
+      if (!addr_list_reduced(addr_list, old_addr_list)) {
+        DLOG("DNS server IP address unchanged (%s).", buf + ip_start);
+        free((void*)addr_list);
+        return;
+      }
+    }
   }
-  DLOG("Received new DNS server IP '%s'", pos);
+  free((void*)addr_list);
+  DLOG("Received new DNS server IP '%s'", buf + ip_start);
   curl_slist_free_all(app->resolv);
   app->resolv = curl_slist_append(NULL, buf);
   // Resets curl or it gets in a mess due to IP of streaming connection not
