@@ -38,12 +38,14 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   return size * nmemb;
 }
 
-#if defined(IP_TOS)
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, struct curl_sockaddr *addr) {
   curl_socket_t sock = 0;
 
   sock=socket(addr->family, addr->socktype, addr->protocol);
 
+  DLOG("curl opened socket: %d", (int)sock);
+
+#if defined(IP_TOS)
   if (purpose != CURLSOCKTYPE_IPCXN) {
 	return sock;
   }
@@ -58,10 +60,16 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, st
 	}
 #endif
   }
+#endif
 
   return sock;
 }
-#endif
+
+static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t item)
+{
+  DLOG("curl closed socket: %d", (int)item);
+  return 0;
+}
 
 static void https_fetch_ctx_init(https_client_t *client,
                                  struct https_fetch_ctx *ctx, const char *url,
@@ -90,11 +98,15 @@ static void https_fetch_ctx_init(https_client_t *client,
                    CURL_HTTP_VERSION_2_0);
   if (logging_debug_enabled()) {
     curl_easy_setopt(ctx->curl, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+    curl_easy_setopt(ctx->curl, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
   }
 #if defined(IP_TOS)
   if (client->opt->dscp) {
-	  curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETDATA, &client->opt->dscp);
-	  curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+    curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETDATA, &client->opt->dscp);
+    if (!logging_debug_enabled()) {
+        curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+      }
   }
 #endif
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
