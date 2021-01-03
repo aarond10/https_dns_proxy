@@ -72,11 +72,15 @@ static int hostname_from_uri(const char* uri,
   return 1;
 }
 
-static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
+static void sigint_cb(struct ev_loop *loop,
+                      ev_signal __attribute__((__unused__)) *w,
+                      int __attribute__((__unused__)) revents) {
   ev_break(loop, EVBREAK_ALL);
 }
 
-static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
+static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
+                       ev_signal __attribute__((__unused__)) *w,
+                       int __attribute__((__unused__)) revents) {
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
@@ -196,10 +200,10 @@ int main(int argc, char *argv[]) {
   dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
                   dns_server_cb, &app);
 
-  if (opt.gid != -1 && setgid(opt.gid)) {
+  if (opt.gid != (uid_t)-1 && setgid(opt.gid)) {
     FLOG("Failed to set gid.");
   }
-  if (opt.uid != -1 && setuid(opt.uid)) {
+  if (opt.uid != (uid_t)-1 && setuid(opt.uid)) {
     FLOG("Failed to set uid.");
   }
 
@@ -240,7 +244,7 @@ int main(int argc, char *argv[]) {
 
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     dns_poller_cleanup(&dns_poller);
-}
+  }
 
   curl_slist_free_all(app.resolv);
 

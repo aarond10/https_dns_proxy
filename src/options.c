@@ -27,8 +27,8 @@ void options_init(struct Options *opt) {
   opt->dscp = 0;
   opt->user = NULL;
   opt->group = NULL;
-  opt->uid = -1;
-  opt->gid = -1;
+  opt->uid = (uid_t)-1;
+  opt->gid = (uid_t)-1;
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
   opt->ipv4 = 0;
@@ -136,7 +136,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
   return 0;
 }
 
-void options_show_usage(int argc, char **argv) {
+void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   struct Options defaults;
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);

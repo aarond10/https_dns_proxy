@@ -251,7 +251,8 @@ static void check_multi_info(https_client_t *c) {
   }
 }
 
-static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
+static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
+                    struct ev_io *w, int revents) {
   https_client_t *c = (https_client_t *)w->data;
   if (c == NULL) {
     FLOG("c is NULL");
@@ -266,7 +267,8 @@ static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
   check_multi_info(c);
 }
 
-static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
+static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
+                     struct ev_timer *w, int __attribute__((unused)) revents) {
   https_client_t *c = (https_client_t *)w->data;
   CURLMcode rc = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
                                           &c->still_running);
@@ -277,7 +279,7 @@ static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
 }
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
-                         https_client_t *c, void *sockp) {
+                         https_client_t *c, void __attribute__((unused)) *sockp) {
   if (!curl) {
     FLOG("Unexpected NULL pointer for CURL");
   }
@@ -318,7 +320,8 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   return 0;
 }
 
-static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
+static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
+                          long timeout_ms, https_client_t *c) {
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms > 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)

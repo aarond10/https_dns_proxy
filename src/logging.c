@@ -32,7 +32,9 @@ static const char *SeverityStr(int severity) {
   }
 }
 
-static void logging_timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
+static void logging_timer_cb(struct ev_loop __attribute__((unused)) *loop,
+                             ev_timer __attribute__((unused)) *w,
+                             int __attribute__((unused)) revents) {
   if (logf) {
     fflush(logf);
   }

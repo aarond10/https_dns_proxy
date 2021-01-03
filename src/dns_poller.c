@@ -12,7 +12,8 @@
 #include "dns_poller.h"
 #include "logging.h"
 
-static void sock_cb(struct ev_loop *loop, ev_io *w, int revents) {
+static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
+                    ev_io *w, int revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
   ares_process_fd(d->ares, (revents & EV_READ) ? w->fd : ARES_SOCKET_BAD,
                   (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
@@ -39,7 +40,8 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
   }
 }
 
-static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
+static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
+                    struct hostent *h) {
   dns_poller_t *d = (dns_poller_t *)arg;
   ev_tstamp interval = NAN;
 
@@ -62,7 +64,8 @@ static void ares_cb(void *arg, int status, int timeouts, struct hostent *h) {
   }
 }
 
-static void timer_cb(struct ev_loop *loop, ev_timer *w, int revents) {
+static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
+                     ev_timer *w, int __attribute__((unused)) revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
   // Cancel any pending queries before making new ones. c-ares can't be depended on to
   // execute ares_cb() even after the specified query timeout has been reached, e.g. if

@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 2.8)
 set(CMAKE_BUILD_TYPE "Debug")
 #set(CMAKE_BUILD_TYPE "Release")
 
-# set(CMAKE_C_FLAGS "-Wall --pedantic -Wno-strict-aliasing")
+#set(CMAKE_C_FLAGS "-Wall -Wextra --pedantic -Wno-strict-aliasing")
+set(CMAKE_C_FLAGS_DEBUG "-g")
+set(CMAKE_C_FLAGS_RELEASE "-O2")
 
 find_path(LIBCARES_INCLUDE_DIR ares.h)
 find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
