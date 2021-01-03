@@ -28,6 +28,8 @@ struct Options {
   // DNS servers to look up resolver host (e.g. dns.google)
   const char *bootstrap_dns;
 
+  int bootstrap_dns_polling_interval;
+
   int ipv4;  // if non-zero, will only use AF_INET addresses.
 
   int dscp; // mark packet with DSCP

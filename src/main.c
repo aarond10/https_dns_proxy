@@ -230,7 +230,8 @@ int main(int argc, char *argv[]) {
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     if (hostname_from_uri(opt.resolver_url, hostname, 254)) {
       app.using_dns_poller = 1;
-      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
+      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
+                      opt.bootstrap_dns_polling_interval, hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
                       dns_poll_cb, &app);
       ILOG("DNS polling initialized for '%s'", hostname);

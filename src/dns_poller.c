@@ -52,7 +52,7 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
     interval = POLLER_INTVL_ERR;
     WLOG("No hosts.");
   } else {
-    interval = POLLER_INTVL_NORM;
+    interval = d->polling_interval;
     d->cb(d->hostname, d->cb_data, h->h_addr_list[0], h->h_addrtype);
   }
 
@@ -76,7 +76,9 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
 }
 
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
-                     const char *bootstrap_dns, const char *hostname,
+                     const char *bootstrap_dns,
+                     int bootstrap_dns_polling_interval,
+                     const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
   int i = 0;
   for (i = 0; i < FD_SETSIZE; i++) {
@@ -103,6 +105,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->hostname = hostname;
   d->family = family;
   d->cb = cb;
+  d->polling_interval = bootstrap_dns_polling_interval;
   d->cb_data = cb_data;
 
   // Start with a shorter polling interval and switch after we've bootstrapped.

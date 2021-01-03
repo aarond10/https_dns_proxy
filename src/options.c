@@ -31,6 +31,7 @@ void options_init(struct Options *opt) {
   opt->gid = (uid_t)-1;
   //new as from https://dnsprivacy.org/wiki/display/DP/DNS+Privacy+Test+Servers
   opt->bootstrap_dns = "8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37";
+  opt->bootstrap_dns_polling_interval = 120;
   opt->ipv4 = 0;
   opt->resolver_url = "https://dns.google/dns-query";
   opt->curl_proxy = NULL;
@@ -39,7 +40,7 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:4r:e:t:l:vx")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vx")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -61,6 +62,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'b': // bootstrap dns servers
       opt->bootstrap_dns = optarg;
+      break;
+    case 'i': // bootstrap dns servers polling interval
+      opt->bootstrap_dns_polling_interval = atoi(optarg);
       break;
     case '4': // ipv4 mode - don't use v6 addresses.
       opt->ipv4 = 1;
@@ -133,6 +137,11 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
            opt->resolver_url);
     return -1;
   }
+  if (opt->bootstrap_dns_polling_interval < 5 ||
+      opt->bootstrap_dns_polling_interval > 3600) {
+    printf("DNS servers polling interval must be between 5 and 3600.\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -156,6 +165,9 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
          "                         When specifying a port for IPv6, enclose the address in [].\n"\
          "                         (%s)\n",
          defaults.bootstrap_dns);
+  printf("  -i polling_interval    Optional polling interval of DNS servers.\n"\
+         "                         (Default: %d, Min: 5, Max: 3600)\n",
+         defaults.bootstrap_dns_polling_interval);
   printf("  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.\n");
   printf("  -r resolver_url        The HTTPS path to the resolver URL. default: %s\n",
          defaults.resolver_url);
