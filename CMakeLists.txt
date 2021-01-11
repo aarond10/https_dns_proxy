@@ -49,4 +49,7 @@ if(CLANG_TIDY_EXE)
   )
 endif()
 
-install(CODE "MESSAGE(\"Please install manually for now.\")")
+configure_file(${TARGET_NAME}.service.in ${TARGET_NAME}.service)
+
+install(TARGETS ${TARGET_NAME} DESTINATION bin)
+install(FILES ${TARGET_NAME}.service DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system/)
