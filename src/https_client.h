@@ -1,10 +1,7 @@
 #ifndef _HTTPS_CLIENT_H_
 #define _HTTPS_CLIENT_H_
 
-#include <arpa/inet.h>
 #include <curl/curl.h>
-#include <ev.h>
-#include <stdint.h>
 
 #include "options.h"
 

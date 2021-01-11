@@ -1,13 +1,5 @@
-#include <ares.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <arpa/inet.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <math.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netdb.h>       // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/socket.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_poller.h"
 #include "logging.h"

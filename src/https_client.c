@@ -1,21 +1,7 @@
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-
-#include <arpa/inet.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <curl/curl.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netdb.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/ip.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdint.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <time.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/in.h>
+#include <ev.h>
 
 #include "https_client.h"
 #include "logging.h"
