@@ -107,7 +107,8 @@ Just run it as a daemon and point traffic at it. Commandline flags are:
 Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
         [-d] [-u <user>] [-g <group>] [-b <dns_servers>]
         [-r <resolver_url>] [-e <subnet_addr>]
-        [-t <proxy_server>] [-l <logfile>] [-x] [-v]+
+        [-t <proxy_server>] [-l <logfile>] -c <dscp_codepoint>
+        [-x] [-v]+
 
   -a listen_addr         Local IPv4/v6 address to bind to. (127.0.0.1)
   -p listen_port         Local port to bind to. (5053)
@@ -118,6 +119,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          of DNS servers to resolve resolver host (e.g. dns.google).
                          When specifying a port for IPv6, enclose the address in [].
                          (8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
+  -i polling_interval    Optional polling interval of DNS servers.
+                         (Default: 120, Min: 5, Max: 3600)
   -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.
   -r resolver_url        The HTTPS path to the resolver URL. default: https://dns.google/dns-query
   -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
@@ -125,9 +128,9 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
+  -l logfile             Path to file to log to. ("-")
   -c dscp_codepoint      Optional DSCP codepoint[0-63] to set on upstream DNS server
                          connections.
-  -l logfile             Path to file to log to. ("-")
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)
   -v                     Increase logging verbosity. (INFO)

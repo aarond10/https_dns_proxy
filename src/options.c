@@ -84,7 +84,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       opt->use_http_1_1 = 1;
       break;
     case '?':
-      printf("Unknown option '-%c'", c);
+      printf("Unknown option '-%c'\n", c);
       return -1;
     default:
       printf("Unknown state!");
