@@ -1,6 +1,5 @@
 #include <stdarg.h>
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/time.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
@@ -79,19 +78,10 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
     logf = fdopen(STDOUT_FILENO, "w");
   }
 
-  // We just want to log the filename, not the path.
-  const char *filename = file + strlen(file);
-  while (filename > file && *filename != '/') {
-    filename--;
-  }
-  if (*filename == '/') {
-    filename++;
-  }
-
   struct timeval tv;
   gettimeofday(&tv, NULL);
   fprintf(logf, "%s %8ld.%06ld %s:%d ", SeverityStr(severity), tv.tv_sec,
-          tv.tv_usec, filename, line);
+          tv.tv_usec, file, line);
 
   va_list args;
   va_start(args, fmt);
