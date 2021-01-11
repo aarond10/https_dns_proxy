@@ -17,6 +17,7 @@ static const char *SeverityStr[] = {
   "[I]",
   "[W]",
   "[E]",
+  "[S]",
   "[F]"
 };
 

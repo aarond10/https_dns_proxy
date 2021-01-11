@@ -4,6 +4,7 @@
 #include <curl/curl.h>
 
 #include "options.h"
+#include "stat.h"
 
 #define MAX_TOTAL_CONNECTIONS 8
 
@@ -35,9 +36,11 @@ typedef struct {
   int still_running;
 
   options_t *opt;
+  stat_t *stat;
 } https_client_t;
 
-void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop);
+void https_client_init(https_client_t *c, options_t *opt,
+                       stat_t *stat, struct ev_loop *loop);
 
 void https_client_fetch(https_client_t *c, const char *url,
                         const char* postdata, size_t postdata_len,

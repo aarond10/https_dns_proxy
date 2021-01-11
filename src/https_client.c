@@ -48,9 +48,15 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
 
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
                                          struct curl_sockaddr *addr) {
+  https_client_t *client = (https_client_t *)clientp;
+
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
 
   DLOG("curl opened socket: %d", sock);
+
+  if (client->stat) {
+    stat_connection_opened(client->stat);
+  }
 
 #if defined(IP_TOS)
   if (purpose != CURLSOCKTYPE_IPCXN) {
@@ -59,11 +65,13 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
 
   if (sock != -1) {
     if (addr->family == AF_INET) {
-        (void)setsockopt(sock, IPPROTO_IP, IP_TOS, (int *)clientp, sizeof(int));
+        (void)setsockopt(sock, IPPROTO_IP, IP_TOS,
+                         (int *)client->opt->dscp, sizeof(int));
     }
 #if defined(IPV6_TCLASS)
     else if (addr->family == AF_INET6) {
-        (void)setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, (int *)clientp, sizeof(int));
+        (void)setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
+                         (int *)client->opt->dscp, sizeof(int));
     }
 #endif
   }
@@ -74,7 +82,14 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
 
 static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t item)
 {
+  https_client_t *client = (https_client_t *)clientp;
+
   DLOG("curl closed socket: %d", item);
+
+  if (client->stat) {
+    stat_connection_closed(client->stat);
+  }
+
   return 0;
 }
 
@@ -107,17 +122,15 @@ static void https_fetch_ctx_init(https_client_t *client,
 
   if (logging_debug_enabled()) {
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_VERBOSE, 1L);
+  }
+  if (logging_debug_enabled() || client->stat || client->opt->dscp) {
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETDATA, client);
+  }
+  if (logging_debug_enabled() || client->stat) {
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
+    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_CLOSESOCKETDATA, client);
   }
-#if defined(IP_TOS)
-  if (client->opt->dscp) {
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETDATA, &client->opt->dscp);
-    if (!logging_debug_enabled()) {
-        ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
-      }
-  }
-#endif
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_URL, url);
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_HTTPHEADER, client->header_list);
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_POSTFIELDSIZE, datalen);
@@ -234,6 +247,18 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       ELOG("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
         ELOG("Try to run application with -4 argument!");
+      }
+    }
+  }
+
+  if (logging_debug_enabled() || client->stat) {
+    if ((res = curl_easy_getinfo(
+            ctx->curl, CURLINFO_NUM_CONNECTS , &long_resp)) != CURLE_OK) {
+      ELOG("CURLINFO_NUM_CONNECTS: %s", curl_easy_strerror(res));
+    } else {
+      DLOG("CURLINFO_NUM_CONNECTS: %d", long_resp);
+      if (long_resp == 0 && client->stat) {
+        stat_connection_reused(client->stat);
       }
     }
   }
@@ -430,7 +455,8 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
   return 0;
 }
 
-void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) {
+void https_client_init(https_client_t *c, options_t *opt,
+                       stat_t *stat, struct ev_loop *loop) {
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(c, 0, sizeof(*c));
   c->loop = loop;
@@ -444,6 +470,7 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
     c->io_events[i].data = c;
   }
   c->opt = opt;
+  c->stat = stat;
 
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING,
                            c->opt->use_http_1_1 ?
@@ -470,9 +497,10 @@ void https_client_fetch(https_client_t *c, const char *url,
 
 void https_client_reset(https_client_t *c) {
   options_t *opt = c->opt;
+  stat_t *stat = c->stat;
   struct ev_loop *loop = c->loop;
   https_client_cleanup(c);
-  https_client_init(c, opt, loop);
+  https_client_init(c, opt, stat, loop);
 }
 
 void https_client_cleanup(https_client_t *c) {

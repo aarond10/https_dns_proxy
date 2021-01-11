@@ -167,6 +167,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          connections.
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)
+  -s statistic_interval  Optional statistic printout interval.
+                         (Default: 0, Disabled: 0, Min: 1, Max: 3600)
   -v                     Increase logging verbosity. (INFO)
   -V                     Print version and exit.
 ```
