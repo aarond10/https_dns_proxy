@@ -2,6 +2,7 @@
 #include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <errno.h>
 
 #include "https_client.h"
 #include "logging.h"
@@ -131,7 +132,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   while (cur) {
     if (cur == ctx) {
       curl_multi_remove_handle(client->curlm, ctx->curl);
-      if (client->opt->loglevel <= LOG_DEBUG) {
+      if (logging_debug_enabled() || cur->buflen == 0) {
         CURLcode res = 0;
         long long_resp = 0;
         char *str_resp = NULL;
@@ -163,7 +164,10 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
                 ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
         } else if (long_resp != 0) {
-          ELOG("CURLINFO_OS_ERRNO: %d", long_resp);
+          ELOG("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
+          if (long_resp == ENETUNREACH && !client->opt->ipv4) {
+            ELOG("Try to run application with -4 argument!");
+          }
         }
 #ifdef CURLINFO_HTTP_VERSION
         if ((res = curl_easy_getinfo(
@@ -193,7 +197,8 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
           DLOG("CURLINFO_PROTOCOL: %d", long_resp);
         }
 #endif
-
+      }
+      if (logging_debug_enabled()) {
         double namelookup_time = NAN;
         double connect_time = NAN;
         double appconnect_time = NAN;
@@ -218,7 +223,6 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
                namelookup_time, connect_time, appconnect_time, pretransfer_time,
                starttransfer_time, total_time);
         }
-
       }
       curl_easy_cleanup(ctx->curl);
       cur->cb(cur->cb_data, cur->buf, cur->buflen);
