@@ -1,6 +1,7 @@
 #ifndef _LOGGING_H_
 #define _LOGGING_H_
 
+#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <ev.h>
 
 #ifdef __cplusplus
@@ -34,12 +35,12 @@ enum _LogSeverity {
 };
 
 // Debug, Info, Warning, Error logging.
-#define DLOG(...) _log(__FILE__, __LINE__, LOG_DEBUG, __VA_ARGS__)
-#define ILOG(...) _log(__FILE__, __LINE__, LOG_INFO, __VA_ARGS__)
-#define WLOG(...) _log(__FILE__, __LINE__, LOG_WARNING, __VA_ARGS__)
-#define ELOG(...) _log(__FILE__, __LINE__, LOG_ERROR, __VA_ARGS__)
+#define DLOG(...) _log(__FILENAME__, __LINE__, LOG_DEBUG, __VA_ARGS__)
+#define ILOG(...) _log(__FILENAME__, __LINE__, LOG_INFO, __VA_ARGS__)
+#define WLOG(...) _log(__FILENAME__, __LINE__, LOG_WARNING, __VA_ARGS__)
+#define ELOG(...) _log(__FILENAME__, __LINE__, LOG_ERROR, __VA_ARGS__)
 #define FLOG(...) do { \
-  _log(__FILE__, __LINE__, LOG_FATAL, __VA_ARGS__); \
+  _log(__FILENAME__, __LINE__, LOG_FATAL, __VA_ARGS__); \
   exit(1); \
 } while(0);
 

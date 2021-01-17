@@ -1,25 +1,12 @@
 // Simple UDP-to-HTTPS DNS Proxy
 // (C) 2016 Aaron Drew
 
-#include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-
-#include <ares.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <arpa/inet.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <curl/curl.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netdb.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdint.h>
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <time.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-
 
 #include "dns_poller.h"
 #include "dns_server.h"
@@ -72,11 +59,15 @@ static int hostname_from_uri(const char* uri,
   return 1;
 }
 
-static void sigint_cb(struct ev_loop *loop, ev_signal *w, int revents) {
+static void sigint_cb(struct ev_loop *loop,
+                      ev_signal __attribute__((__unused__)) *w,
+                      int __attribute__((__unused__)) revents) {
   ev_break(loop, EVBREAK_ALL);
 }
 
-static void sigpipe_cb(struct ev_loop *loop, ev_signal *w, int revents) {
+static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
+                       ev_signal __attribute__((__unused__)) *w,
+                       int __attribute__((__unused__)) revents) {
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
@@ -121,22 +112,50 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
                      dns_req, dns_req_len, app->resolv, https_resp_cb, req);
 }
 
+static int addr_list_reduced(const char* full_list, const char* list) {
+  const char *pos = list;
+  const char *end = list + strlen(list);
+  while (pos < end) {
+    char current[50];
+    const char *comma = strchr(pos, ',');
+    int ip_len = comma ? comma - pos : end - pos;
+    strncpy(current, pos, ip_len);
+    current[ip_len] = '\0';
+
+    const char *match_begin = strstr(full_list, current);
+    if (!match_begin ||
+        !(match_begin == full_list || *(match_begin - 1) == ',') ||
+        !(*(match_begin + ip_len) == ',' || *(match_begin + ip_len) == '\0')) {
+      DLOG("IP address missing: %s", current);
+      return 1;
+    }
+
+    pos += ip_len + 1;
+  }
+  return 0;
+}
+
 static void dns_poll_cb(const char* hostname, void *data,
-                        const void* addr, const int af) {
+                        const char* addr_list) {
   app_state_t *app = (app_state_t *)data;
-  char buf[280];
+  char buf[255 + (sizeof(":443:") - 1) + POLLER_ADDR_LIST_SIZE];
   memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
-  snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  char *pos = buf + strlen(buf);
-  ares_inet_ntop(af, addr, pos, buf + sizeof(buf) - 1 - pos);
-  if (app->resolv &&
-      app->resolv->data &&
-      !strcmp(app->resolv->data, buf)) {
-    DLOG("DNS server IP address unchanged (%s).", pos);
-    return;
+  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list);
+  if (app->resolv && app->resolv->data) {
+    char * old_addr_list = strstr(app->resolv->data, ":443:");
+    if (old_addr_list) {
+      old_addr_list += sizeof(":443:") - 1;
+      if (!addr_list_reduced(addr_list, old_addr_list)) {
+        DLOG("DNS server IP address unchanged (%s).", buf + ip_start);
+        free((void*)addr_list);
+        return;
+      }
+    }
   }
-  DLOG("Received new DNS server IP '%s'", pos);
+  free((void*)addr_list);
+  DLOG("Received new DNS server IP '%s'", buf + ip_start);
   curl_slist_free_all(app->resolv);
   app->resolv = curl_slist_append(NULL, buf);
   // Resets curl or it gets in a mess due to IP of streaming connection not
@@ -196,10 +215,10 @@ int main(int argc, char *argv[]) {
   dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
                   dns_server_cb, &app);
 
-  if (opt.gid != -1 && setgid(opt.gid)) {
+  if (opt.gid != (uid_t)-1 && setgid(opt.gid)) {
     FLOG("Failed to set gid.");
   }
-  if (opt.uid != -1 && setuid(opt.uid)) {
+  if (opt.uid != (uid_t)-1 && setuid(opt.uid)) {
     FLOG("Failed to set uid.");
   }
 
@@ -226,7 +245,8 @@ int main(int argc, char *argv[]) {
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     if (hostname_from_uri(opt.resolver_url, hostname, 254)) {
       app.using_dns_poller = 1;
-      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns, hostname,
+      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
+                      opt.bootstrap_dns_polling_interval, hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
                       dns_poll_cb, &app);
       ILOG("DNS polling initialized for '%s'", hostname);
@@ -240,7 +260,7 @@ int main(int argc, char *argv[]) {
 
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     dns_poller_cleanup(&dns_poller);
-}
+  }
 
   curl_slist_free_all(app.resolv);
 

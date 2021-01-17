@@ -1,21 +1,9 @@
 #include <sys/socket.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-
 #include <ares.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <arpa/inet.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <curl/curl.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <errno.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <ev.h>             // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <grp.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netdb.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netinet/in.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <pwd.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <signal.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdint.h>
-#include <stdio.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <time.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_server.h"
@@ -65,7 +53,8 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
 // A default MTU. We don't do TCP so any bigger is likely a waste.
 #define REQUEST_MAX 1500
 
-static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
+static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
+                       ev_io *w, int __attribute__((unused)) revents) {
   dns_server_t *d = (dns_server_t *)w->data;
 
   char *buf = (char *)calloc(1, REQUEST_MAX + 1);
@@ -82,7 +71,7 @@ static void watcher_cb(struct ev_loop *loop, ev_io *w, int revents) {
     return;
   }
 
-  if (len < sizeof(uint16_t)) {
+  if (len < (int)sizeof(uint16_t)) {
     DLOG("Malformed request received (too short).");
     return;
   }
@@ -110,7 +99,7 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
 
 void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
                         int blen) {
-  size_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
+  ssize_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
   if(len == -1) {
     DLOG("sendto failed: %s", strerror(errno));
   }

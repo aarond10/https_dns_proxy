@@ -1,21 +1,7 @@
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-
-#include <arpa/inet.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <curl/curl.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netdb.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/ip.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdint.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <time.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netinet/in.h>
+#include <ev.h>
 
 #include "https_client.h"
 #include "logging.h"
@@ -38,12 +24,14 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   return size * nmemb;
 }
 
-#if defined(IP_TOS)
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, struct curl_sockaddr *addr) {
   curl_socket_t sock = 0;
 
   sock=socket(addr->family, addr->socktype, addr->protocol);
 
+  DLOG("curl opened socket: %d", (int)sock);
+
+#if defined(IP_TOS)
   if (purpose != CURLSOCKTYPE_IPCXN) {
 	return sock;
   }
@@ -58,10 +46,16 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, st
 	}
 #endif
   }
+#endif
 
   return sock;
 }
-#endif
+
+static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t item)
+{
+  DLOG("curl closed socket: %d", (int)item);
+  return 0;
+}
 
 static void https_fetch_ctx_init(https_client_t *client,
                                  struct https_fetch_ctx *ctx, const char *url,
@@ -90,11 +84,15 @@ static void https_fetch_ctx_init(https_client_t *client,
                    CURL_HTTP_VERSION_2_0);
   if (logging_debug_enabled()) {
     curl_easy_setopt(ctx->curl, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+    curl_easy_setopt(ctx->curl, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
   }
 #if defined(IP_TOS)
   if (client->opt->dscp) {
-	  curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETDATA, &client->opt->dscp);
-	  curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+    curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETDATA, &client->opt->dscp);
+    if (!logging_debug_enabled()) {
+        curl_easy_setopt(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+      }
   }
 #endif
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
@@ -105,7 +103,12 @@ static void https_fetch_ctx_init(https_client_t *client,
   curl_easy_setopt(ctx->curl, CURLOPT_POSTFIELDS, data);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEDATA, ctx);
-  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 5L);
+#ifdef CURLOPT_MAXAGE_CONN
+  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 1L);
+  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPIDLE, 50L);
+  curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPINTVL, 50L);
+  curl_easy_setopt(ctx->curl, CURLOPT_MAXAGE_CONN, 300L);
+#endif
   curl_easy_setopt(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
   curl_easy_setopt(ctx->curl, CURLOPT_NOSIGNAL, 0);
   curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, 10 /* seconds */);
@@ -251,7 +254,8 @@ static void check_multi_info(https_client_t *c) {
   }
 }
 
-static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
+static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
+                    struct ev_io *w, int revents) {
   https_client_t *c = (https_client_t *)w->data;
   if (c == NULL) {
     FLOG("c is NULL");
@@ -266,7 +270,8 @@ static void sock_cb(struct ev_loop *loop, struct ev_io *w, int revents) {
   check_multi_info(c);
 }
 
-static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
+static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
+                     struct ev_timer *w, int __attribute__((unused)) revents) {
   https_client_t *c = (https_client_t *)w->data;
   CURLMcode rc = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
                                           &c->still_running);
@@ -277,7 +282,7 @@ static void timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents) {
 }
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
-                         https_client_t *c, void *sockp) {
+                         https_client_t *c, void __attribute__((unused)) *sockp) {
   if (!curl) {
     FLOG("Unexpected NULL pointer for CURL");
   }
@@ -318,7 +323,8 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   return 0;
 }
 
-static int multi_timer_cb(CURLM *multi, long timeout_ms, https_client_t *c) {
+static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
+                          long timeout_ms, https_client_t *c) {
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms > 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
