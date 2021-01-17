@@ -1,7 +1,7 @@
-#include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ev.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>
-#include <ev.h>
+#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "https_client.h"
 #include "logging.h"
@@ -289,23 +289,6 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   if (!c) {
     FLOG("Unexpected NULL pointer for https_client_t");
   }
-#ifndef NO_LIBCURL_BUG_WORKAROUND
-  static int curl_bug = -1;
-  if (curl_bug == -1) {
-    if (what == CURL_POLL_IN) {
-      curl_bug = 0;
-    } else if (what == CURL_POLL_REMOVE) {
-      ELOG("libcurl bug detected: socket closed without ever being read.");
-      ELOG("Activating workaround.  PERFORMANCE WILL BE GREATLY DEGRADED!");
-      curl_bug = 1;
-    }
-  }
-  if (curl_bug == 1 && what == CURL_POLL_REMOVE && c != NULL) {
-    do {
-      curl_multi_perform(c->curlm, &c->still_running);
-    } while (c->still_running != 0);
-  }
-#endif
   if (what == CURL_POLL_REMOVE) {
     ev_io_stop(c->loop, &c->fd[sock]);
     c->fd[sock].fd = 0;

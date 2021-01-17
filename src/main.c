@@ -1,11 +1,11 @@
 // Simple UDP-to-HTTPS DNS Proxy
 // (C) 2016 Aaron Drew
 
-#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_poller.h"
@@ -118,8 +118,8 @@ static int addr_list_reduced(const char* full_list, const char* list) {
   while (pos < end) {
     char current[50];
     const char *comma = strchr(pos, ',');
-    int ip_len = comma ? comma - pos : end - pos;
-    strncpy(current, pos, ip_len);
+    size_t ip_len = comma ? comma - pos : end - pos;
+    strncpy(current, pos, ip_len); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     current[ip_len] = '\0';
 
     const char *match_begin = strstr(full_list, current);
@@ -142,7 +142,7 @@ static void dns_poll_cb(const char* hostname, void *data,
   memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list);
+  snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (app->resolv && app->resolv->data) {
     char * old_addr_list = strstr(app->resolv->data, ":443:");
     if (old_addr_list) {

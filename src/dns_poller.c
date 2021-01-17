@@ -33,7 +33,8 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
 }
 
 static char *get_addr_listing(char** addr_list, const int af) {
-  char *list = (char *)calloc(1, POLLER_ADDR_LIST_SIZE), *pos = list;
+  char *list = (char *)calloc(1, POLLER_ADDR_LIST_SIZE);
+  char *pos = list;
   if (list == NULL) {
     FLOG("Out of mem");
   }
