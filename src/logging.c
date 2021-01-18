@@ -12,24 +12,13 @@ static FILE *logf = NULL;        // NOLINT(cppcoreguidelines-avoid-non-const-glo
 static int loglevel = LOG_ERROR; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_timer logging_timer;   // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-// Renders a severity as a short string.
-static const char *SeverityStr(int severity) {
-  switch (severity) {
-  case LOG_DEBUG:
-    return "[D]";
-  case LOG_INFO:
-    return "[I]";
-  case LOG_WARNING:
-    return "[W]";
-  case LOG_ERROR:
-    return "[E]";
-  case LOG_FATAL:
-    return "[F]";
-  default:
-    fprintf(logf, "Unknown log severity: %d\n", severity);
-    exit(EXIT_FAILURE);
-  }
-}
+static const char *_SeverityStr[] = {
+  "[D]",
+  "[I]",
+  "[W]",
+  "[E]",
+  "[F]"
+};
 
 static void logging_timer_cb(struct ev_loop __attribute__((unused)) *loop,
                              ev_timer __attribute__((unused)) *w,
@@ -73,14 +62,16 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (severity < loglevel) {
     return;
   }
-
+  if (severity < 0 || severity >= LOG_MAX) {
+    FLOG("Unknown log severity: %d\n", severity);
+  }
   if (!logf) {
     logf = fdopen(STDOUT_FILENO, "w");
   }
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  fprintf(logf, "%s %8ld.%06ld %s:%d ", SeverityStr(severity), tv.tv_sec,
+  fprintf(logf, "%s %8ld.%06ld %s:%d ", _SeverityStr[severity], tv.tv_sec,
           tv.tv_usec, file, line);
 
   va_list args;
@@ -93,6 +84,10 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
     fflush(logf);
   }
   if (severity == LOG_FATAL) {
+#ifdef DEBUG
+    abort();
+#else
     exit(1);
+#endif
   }
 }
