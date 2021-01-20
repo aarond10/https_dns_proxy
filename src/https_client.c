@@ -64,7 +64,6 @@ static void https_fetch_ctx_init(https_client_t *client,
                                  struct curl_slist *resolv,
                                  https_response_cb cb, void *cb_data) {
   ctx->curl = curl_easy_init();
-  ctx->header_list = NULL;
   ctx->cb = cb;
   ctx->cb_data = cb_data;
   ctx->buf = NULL;
@@ -97,9 +96,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
 #endif
   curl_easy_setopt(ctx->curl, CURLOPT_URL, url);
-  ctx->header_list = curl_slist_append(ctx->header_list, "Accept: application/dns-message");
-  ctx->header_list = curl_slist_append(ctx->header_list, "Content-Type: application/dns-message");
-  curl_easy_setopt(ctx->curl, CURLOPT_HTTPHEADER, ctx->header_list);
+  curl_easy_setopt(ctx->curl, CURLOPT_HTTPHEADER, client->header_list);
   curl_easy_setopt(ctx->curl, CURLOPT_POSTFIELDSIZE, datalen);
   curl_easy_setopt(ctx->curl, CURLOPT_POSTFIELDS, data);
   curl_easy_setopt(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
@@ -226,7 +223,6 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
       }
       curl_easy_cleanup(ctx->curl);
       cur->cb(cur->cb_data, cur->buf, cur->buflen);
-      curl_slist_free_all(cur->header_list);
       free(cur->buf);
       if (last) {
         last->next = cur->next;
@@ -330,6 +326,9 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
   memset(c, 0, sizeof(*c));
   c->loop = loop;
   c->curlm = curl_multi_init();
+  c->header_list = curl_slist_append(curl_slist_append(NULL,
+    "Accept: application/dns-message"),
+    "Content-Type: application/dns-message");
   c->fetches = NULL;
   c->timer.data = c;
 
@@ -386,5 +385,6 @@ void https_client_cleanup(https_client_t *c) {
     }
   }
   ev_timer_stop(c->loop, &c->timer);
+  curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
 }
