@@ -181,34 +181,30 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
             ELOG("Try to run application with -4 argument!");
           }
         }
-#ifdef CURLINFO_HTTP_VERSION
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
         } else {
           switch (long_resp) {
             case CURL_HTTP_VERSION_1_0:
-              DLOG("CURLINFO_HTTP_VERSION: %s", "1.0");
+              DLOG("CURLINFO_HTTP_VERSION: 1.0");
               break;
             case CURL_HTTP_VERSION_1_1:
-              DLOG("CURLINFO_HTTP_VERSION: %s", "1.1");
+              DLOG("CURLINFO_HTTP_VERSION: 1.1");
               break;
             case CURL_HTTP_VERSION_2_0:
-              DLOG("CURLINFO_HTTP_VERSION: %s", "2");
+              DLOG("CURLINFO_HTTP_VERSION: 2");
               break;
             default:
               DLOG("CURLINFO_HTTP_VERSION: %d", long_resp);
           }
         }
-#endif
-#ifdef CURLINFO_PROTOCOL
         if ((res = curl_easy_getinfo(
                 ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
           ELOG("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
         } else if (long_resp != CURLPROTO_HTTPS) {
           DLOG("CURLINFO_PROTOCOL: %d", long_resp);
         }
-#endif
       }
       if (logging_debug_enabled()) {
         double namelookup_time = NAN;
@@ -229,7 +225,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
                               CURLINFO_STARTTRANSFER_TIME, &starttransfer_time) != CURLE_OK ||
             curl_easy_getinfo(ctx->curl,
                               CURLINFO_TOTAL_TIME, &total_time) != CURLE_OK) {
-          ELOG("Err getting timing");
+          ELOG("Error getting timing");
         } else {
           DLOG("Times: %lf, %lf, %lf, %lf, %lf, %lf",
                namelookup_time, connect_time, appconnect_time, pretransfer_time,
