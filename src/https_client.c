@@ -41,12 +41,11 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   return size * nmemb;
 }
 
-static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, struct curl_sockaddr *addr) {
-  curl_socket_t sock = 0;
+static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
+                                         struct curl_sockaddr *addr) {
+  curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
 
-  sock=socket(addr->family, addr->socktype, addr->protocol);
-
-  DLOG("curl opened socket: %d", (int)sock);
+  DLOG("curl opened socket: %d", sock);
 
 #if defined(IP_TOS)
   if (purpose != CURLSOCKTYPE_IPCXN) {
@@ -70,7 +69,7 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose, st
 
 static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t item)
 {
-  DLOG("curl closed socket: %d", (int)item);
+  DLOG("curl closed socket: %d", item);
   return 0;
 }
 
@@ -293,7 +292,8 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
 }
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
-                         https_client_t *c, void __attribute__((unused)) *sockp) {
+                         void *userp, void __attribute__((unused)) *sockp) {
+  https_client_t *c = (https_client_t *)userp;
   if (!curl) {
     FLOG("Unexpected NULL pointer for CURL");
   }
@@ -318,7 +318,8 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
 }
 
 static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
-                          long timeout_ms, https_client_t *c) {
+                          long timeout_ms, void *userp) {
+  https_client_t *c = (https_client_t *)userp;
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms > 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
@@ -349,13 +350,10 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
 
   c->opt = opt;
 
-#if defined(CURLMOPT_PIPELINING) && defined(CURLPIPE_HTTP1) && \
-  defined(CURLPIPE_MULTIPLEX)
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING,
                            c->opt->use_http_1_1 ?
                            CURLPIPE_HTTP1 :
                            CURLPIPE_MULTIPLEX);
-#endif
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, 8);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
