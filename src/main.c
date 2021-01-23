@@ -63,6 +63,7 @@ static int hostname_from_uri(const char* uri,
 static void sigint_cb(struct ev_loop *loop,
                       ev_signal __attribute__((__unused__)) *w,
                       int __attribute__((__unused__)) revents) {
+  ILOG("Shutting down gracefully. To force exit, send signal again.");
   ev_break(loop, EVBREAK_ALL);
 }
 
@@ -259,18 +260,27 @@ int main(int argc, char *argv[]) {
   }
 
   ev_run(loop, 0);
+  DLOG("loop breaked");
 
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     dns_poller_cleanup(&dns_poller);
   }
-
   curl_slist_free_all(app.resolv);
 
+  logging_flush_cleanup(loop);
   ev_signal_stop(loop, &sigint);
+  ev_signal_stop(loop, &sigpipe);
+  dns_server_stop(&dns_server);
+
+  DLOG("re-entering loop");
+  ev_run(loop, 0);
+  DLOG("loop finished all events");
+
   dns_server_cleanup(&dns_server);
   https_client_cleanup(&https_client);
 
   ev_loop_destroy(loop);
+  DLOG("loop destroyed");
 
   curl_global_cleanup();
   logging_cleanup();

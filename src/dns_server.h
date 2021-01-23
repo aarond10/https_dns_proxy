@@ -28,6 +28,8 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
 void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
                         int blen);
 
+void dns_server_stop(dns_server_t *d);
+
 void dns_server_cleanup(dns_server_t *d);
 
 #endif // _DNS_SERVER_H_

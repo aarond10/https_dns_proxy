@@ -13,6 +13,7 @@ void logging_init(int fd, int level);
 
 // Initialize periodic timer to flush logs.
 void logging_flush_init(struct ev_loop *loop);
+void logging_flush_cleanup(struct ev_loop *loop);
 
 // Cleans up and flushes open logs.
 void logging_cleanup();

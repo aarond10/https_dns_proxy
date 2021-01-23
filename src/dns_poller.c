@@ -73,7 +73,7 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
     d->cb(d->hostname, d->cb_data, get_addr_listing(h->h_addr_list, h->h_addrtype));
   }
 
-  if(interval != d->timer.repeat) {
+  if (interval != d->timer.repeat && status != ARES_EDESTRUCTION) {
     DLOG("DNS poll interval changed from %.0lf -> %.0lf", d->timer.repeat, interval);
     ev_timer_stop(d->loop, &d->timer);
     ev_timer_set(&d->timer, interval, interval);
@@ -133,7 +133,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
 }
 
 void dns_poller_cleanup(dns_poller_t *d) {
-  ev_timer_stop(d->loop, &d->timer);
   ares_destroy(d->ares);
+  ev_timer_stop(d->loop, &d->timer);
   ares_library_cleanup();
 }

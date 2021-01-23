@@ -397,7 +397,6 @@ void https_client_cleanup(https_client_t *c) {
   while (c->fetches) {
     https_fetch_ctx_cleanup(c, c->fetches);
   }
-  ev_timer_stop(c->loop, &c->timer);
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
 }
