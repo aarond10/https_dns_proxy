@@ -291,6 +291,24 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
   check_multi_info(c);
 }
 
+static struct ev_io * get_used_io_event(struct ev_io io_events[], curl_socket_t sock) {
+  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
+    if (io_events[i].fd == sock) {
+      return &io_events[i];
+    }
+  }
+  return NULL;
+}
+
+static struct ev_io * get_new_io_event(struct ev_io io_events[]) {
+  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
+    if (io_events[i].fd == 0) {
+      return &io_events[i];
+    }
+  }
+  return NULL;
+}
+
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
                          void *userp, void __attribute__((unused)) *sockp) {
   https_client_t *c = (https_client_t *)userp;
@@ -300,20 +318,27 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   if (!c) {
     FLOG("Unexpected NULL pointer for https_client_t");
   }
+  // stop and release used event
+  struct ev_io *io_event_ptr = get_used_io_event(c->io_events, sock);
+  if (io_event_ptr) {
+    ev_io_stop(c->loop, io_event_ptr);
+    io_event_ptr->fd = 0;
+    DLOG("Released used io event: %p", io_event_ptr);
+  }
   if (what == CURL_POLL_REMOVE) {
-    ev_io_stop(c->loop, &c->fd[sock]);
-    c->fd[sock].fd = 0;
     return 0;
   }
-  if (c->fd[sock].fd) {
-    ev_io_stop(c->loop, &c->fd[sock]);
+  // reserve and start new event
+  io_event_ptr = get_new_io_event(c->io_events);
+  if (!io_event_ptr) {
+    FLOG("curl needed more event, than max connection!");
   }
+  DLOG("Reserved new io event: %p", io_event_ptr);
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  ev_io_init(&c->fd[sock], sock_cb, sock,
+  ev_io_init(io_event_ptr, sock_cb, sock,
              ((what & CURL_POLL_IN) ? EV_READ : 0) |
-                 ((what & CURL_POLL_OUT) ? EV_WRITE : 0));
-  c->fd[sock].data = c;
-  ev_io_start(c->loop, &c->fd[sock]);
+             ((what & CURL_POLL_OUT) ? EV_WRITE : 0));
+  ev_io_start(c->loop, io_event_ptr);
   return 0;
 }
 
@@ -332,8 +357,6 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
 }
 
 void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) {
-  int i = 0;
-
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(c, 0, sizeof(*c));
   c->loop = loop;
@@ -343,18 +366,16 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
     "Content-Type: application/dns-message");
   c->fetches = NULL;
   c->timer.data = c;
-
-  for (i = 0; i < FD_SETSIZE; i++) {
-    c->fd[i].fd = 0;
+  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
+    c->io_events[i].data = c;
   }
-
   c->opt = opt;
 
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING,
                            c->opt->use_http_1_1 ?
                            CURLPIPE_HTTP1 :
                            CURLPIPE_MULTIPLEX);
-  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, 8);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, MAX_TOTAL_CONNECTIONS);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERDATA, c);
@@ -381,16 +402,8 @@ void https_client_reset(https_client_t *c) {
 }
 
 void https_client_cleanup(https_client_t *c) {
-  int i = 0;
-
   while (c->fetches) {
     https_fetch_ctx_cleanup(c, c->fetches);
-  }
-
-  for (i = 0; i < FD_SETSIZE; i++) {
-    if (c->fd[i].fd) {
-      ev_io_stop(c->loop, &c->fd[i]);
-    }
   }
   ev_timer_stop(c->loop, &c->timer);
   curl_slist_free_all(c->header_list);

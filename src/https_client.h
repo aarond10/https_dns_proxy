@@ -5,6 +5,8 @@
 
 #include "options.h"
 
+#define MAX_TOTAL_CONNECTIONS 8
+
 // Callback type for receiving data when a transfer finishes.
 typedef void (*https_response_cb)(void *data, char *buf, size_t buflen);
 
@@ -35,7 +37,7 @@ typedef struct {
   struct https_fetch_ctx *fetches;
 
   ev_timer timer;
-  ev_io fd[FD_SETSIZE]; // I'm lazy.
+  ev_io io_events[MAX_TOTAL_CONNECTIONS];
   int still_running;
 
   options_t *opt;
