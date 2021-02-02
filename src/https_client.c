@@ -291,18 +291,9 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
   check_multi_info(c);
 }
 
-static struct ev_io * get_used_io_event(struct ev_io io_events[], curl_socket_t sock) {
+static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock) {
   for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
     if (io_events[i].fd == sock) {
-      return &io_events[i];
-    }
-  }
-  return NULL;
-}
-
-static struct ev_io * get_new_io_event(struct ev_io io_events[]) {
-  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
-    if (io_events[i].fd == 0) {
       return &io_events[i];
     }
   }
@@ -319,7 +310,7 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
     FLOG("Unexpected NULL pointer for https_client_t");
   }
   // stop and release used event
-  struct ev_io *io_event_ptr = get_used_io_event(c->io_events, sock);
+  struct ev_io *io_event_ptr = get_io_event(c->io_events, sock);
   if (io_event_ptr) {
     ev_io_stop(c->loop, io_event_ptr);
     io_event_ptr->fd = 0;
@@ -328,8 +319,8 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   if (what == CURL_POLL_REMOVE) {
     return 0;
   }
-  // reserve and start new event
-  io_event_ptr = get_new_io_event(c->io_events);
+  // reserve and start new event on unused slot
+  io_event_ptr = get_io_event(c->io_events, 0);
   if (!io_event_ptr) {
     FLOG("curl needed more event, than max connection!");
   }
