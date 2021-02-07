@@ -50,17 +50,17 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
 
 #if defined(IP_TOS)
   if (purpose != CURLSOCKTYPE_IPCXN) {
-	return sock;
+    return sock;
   }
 
   if (sock != -1) {
-	if (addr->family == AF_INET) {
-		(void)setsockopt(sock, IPPROTO_IP, IP_TOS, (int *)clientp, sizeof(int));
-	}
+    if (addr->family == AF_INET) {
+        (void)setsockopt(sock, IPPROTO_IP, IP_TOS, (int *)clientp, sizeof(int));
+    }
 #if defined(IPV6_TCLASS)
-	else if (addr->family == AF_INET6) {
-		(void)setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, (int *)clientp, sizeof(int));
-	}
+    else if (addr->family == AF_INET6) {
+        (void)setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS, (int *)clientp, sizeof(int));
+    }
 #endif
   }
 #endif
@@ -79,7 +79,7 @@ static void https_fetch_ctx_init(https_client_t *client,
                                  const char* data, size_t datalen,
                                  struct curl_slist *resolv,
                                  https_response_cb cb, void *cb_data) {
-  ctx->curl = curl_easy_init(); // if failes, first setopt will fail
+  ctx->curl = curl_easy_init(); // if fails, first setopt will fail
   ctx->cb = cb;
   ctx->cb_data = cb_data;
   ctx->buf = NULL;
@@ -352,7 +352,7 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(c, 0, sizeof(*c));
   c->loop = loop;
-  c->curlm = curl_multi_init(); // if failes, first setopt will fail
+  c->curlm = curl_multi_init(); // if fails, first setopt will fail
   c->header_list = curl_slist_append(curl_slist_append(NULL,
     "Accept: application/dns-message"),
     "Content-Type: application/dns-message");
