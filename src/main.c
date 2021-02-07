@@ -224,8 +224,9 @@ int main(int argc, char *argv[]) {
 
   if (opt.daemonize) {
     // daemon() is non-standard. If needed, see OpenSSH openbsd-compat/daemon.c
-    if (daemon(0, 0) == -1)
+    if (daemon(0, 0) == -1) {
       FLOG("daemon failed: %s", strerror(errno));
+}
   }
 
   ev_signal sigpipe;

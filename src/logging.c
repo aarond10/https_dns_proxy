@@ -12,7 +12,7 @@ static FILE *logf = NULL;        // NOLINT(cppcoreguidelines-avoid-non-const-glo
 static int loglevel = LOG_ERROR; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_timer logging_timer;   // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-static const char *_SeverityStr[] = {
+static const char *SeverityStr[] = {
   "[D]",
   "[I]",
   "[W]",
@@ -71,7 +71,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  fprintf(logf, "%s %8ld.%06ld %s:%d ", _SeverityStr[severity], tv.tv_sec,
+  fprintf(logf, "%s %8ld.%06ld %s:%d ", SeverityStr[severity], tv.tv_sec,
           tv.tv_usec, file, line);
 
   va_list args;
