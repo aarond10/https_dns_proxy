@@ -27,21 +27,18 @@ void _log(const char *file, int line, int severity, const char *fmt, ...);
 #endif
 
 enum _LogSeverity {
-  LOG_DEBUG = 0,
-  LOG_INFO = 1,
-  LOG_WARNING = 2,
-  LOG_ERROR = 3,
-  LOG_FATAL = 4,
+  LOG_DEBUG,
+  LOG_INFO,
+  LOG_WARNING,
+  LOG_ERROR,
+  LOG_FATAL,
+  LOG_MAX
 };
 
-// Debug, Info, Warning, Error logging.
 #define DLOG(...) _log(__FILENAME__, __LINE__, LOG_DEBUG, __VA_ARGS__)
 #define ILOG(...) _log(__FILENAME__, __LINE__, LOG_INFO, __VA_ARGS__)
 #define WLOG(...) _log(__FILENAME__, __LINE__, LOG_WARNING, __VA_ARGS__)
 #define ELOG(...) _log(__FILENAME__, __LINE__, LOG_ERROR, __VA_ARGS__)
-#define FLOG(...) do { \
-  _log(__FILENAME__, __LINE__, LOG_FATAL, __VA_ARGS__); \
-  exit(1); \
-} while(0);
+#define FLOG(...) _log(__FILENAME__, __LINE__, LOG_FATAL, __VA_ARGS__)
 
 #endif // _LOGGING_H_

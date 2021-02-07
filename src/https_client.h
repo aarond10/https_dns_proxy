@@ -5,13 +5,14 @@
 
 #include "options.h"
 
+#define MAX_TOTAL_CONNECTIONS 8
+
 // Callback type for receiving data when a transfer finishes.
 typedef void (*https_response_cb)(void *data, char *buf, size_t buflen);
 
 // Internal: Holds state on an individual transfer.
 struct https_fetch_ctx {
   CURL *curl;
-  struct curl_slist *header_list;
 
   https_response_cb cb;
   void *cb_data;
@@ -32,10 +33,11 @@ struct https_fd_watcher {
 typedef struct {
   struct ev_loop *loop;
   CURLM *curlm;
+  struct curl_slist *header_list;
   struct https_fetch_ctx *fetches;
 
   ev_timer timer;
-  ev_io fd[FD_SETSIZE]; // I'm lazy.
+  ev_io io_events[MAX_TOTAL_CONNECTIONS];
   int still_running;
 
   options_t *opt;

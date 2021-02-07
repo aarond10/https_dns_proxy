@@ -6,7 +6,7 @@ set(CMAKE_BUILD_TYPE "Debug")
 
 #set(CMAKE_C_FLAGS "-Wall -Wextra --pedantic -Wno-strict-aliasing")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(notdir $<)\"'")
-set(CMAKE_C_FLAGS_DEBUG "-g")
+set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
 find_path(LIBCARES_INCLUDE_DIR ares.h)
