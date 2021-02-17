@@ -68,7 +68,27 @@ $ make
 
 ## INSTALL
 
-There is no installer at this stage - just run it.
+### Install built program
+
+This method work fine on most Linux operating system, which uses systemd.  
+Like: Raspberry Pi OS / Raspbian, Debian, Ubuntu, etc.
+
+To install the program binary and systemd service, simply execute the following after build:
+```
+$ sudo make install
+```
+
+To overwrite default options use:
+```
+$ sudo systemctl edit https_dns_proxy.service
+```
+And re-define ExecStart with desired options:
+```
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/https_dns_proxy \
+  -u nobody -g nogroup -r https://doh.opendns.com/dns-query
+```
 
 ### OpenWRT package install
 
