@@ -70,12 +70,6 @@ set_source_files_properties(
   src/options.c PROPERTIES
   COMPILE_FLAGS "-DGIT_VERSION='\"${GIT_VERSION}\"'")
 
-# clang-tidy
-set_target_properties(
-  ${TARGET_NAME} PROPERTIES
-  COMPILE_FLAGS "${WARNING_FLAGS}"
-)
-
 if(CLANG_TIDY_EXE)
   set_target_properties(
     ${TARGET_NAME} PROPERTIES
