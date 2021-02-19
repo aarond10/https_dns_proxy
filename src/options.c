@@ -37,7 +37,7 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vx")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -82,6 +82,10 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'x': // http/1.1
       opt->use_http_1_1 = 1;
+      break;
+    case 'V': // version
+      printf("%s\n", GIT_VERSION);
+      exit(0);
       break;
     case '?':
       printf("Unknown option '-%c'\n", c);
@@ -180,6 +184,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl. (false)\n");
   printf("  -v                     Increase logging verbosity. (INFO)\n");
+  printf("  -V                     Print version and exit.\n");
   options_cleanup(&defaults);
 }
 

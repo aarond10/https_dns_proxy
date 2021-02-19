@@ -134,6 +134,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)
   -v                     Increase logging verbosity. (INFO)
+  -V                     Print version and exit.
 ```
 
 ## TODO

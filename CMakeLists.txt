@@ -9,6 +9,24 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(notdir $<)\"'")
 set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
+find_package(Git)
+if(Git_FOUND)
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" show --date=format:%Y.%m.%d --format=%ad-%h --no-patch
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE GIT_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  message(STATUS "Version: ${GIT_VERSION}")
+
+  # May not update version in some cases (example: git commit --amend)
+  set_property(GLOBAL APPEND
+    PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/.git/index")
+else()
+  set(GIT_VERSION "UNKNOWN")
+  message(WARNING "Could not find git command! Version is set to: ${GIT_VERSION}")
+endif()
+
 find_path(LIBCARES_INCLUDE_DIR ares.h)
 find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
 find_path(LIBEV_INCLUDE_DIR ev.h)
@@ -35,6 +53,10 @@ set(SRC_LIST ${SRC_LIST})
 add_executable(${TARGET_NAME} ${SRC_LIST})
 set(LIBS ${LIBS} cares curl ev resolv)
 target_link_libraries(${TARGET_NAME} ${LIBS})
+
+set_source_files_properties(
+  src/options.c PROPERTIES
+  COMPILE_FLAGS "-DGIT_VERSION='\"${GIT_VERSION}\"'")
 
 # clang-tidy
 set_target_properties(
