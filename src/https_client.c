@@ -120,6 +120,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_MAXAGE_CONN, 300L);
 #endif
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
+  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_FOLLOWLOCATION, 0);
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_NOSIGNAL, 0);
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_TIMEOUT, 10 /* seconds */);
   // We know Google supports this, so force it.
@@ -137,27 +138,31 @@ static void https_fetch_ctx_init(https_client_t *client,
 static void https_fetch_ctx_process_response(https_client_t *client,
                                              struct https_fetch_ctx *ctx)
 {
-  if (logging_debug_enabled() || ctx->buflen == 0) {
-    CURLcode res = 0;
-    long long_resp = 0;
-    char *str_resp = NULL;
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
+  CURLcode res = 0;
+  long long_resp = 0;
+  char *str_resp = NULL;
+  int faulty_response = 1;
+
+  if ((res = curl_easy_getinfo(
+        ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
+    ELOG("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
+  } else {
+    if (long_resp == 200) {
+      faulty_response = 0;
     } else {
-      DLOG("CURLINFO_EFFECTIVE_URL: %s", str_resp);
+      ELOG("curl response code: %d", long_resp);
     }
+  }
+
+  if (logging_debug_enabled() || faulty_response || ctx->buflen == 0) {
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
       ELOG("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
     } else if (str_resp != NULL) {
-      DLOG("CURLINFO_REDIRECT_URL: %s", str_resp);
-    }
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
-    } else if (long_resp != 200) {
-      DLOG("CURLINFO_RESPONSE_CODE: %d", long_resp);
+      ELOG("Request would be redirected to: %s", str_resp);
+      if (strcmp(str_resp, client->opt->resolver_url)) {
+        ELOG("Please update Resolver URL to avoid redirection!");
+      }
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
@@ -173,6 +178,15 @@ static void https_fetch_ctx_process_response(https_client_t *client,
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
         ELOG("Try to run application with -4 argument!");
       }
+    }
+  }
+
+  if (logging_debug_enabled()) {
+    if ((res = curl_easy_getinfo(
+            ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp)) != CURLE_OK) {
+      ELOG("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
+    } else {
+      DLOG("CURLINFO_EFFECTIVE_URL: %s", str_resp);
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
@@ -198,8 +212,7 @@ static void https_fetch_ctx_process_response(https_client_t *client,
     } else if (long_resp != CURLPROTO_HTTPS) {
       DLOG("CURLINFO_PROTOCOL: %d", long_resp);
     }
-  }
-  if (logging_debug_enabled()) {
+
     double namelookup_time = NAN;
     double connect_time = NAN;
     double appconnect_time = NAN;
@@ -225,6 +238,7 @@ static void https_fetch_ctx_process_response(https_client_t *client,
            starttransfer_time, total_time);
     }
   }
+
   ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
 }
 
