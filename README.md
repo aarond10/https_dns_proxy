@@ -101,7 +101,7 @@ user@arch:~# yaourt -S https-dns-proxy-git
 
 ### Docker install
 
-There is also an externally maintained [Docker image](https://hub.docker.com/repository/docker/bwmoran/https-dns-proxy/general) for latest git version. Documentation, Dockerfile, and entrypoint script can be viewed on [GitHub](https://github.com/moranbw/https-dns-proxy-docker).  An example run:
+There is also an externally maintained [Docker image](https://hub.docker.com/r/bwmoran/https-dns-proxy) for latest git version. Documentation, Dockerfile, and entrypoint script can be viewed on [GitHub](https://github.com/moranbw/https-dns-proxy-docker).  An example run:
 
 ```
 ### points towards AdGuard DNS, only use IPv4, increase logging ###
