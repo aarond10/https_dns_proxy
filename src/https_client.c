@@ -4,6 +4,7 @@
 #include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ctype.h>
 
 #include "https_client.h"
 #include "logging.h"
@@ -135,6 +136,33 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
 }
 
+static void https_log_response_content(char *ptr, size_t size)
+{
+  const size_t width = 0x10;
+
+  for (size_t i = 0; i < size; i += width) {
+    char hex[3 * width + 1];
+    char str[width + 1];
+    size_t hex_off = 0;
+    size_t str_off = 0;
+    memset(hex, 0, sizeof(hex));
+    memset(str, 0, sizeof(str));
+
+    for (size_t c = 0; c < width; c++) {
+      if (i+c < size) {
+        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
+                            "%02x ", (unsigned char)ptr[i+c]);
+        str_off += snprintf(str + str_off, sizeof(str) - str_off,
+                            "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
+      } else {
+        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
+      }
+    }
+
+    ELOG("%4.4lx: %s%s", (long)i, hex, str);
+  }
+}
+
 static void https_fetch_ctx_process_response(https_client_t *client,
                                              struct https_fetch_ctx *ctx)
 {
@@ -150,7 +178,10 @@ static void https_fetch_ctx_process_response(https_client_t *client,
     if (long_resp == 200) {
       faulty_response = 0;
     } else {
-      ELOG("curl response code: %d", long_resp);
+      ELOG("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
+      if (ctx->buflen >= 0) {
+        https_log_response_content(ctx->buf, ctx->buflen);
+      }
     }
   }
 
