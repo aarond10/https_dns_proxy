@@ -5,6 +5,7 @@
 #include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
@@ -159,7 +160,7 @@ static void dns_poll_cb(const char* hostname, void *data,
   curl_slist_free_all(app->resolv);
   app->resolv = curl_slist_append(NULL, buf);
   // Resets curl or it gets in a mess due to IP of streaming connection not
-  // matching that of configured DNS. 
+  // matching that of configured DNS.
   https_client_reset(app->https_client);
 }
 

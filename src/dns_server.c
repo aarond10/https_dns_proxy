@@ -3,6 +3,7 @@
 #include <errno.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netdb.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netinet/in.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 

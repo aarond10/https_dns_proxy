@@ -2,6 +2,7 @@
 #include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/stat.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
@@ -127,7 +128,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
   if (opt->logfile == NULL ||
       !strcmp(opt->logfile, "-")) {
     opt->logfd = STDOUT_FILENO;
-  } else if ((opt->logfd = open(opt->logfile, 
+  } else if ((opt->logfd = open(opt->logfile,
                                 O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC,
                                 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
     printf("Logfile '%s' is not writable.\n", opt->logfile);
