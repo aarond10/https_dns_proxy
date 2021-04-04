@@ -77,7 +77,21 @@ if(CLANG_TIDY_EXE)
   )
 endif()
 
+install(TARGETS ${TARGET_NAME} DESTINATION bin)
+
+set(SERVICE_EXTRA_OPTIONS "")
+if(IS_DIRECTORY "/etc/munin/plugins" AND
+   IS_DIRECTORY "/etc/munin/plugin-conf.d")
+  set(SERVICE_EXTRA_OPTIONS "-s 300")
+  install(PROGRAMS munin/${TARGET_NAME}.plugin
+          DESTINATION /etc/munin/plugins/
+          RENAME ${TARGET_NAME})
+  install(FILES munin/${TARGET_NAME}.config
+          DESTINATION /etc/munin/plugin-conf.d/
+          RENAME ${TARGET_NAME})
+endif()
+
 configure_file(${TARGET_NAME}.service.in ${TARGET_NAME}.service)
 
-install(TARGETS ${TARGET_NAME} DESTINATION bin)
-install(FILES ${TARGET_NAME}.service DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system/)
+install(FILES ${TARGET_NAME}.service
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system/)

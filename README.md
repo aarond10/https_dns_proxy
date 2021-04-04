@@ -73,12 +73,18 @@ $ make
 This method work fine on most Linux operating system, which uses systemd.  
 Like: Raspberry Pi OS / Raspbian, Debian, Ubuntu, etc.
 
-To install the program binary and systemd service, simply execute the following after build:
+To install the program binary, systemd service and munin plugin (if munin is pre-installed),
+simply execute the following after build:
 ```
 $ sudo make install
 ```
 
-To overwrite default options use:
+To activate munin plugin, restart munin services:
+```
+$ sudo systemctl restart munin munin-node
+```
+
+To overwrite default service options use:
 ```
 $ sudo systemctl edit https_dns_proxy.service
 ```
