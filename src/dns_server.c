@@ -106,7 +106,10 @@ void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
   }
 }
 
-void dns_server_cleanup(dns_server_t *d) {
+void dns_server_stop(dns_server_t *d) {
   ev_io_stop(d->loop, &d->watcher);
+}
+
+void dns_server_cleanup(dns_server_t *d) {
   close(d->sock);
 }

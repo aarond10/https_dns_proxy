@@ -10,6 +10,7 @@ Type=simple
 Restart=on-failure
 ExecStart=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/https_dns_proxy \
   -u nobody -g nogroup -v -v
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target

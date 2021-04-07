@@ -29,14 +29,18 @@ static void logging_timer_cb(struct ev_loop __attribute__((unused)) *loop,
 }
 
 void logging_flush_init(struct ev_loop *loop) {
-  /* don't init timer if we will never write messages that are not flushed */
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  ev_timer_init(&logging_timer, logging_timer_cb, 0, 10);
+  /* don't start timer if we will never write messages that are not flushed */
   if (loglevel >= LOG_FLUSH_LEVEL) {
     return;
   }
-  DLOG("initializing periodic log flush timer");
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  ev_timer_init(&logging_timer, logging_timer_cb, 0, 10);
+  DLOG("starting periodic log flush timer");
   ev_timer_start(loop, &logging_timer);
+}
+
+void logging_flush_cleanup(struct ev_loop *loop) {
+  ev_timer_stop(loop, &logging_timer);
 }
 
 void logging_init(int fd, int level) {

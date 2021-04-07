@@ -1,11 +1,21 @@
 project(HttpsDnsProxy)
 cmake_minimum_required(VERSION 2.8)
 
+# source: https://stackoverflow.com/a/27990434
+function(define_file_basename_for_sources targetname)
+  get_target_property(source_files "${targetname}" SOURCES)
+  foreach(sourcefile ${source_files})
+    get_filename_component(basename "${sourcefile}" NAME)
+    set_property(
+      SOURCE "${sourcefile}" APPEND
+      PROPERTY COMPILE_DEFINITIONS "__FILENAME__=\"${basename}\"")
+  endforeach()
+endfunction()
+
 set(CMAKE_BUILD_TYPE "Debug")
 #set(CMAKE_BUILD_TYPE "Release")
 
 #set(CMAKE_C_FLAGS "-Wall -Wextra --pedantic -Wno-strict-aliasing")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(notdir $<)\"'")
 set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
@@ -54,15 +64,11 @@ add_executable(${TARGET_NAME} ${SRC_LIST})
 set(LIBS ${LIBS} cares curl ev resolv)
 target_link_libraries(${TARGET_NAME} ${LIBS})
 
+define_file_basename_for_sources("https_dns_proxy")
+
 set_source_files_properties(
   src/options.c PROPERTIES
   COMPILE_FLAGS "-DGIT_VERSION='\"${GIT_VERSION}\"'")
-
-# clang-tidy
-set_target_properties(
-  ${TARGET_NAME} PROPERTIES
-  COMPILE_FLAGS "${WARNING_FLAGS}"
-)
 
 if(CLANG_TIDY_EXE)
   set_target_properties(

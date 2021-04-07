@@ -9,3 +9,7 @@ https_dns_proxy
 *_unittest
 https_dns_proxy.service
 install_manifest.txt
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
