@@ -10,6 +10,8 @@
 #include "logging.h"
 #include "options.h"
 
+#define DOH_CONTENT_TYPE "application/dns-message"
+
 #define ASSERT_CURL_MULTI_SETOPT(curlm, option, param) \
   do { \
     CURLMcode code = curl_multi_setopt(curlm, option, param); \
@@ -163,8 +165,8 @@ static void https_log_response_content(char *ptr, size_t size)
   }
 }
 
-static void https_fetch_ctx_process_response(https_client_t *client,
-                                             struct https_fetch_ctx *ctx)
+static int https_fetch_ctx_process_response(https_client_t *client,
+                                            struct https_fetch_ctx *ctx)
 {
   CURLcode res = 0;
   long long_resp = 0;
@@ -177,10 +179,26 @@ static void https_fetch_ctx_process_response(https_client_t *client,
   } else {
     if (long_resp == 200) {
       faulty_response = 0;
+    } else if (long_resp == 0) {
+      ELOG("No response");
     } else {
       ELOG("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen >= 0) {
         https_log_response_content(ctx->buf, ctx->buflen);
+      }
+    }
+  }
+
+  if (!faulty_response)
+  {
+    if ((res = curl_easy_getinfo(
+          ctx->curl, CURLINFO_CONTENT_TYPE, &str_resp)) != CURLE_OK) {
+      ELOG("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
+    } else {
+      if (str_resp == NULL ||
+          strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1)) {  // at least, start with it
+        ELOG("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
+        faulty_response = 1;
       }
     }
   }
@@ -270,7 +288,7 @@ static void https_fetch_ctx_process_response(https_client_t *client,
     }
   }
 
-  ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
+  return faulty_response;
 }
 
 static void https_fetch_ctx_cleanup(https_client_t *client,
@@ -283,15 +301,22 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
       if (code != CURLM_OK) {
         FLOG("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
       }
-      https_fetch_ctx_process_response(client, ctx);
-      curl_easy_cleanup(ctx->curl);
-      free(cur->buf);
-      if (last) {
-        last->next = cur->next;
-      } else {
-        client->fetches = cur->next;
+      if (https_fetch_ctx_process_response(client, ctx) != 0) {
+        ILOG("Response was faulty, skipping DNS reply.");
+        free(ctx->buf);
+        ctx->buf = NULL;
+        ctx->buflen = 0;
       }
-      free(cur);
+      // callback must be called to avoid memleak
+      ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
+      curl_easy_cleanup(ctx->curl);
+      free(ctx->buf);
+      if (last) {
+        last->next = ctx->next;
+      } else {
+        client->fetches = ctx->next;
+      }
+      free(ctx);
       return;
     }
     last = cur;
@@ -405,8 +430,8 @@ void https_client_init(https_client_t *c, options_t *opt, struct ev_loop *loop) 
   c->loop = loop;
   c->curlm = curl_multi_init(); // if fails, first setopt will fail
   c->header_list = curl_slist_append(curl_slist_append(NULL,
-    "Accept: application/dns-message"),
-    "Content-Type: application/dns-message");
+    "Accept: " DOH_CONTENT_TYPE),
+    "Content-Type: " DOH_CONTENT_TYPE);
   c->fetches = NULL;
   c->timer.data = c;
   for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
