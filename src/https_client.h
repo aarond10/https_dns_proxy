@@ -23,12 +23,6 @@ struct https_fetch_ctx {
   struct https_fetch_ctx *next;
 };
 
-// Internal: Holds state on a socket watcher.
-struct https_fd_watcher {
-  ev_io watcher;
-  struct https_fd_watcher *next;
-};
-
 // Holds state on the whole multiplexed CURL machine.
 typedef struct {
   struct ev_loop *loop;
