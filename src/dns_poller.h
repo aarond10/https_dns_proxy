@@ -29,8 +29,8 @@ typedef struct {
   void *cb_data;
 
   ev_timer timer;
-  // Lazy approach. FD_SETSIZE is 1k under linux. sizeof(ev_io) is 48 bytes.
-  ev_io fd[FD_SETSIZE];
+  ev_io *io_events;
+  int io_events_count;
 } dns_poller_t;
 
 // Initializes c-ares and starts a timer for periodic DNS resolution on the

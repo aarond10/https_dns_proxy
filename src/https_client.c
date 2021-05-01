@@ -399,7 +399,7 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   // reserve and start new event on unused slot
   io_event_ptr = get_io_event(c->io_events, 0);
   if (!io_event_ptr) {
-    FLOG("curl needed more event, than max connection!");
+    FLOG("curl needed more event, than max connections: %d", MAX_TOTAL_CONNECTIONS);
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)

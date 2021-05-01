@@ -12,25 +12,37 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                   (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
 }
 
+static struct ev_io * get_io_event(dns_poller_t *d, int sock) {
+  for (int i = 0; i < d->io_events_count; i++) {
+    if (d->io_events[i].fd == sock) {
+      return &d->io_events[i];
+    }
+  }
+  return NULL;
+}
+
 static void sock_state_cb(void *data, int fd, int read, int write) {
   dns_poller_t *d = (dns_poller_t *)data;
-  if (!read && !write) {
-    ev_io_stop(d->loop, &d->fd[fd]);
-    d->fd[fd].fd = 0;
-  } else if (d->fd[fd].fd != 0) {
-    ev_io_stop(d->loop, &d->fd[fd]);
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-    ev_io_init(&d->fd[fd], sock_cb, fd,
-               (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
-    d->fd[fd].data = d;
-    ev_io_start(d->loop, &d->fd[fd]);
-  } else {
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-    ev_io_init(&d->fd[fd], sock_cb, fd,
-               (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
-    d->fd[fd].data = d;
-    ev_io_start(d->loop, &d->fd[fd]);
+  // stop and release used event
+  struct ev_io *io_event_ptr = get_io_event(d, fd);
+  if (io_event_ptr) {
+    ev_io_stop(d->loop, io_event_ptr);
+    io_event_ptr->fd = 0;
+    DLOG("Released used io event: %p", io_event_ptr);
   }
+  if (!read && !write) {
+    return;
+  }
+  // reserve and start new event on unused slot
+  io_event_ptr = get_io_event(d, 0);
+  if (!io_event_ptr) {
+    FLOG("c-ares needed more event, than nameservers count: %d", d->io_events_count);
+  }
+  DLOG("Reserved new io event: %p", io_event_ptr);
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  ev_io_init(io_event_ptr, sock_cb, fd,
+             (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
+  ev_io_start(d->loop, io_event_ptr);
 }
 
 static char *get_addr_listing(char** addr_list, const int af) {
@@ -121,11 +133,6 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      int bootstrap_dns_polling_interval,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
-  int i = 0;
-  for (i = 0; i < FD_SETSIZE; i++) {
-    d->fd[i].fd = 0;
-  }
-
   int r = 0;
   if ((r = ares_library_init(ARES_LIB_INIT_ALL)) != ARES_SUCCESS) {
     FLOG("ares_library_init error: %s", ares_strerror(r));
@@ -159,10 +166,24 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   ev_timer_init(&d->timer, timer_cb, 0, 0);
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);
+
+  int nameservers = 1;
+  for (int i = 0; bootstrap_dns[i]; i++) {
+    if (bootstrap_dns[i] == ',') {
+      nameservers++;
+    }
+  }
+  DLOG("Nameservers count: %d", nameservers);
+  d->io_events = (ev_io *)calloc(nameservers, sizeof(ev_io));  // zeroed!
+  for (int i = 0; i < nameservers; i++) {
+    d->io_events[i].data = d;
+  }
+  d->io_events_count = nameservers;
 }
 
 void dns_poller_cleanup(dns_poller_t *d) {
   ares_destroy(d->ares);
   ev_timer_stop(d->loop, &d->timer);
   ares_library_cleanup();
+  free(d->io_events);
 }
