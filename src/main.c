@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
   ev_run(loop, 0);
   DLOG("loop breaked");
 
-  if (!proxy_supports_name_resolution(opt.curl_proxy)) {
+  if (app.using_dns_poller) {
     dns_poller_cleanup(&dns_poller);
   }
   curl_slist_free_all(app.resolv);
