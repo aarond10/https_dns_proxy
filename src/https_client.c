@@ -93,10 +93,17 @@ static void https_fetch_ctx_init(https_client_t *client,
   ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_RESOLVE, resolv);
 
   DLOG("Requesting HTTP/1.1: %d\n", client->opt->use_http_1_1);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_HTTP_VERSION,
-                          client->opt->use_http_1_1 ?
-                          CURL_HTTP_VERSION_1_1 :
-                          CURL_HTTP_VERSION_2_0);
+  CURLcode easy_code = curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION,
+                                        client->opt->use_http_1_1 ?
+                                        CURL_HTTP_VERSION_1_1 :
+                                        CURL_HTTP_VERSION_2_0);
+  if (easy_code != CURLE_OK) {
+    ELOG("CURLOPT_HTTP_VERSION error %d: %s", easy_code, curl_easy_strerror(easy_code));
+    if (!client->opt->use_http_1_1) {
+      ELOG("Try to run application with -x argument!");
+    }
+  }
+
   if (logging_debug_enabled()) {
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_VERBOSE, 1L);
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
@@ -132,9 +139,9 @@ static void https_fetch_ctx_init(https_client_t *client,
     DLOG("Using curl proxy: %s", client->opt->curl_proxy);
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_PROXY, client->opt->curl_proxy);
   }
-  CURLMcode code = curl_multi_add_handle(client->curlm, ctx->curl);
-  if (code != CURLM_OK) {
-    FLOG("curl_multi_add_handle error %d: %s", code, curl_multi_strerror(code));
+  CURLMcode multi_code = curl_multi_add_handle(client->curlm, ctx->curl);
+  if (multi_code != CURLM_OK) {
+    FLOG("curl_multi_add_handle error %d: %s", multi_code, curl_multi_strerror(multi_code));
   }
 }
 
