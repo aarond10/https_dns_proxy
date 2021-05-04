@@ -4,10 +4,12 @@
 #include <ares.h>
 #include <ev.h>
 
-// Due to c-ares not playing nicely with libev, the intervals below also
-// wind up functioning as the timeout values after which any pending
-// queries are cancelled and treated as if they've failed.
-#define POLLER_INTVL_ERR 5
+// Fast DNS querying mode
+// Requests will be send after 0, 0.8, 1.3, 1.75 second
+// And waiting extra 4.2 seconds for reply
+// That's total: 8,05 second for trying
+#define POLLER_QUERY_TIMEOUT_MS 700
+#define POLLER_QUERY_TRIES 4
 
 // enough for minimum 64 pcs IPv4 address or 25 pcs IPv6
 #define POLLER_ADDR_LIST_SIZE 1024
@@ -23,12 +25,12 @@ typedef struct {
   int family;  // AF_UNSPEC for IPv4 or IPv6, AF_INET for IPv4 only.
   dns_poller_cb cb;
   int polling_interval;
+  int request_ongoing;
   void *cb_data;
 
-
   ev_timer timer;
-  // Lazy approach. FD_SETSIZE is 1k under linux. sizeof(ev_io) is 48 bytes.
-  ev_io fd[FD_SETSIZE];
+  ev_io *io_events;
+  int io_events_count;
 } dns_poller_t;
 
 // Initializes c-ares and starts a timer for periodic DNS resolution on the

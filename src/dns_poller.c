@@ -12,25 +12,37 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                   (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
 }
 
+static struct ev_io * get_io_event(dns_poller_t *d, int sock) {
+  for (int i = 0; i < d->io_events_count; i++) {
+    if (d->io_events[i].fd == sock) {
+      return &d->io_events[i];
+    }
+  }
+  return NULL;
+}
+
 static void sock_state_cb(void *data, int fd, int read, int write) {
   dns_poller_t *d = (dns_poller_t *)data;
-  if (!read && !write) {
-    ev_io_stop(d->loop, &d->fd[fd]);
-    d->fd[fd].fd = 0;
-  } else if (d->fd[fd].fd != 0) {
-    ev_io_stop(d->loop, &d->fd[fd]);
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-    ev_io_init(&d->fd[fd], sock_cb, fd,
-               (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
-    d->fd[fd].data = d;
-    ev_io_start(d->loop, &d->fd[fd]);
-  } else {
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-    ev_io_init(&d->fd[fd], sock_cb, fd,
-               (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
-    d->fd[fd].data = d;
-    ev_io_start(d->loop, &d->fd[fd]);
+  // stop and release used event
+  struct ev_io *io_event_ptr = get_io_event(d, fd);
+  if (io_event_ptr) {
+    ev_io_stop(d->loop, io_event_ptr);
+    io_event_ptr->fd = 0;
+    DLOG("Released used io event: %p", io_event_ptr);
   }
+  if (!read && !write) {
+    return;
+  }
+  // reserve and start new event on unused slot
+  io_event_ptr = get_io_event(d, 0);
+  if (!io_event_ptr) {
+    FLOG("c-ares needed more event, than nameservers count: %d", d->io_events_count);
+  }
+  DLOG("Reserved new io event: %p", io_event_ptr);
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  ev_io_init(io_event_ptr, sock_cb, fd,
+             (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
+  ev_io_start(d->loop, io_event_ptr);
 }
 
 static char *get_addr_listing(char** addr_list, const int af) {
@@ -60,36 +72,60 @@ static char *get_addr_listing(char** addr_list, const int af) {
 static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
                     struct hostent *h) {
   dns_poller_t *d = (dns_poller_t *)arg;
-  ev_tstamp interval = NAN;
+  d->request_ongoing = 0;
+  ev_tstamp interval = 0;  // retry by default
 
   if (status != ARES_SUCCESS) {
-    interval = POLLER_INTVL_ERR;
     WLOG("DNS lookup failed: %s", ares_strerror(status));
   } else if (!h || h->h_length < 1) {
-    interval = POLLER_INTVL_ERR;
     WLOG("No hosts.");
   } else {
     interval = d->polling_interval;
     d->cb(d->hostname, d->cb_data, get_addr_listing(h->h_addr_list, h->h_addrtype));
   }
 
-  if (interval != d->timer.repeat && status != ARES_EDESTRUCTION) {
-    DLOG("DNS poll interval changed from %.0lf -> %.0lf", d->timer.repeat, interval);
+  if (status != ARES_EDESTRUCTION) {
+    DLOG("DNS poll interval changed to: %.0lf", interval);
     ev_timer_stop(d->loop, &d->timer);
-    ev_timer_set(&d->timer, interval, interval);
+    ev_timer_set(&d->timer, interval, 0);
     ev_timer_start(d->loop, &d->timer);
   }
+}
+
+static ev_tstamp get_timeout(dns_poller_t *d)
+{
+    static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
+    struct timeval tv, *tvp = ares_timeout(d->ares, &max_tv, &tv);
+    ev_tstamp after = tvp->tv_sec + tvp->tv_usec * 1e-6;
+    return after ? after : 0.1;
 }
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
                      ev_timer *w, int __attribute__((unused)) revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
-  // Cancel any pending queries before making new ones. c-ares can't be depended on to
-  // execute ares_cb() even after the specified query timeout has been reached, e.g. if
-  // the packet was dropped without any response from the network. This also serves to
-  // free memory tied up by any "zombie" queries.
-  ares_cancel(d->ares);
-  ares_gethostbyname(d->ares, d->hostname, d->family, ares_cb, d);
+
+  if (d->request_ongoing) {
+    // process query timeouts
+    DLOG("Processing DNS queries");
+    ares_process(d->ares, NULL, NULL);
+  } else {
+    DLOG("Starting DNS query");
+    // Cancel any pending queries before making new ones. c-ares can't be depended on to
+    // execute ares_cb() even after the specified query timeout has been reached, e.g. if
+    // the packet was dropped without any response from the network. This also serves to
+    // free memory tied up by any "zombie" queries.
+    ares_cancel(d->ares);
+    d->request_ongoing = 1;
+    ares_gethostbyname(d->ares, d->hostname, d->family, ares_cb, d);
+  }
+
+  if (d->request_ongoing) {  // need to re-check, it might change!
+    const ev_tstamp interval = get_timeout(d);
+    DLOG("DNS poll interval changed to: %.03f", interval);
+    ev_timer_stop(d->loop, &d->timer);
+    ev_timer_set(&d->timer, interval, 0);
+    ev_timer_start(d->loop, &d->timer);
+  }
 }
 
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
@@ -97,20 +133,20 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      int bootstrap_dns_polling_interval,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
-  int i = 0;
-  for (i = 0; i < FD_SETSIZE; i++) {
-    d->fd[i].fd = 0;
+  int r = 0;
+  if ((r = ares_library_init(ARES_LIB_INIT_ALL)) != ARES_SUCCESS) {
+    FLOG("ares_library_init error: %s", ares_strerror(r));
   }
 
-  int r = 0;
-  ares_library_init(ARES_LIB_INIT_ALL);
+  struct ares_options options = {
+    .timeout = POLLER_QUERY_TIMEOUT_MS,
+    .tries = POLLER_QUERY_TRIES,
+    .sock_state_cb = sock_state_cb,
+    .sock_state_cb_data = d
+  };
+  int optmask = ARES_OPT_TIMEOUTMS | ARES_OPT_TRIES | ARES_OPT_SOCK_STATE_CB;
 
-  struct ares_options options;
-  options.sock_state_cb = sock_state_cb;
-  options.sock_state_cb_data = d;
-
-  if ((r = ares_init_options(
-      &d->ares, &options, ARES_OPT_SOCK_STATE_CB)) != ARES_SUCCESS) {
+  if ((r = ares_init_options(&d->ares, &options, optmask)) != ARES_SUCCESS) {
     FLOG("ares_init_options error: %s", ares_strerror(r));
   }
 
@@ -123,17 +159,31 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->family = family;
   d->cb = cb;
   d->polling_interval = bootstrap_dns_polling_interval;
+  d->request_ongoing = 0;
   d->cb_data = cb_data;
 
-  // Start with a shorter polling interval and switch after we've bootstrapped.
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  ev_timer_init(&d->timer, timer_cb, 0, POLLER_INTVL_ERR);
+  ev_timer_init(&d->timer, timer_cb, 0, 0);
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);
+
+  int nameservers = 1;
+  for (int i = 0; bootstrap_dns[i]; i++) {
+    if (bootstrap_dns[i] == ',') {
+      nameservers++;
+    }
+  }
+  DLOG("Nameservers count: %d", nameservers);
+  d->io_events = (ev_io *)calloc(nameservers, sizeof(ev_io));  // zeroed!
+  for (int i = 0; i < nameservers; i++) {
+    d->io_events[i].data = d;
+  }
+  d->io_events_count = nameservers;
 }
 
 void dns_poller_cleanup(dns_poller_t *d) {
   ares_destroy(d->ares);
   ev_timer_stop(d->loop, &d->timer);
   ares_library_cleanup();
+  free(d->io_events);
 }
