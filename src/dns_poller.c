@@ -95,7 +95,8 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
 static ev_tstamp get_timeout(dns_poller_t *d)
 {
     static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
-    struct timeval tv, *tvp = ares_timeout(d->ares, &max_tv, &tv);
+    struct timeval tv;
+    struct timeval *tvp = ares_timeout(d->ares, &max_tv, &tv);
     ev_tstamp after = tvp->tv_sec + tvp->tv_usec * 1e-6;
     return after ? after : 0.1;
 }

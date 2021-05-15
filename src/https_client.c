@@ -1,10 +1,11 @@
+#include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <ev.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <ctype.h>
 
 #include "https_client.h"
 #include "logging.h"
@@ -203,7 +204,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       ELOG("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
     } else {
       if (str_resp == NULL ||
-          strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1)) {  // at least, start with it
+          strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
         ELOG("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
         faulty_response = 1;
       }
@@ -216,7 +217,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       ELOG("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
     } else if (str_resp != NULL) {
       ELOG("Request would be redirected to: %s", str_resp);
-      if (strcmp(str_resp, client->opt->resolver_url)) {
+      if (strcmp(str_resp, client->opt->resolver_url) != 0) {
         ELOG("Please update Resolver URL to avoid redirection!");
       }
     }
@@ -421,12 +422,10 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
                           long timeout_ms, void *userp) {
   https_client_t *c = (https_client_t *)userp;
   ev_timer_stop(c->loop, &c->timer);
-  if (timeout_ms > 0) {
+  if (timeout_ms >= 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     ev_timer_init(&c->timer, timer_cb, timeout_ms / 1000.0, 0);
     ev_timer_start(c->loop, &c->timer);
-  } else {
-    timer_cb(c->loop, &c->timer, 0);
   }
   return 0;
 }
