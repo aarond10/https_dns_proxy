@@ -176,6 +176,9 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   }
   DLOG("Nameservers count: %d", nameservers);
   d->io_events = (ev_io *)calloc(nameservers, sizeof(ev_io));  // zeroed!
+  if (!d->io_events) {
+    FLOG("Out of mem");
+  }
   for (int i = 0; i < nameservers; i++) {
     d->io_events[i].data = d;
   }
