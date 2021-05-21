@@ -27,7 +27,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...);
 }
 #endif
 
-enum _LogSeverity {
+enum LogSeverity {
   LOG_DEBUG,
   LOG_INFO,
   LOG_WARNING,
@@ -37,6 +37,7 @@ enum _LogSeverity {
   LOG_MAX
 };
 
+#define LOG(level, ...) _log(__FILENAME__, __LINE__, level, __VA_ARGS__)
 #define DLOG(...) _log(__FILENAME__, __LINE__, LOG_DEBUG, __VA_ARGS__)
 #define ILOG(...) _log(__FILENAME__, __LINE__, LOG_INFO, __VA_ARGS__)
 #define WLOG(...) _log(__FILENAME__, __LINE__, LOG_WARNING, __VA_ARGS__)

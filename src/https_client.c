@@ -98,6 +98,89 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   return 0;
 }
 
+static void https_log_data(enum LogSeverity level, char *ptr, size_t size)
+{
+  const size_t width = 0x10;
+
+  for (size_t i = 0; i < size; i += width) {
+    char hex[3 * width + 1];
+    char str[width + 1];
+    size_t hex_off = 0;
+    size_t str_off = 0;
+    memset(hex, 0, sizeof(hex));
+    memset(str, 0, sizeof(str));
+
+    for (size_t c = 0; c < width; c++) {
+      if (i+c < size) {
+        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
+                            "%02x ", (unsigned char)ptr[i+c]);
+        str_off += snprintf(str + str_off, sizeof(str) - str_off,
+                            "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
+      } else {
+        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
+      }
+    }
+
+    LOG(level, "%4.4lx: %s%s", (long)i, hex, str);
+  }
+}
+
+static int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype type,
+                            char *data, size_t size, void *userp)
+{
+  struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
+  const char *prefix = "";
+
+  switch (type) {
+    case CURLINFO_TEXT:
+      prefix = "* ";
+      break;
+    case CURLINFO_HEADER_OUT:
+      prefix = "> ";
+      break;
+    case CURLINFO_HEADER_IN:
+      prefix = "< ";
+      break;
+    // not dumping DNS packets because of privacy
+    case CURLINFO_DATA_OUT:
+    case CURLINFO_DATA_IN:
+      // uncomment, to dump
+      /* DLOG("data %s", type == CURLINFO_DATA_IN ? "IN" : "OUT");
+       * https_log_data(LOG_DEBUG, data, size);
+       * return 0; */
+    // uninformative
+    case CURLINFO_SSL_DATA_OUT:
+    case CURLINFO_SSL_DATA_IN:
+      return 0;
+    default:
+      WLOG("Unhandled curl info type: %d", type);
+      return 0;
+  }
+
+  // for extra debugging purpose
+  // if (type != CURLINFO_TEXT) {
+  //   https_log_data(LOG_DEBUG, data, size);
+  // }
+
+  // process lines one-by one
+  char *start = NULL; // start position of currently processed line
+  for (char *pos = data; pos <= (data + size); pos++) {
+    // tokenize by end of string and line splitting characters
+    if (pos == (data + size) || *pos == '\r' || *pos == '\n') {
+      // skip empty string and curl info Expire
+      if (start != NULL && (pos - start) > 0 &&
+          strncmp(start, "Expire", sizeof("Expire") - 1) != 0) {
+        // https_log_data(LOG_DEBUG, start, pos - start);
+        DLOG("%s%.*s", prefix, pos - start, start);
+        start = NULL;
+      }
+    } else if (start == NULL) {
+      start = pos;
+    }
+  }
+  return 0;
+}
+
 static void https_fetch_ctx_init(https_client_t *client,
                                  struct https_fetch_ctx *ctx, const char *url,
                                  const char* data, size_t datalen,
@@ -128,6 +211,8 @@ static void https_fetch_ctx_init(https_client_t *client,
 
   if (logging_debug_enabled()) {
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_VERBOSE, 1L);
+    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_DEBUGFUNCTION, https_curl_debug);
+    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_DEBUGDATA, ctx);
   }
   if (logging_debug_enabled() || client->stat || client->opt->dscp) {
     ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
@@ -165,33 +250,6 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
 }
 
-static void https_log_response_content(char *ptr, size_t size)
-{
-  const size_t width = 0x10;
-
-  for (size_t i = 0; i < size; i += width) {
-    char hex[3 * width + 1];
-    char str[width + 1];
-    size_t hex_off = 0;
-    size_t str_off = 0;
-    memset(hex, 0, sizeof(hex));
-    memset(str, 0, sizeof(str));
-
-    for (size_t c = 0; c < width; c++) {
-      if (i+c < size) {
-        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
-                            "%02x ", (unsigned char)ptr[i+c]);
-        str_off += snprintf(str + str_off, sizeof(str) - str_off,
-                            "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
-      } else {
-        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
-      }
-    }
-
-    ELOG("%4.4lx: %s%s", (long)i, hex, str);
-  }
-}
-
 static int https_fetch_ctx_process_response(https_client_t *client,
                                             struct https_fetch_ctx *ctx)
 {
@@ -211,7 +269,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     } else {
       ELOG("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen >= 0) {
-        https_log_response_content(ctx->buf, ctx->buflen);
+        https_log_data(LOG_ERROR, ctx->buf, ctx->buflen);
       }
     }
   }
