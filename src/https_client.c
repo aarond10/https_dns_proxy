@@ -14,6 +14,15 @@
 
 #define DOH_CONTENT_TYPE "application/dns-message"
 
+// the following macros require to have ctx pointer to https_fetch_ctx structure
+// else: compilation failure will occur
+#define LOG_REQ(level, format, args...) LOG(level, "%04hX: " format, ctx->id, ## args)
+#define DLOG_REQ(format, args...) DLOG("%04hX: " format, ctx->id, ## args)
+#define ILOG_REQ(format, args...) ILOG("%04hX: " format, ctx->id, ## args)
+#define WLOG_REQ(format, args...) WLOG("%04hX: " format, ctx->id, ## args)
+#define ELOG_REQ(format, args...) ELOG("%04hX: " format, ctx->id, ## args)
+#define FLOG_REQ(format, args...) FLOG("%04hX: " format, ctx->id, ## args)
+
 #define ASSERT_CURL_MULTI_SETOPT(curlm, option, param) \
   do { \
     CURLMcode code = curl_multi_setopt(curlm, option, param); \
@@ -22,11 +31,11 @@
     } \
   } while(0);
 
-#define ASSERT_CURL_EASY_SETOPT(curl, option, param) \
+#define ASSERT_CURL_EASY_SETOPT(ctx, option, param) \
   do { \
-    CURLcode code = curl_easy_setopt(curl, option, param); \
+    CURLcode code = curl_easy_setopt(ctx->curl, option, param); \
     if (code != CURLE_OK) { \
-      FLOG(#option " error %d: %s", code, curl_easy_strerror(code)); \
+      FLOG_REQ(#option " error %d: %s", code, curl_easy_strerror(code)); \
     } \
   } while(0);
 
@@ -35,7 +44,7 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   char *new_buf = (char *)realloc(
       ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
-    ELOG("Out of memory!");
+    ELOG_REQ("Out of memory!");
     return 0;
   }
   ctx->buf = new_buf;
@@ -98,7 +107,8 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   return 0;
 }
 
-static void https_log_data(enum LogSeverity level, char *ptr, size_t size)
+static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
+                           char *ptr, size_t size)
 {
   const size_t width = 0x10;
 
@@ -121,12 +131,13 @@ static void https_log_data(enum LogSeverity level, char *ptr, size_t size)
       }
     }
 
-    LOG(level, "%4.4lx: %s%s", (long)i, hex, str);
+    LOG_REQ(level, "%4.4lx: %s%s", (long)i, hex, str);
   }
 }
 
-static int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype type,
-                            char *data, size_t size, void *userp)
+static
+int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype type,
+                     char *data, size_t size, void *userp)
 {
   struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
   const char *prefix = "";
@@ -145,8 +156,8 @@ static int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype
     case CURLINFO_DATA_OUT:
     case CURLINFO_DATA_IN:
       // uncomment, to dump
-      /* DLOG("data %s", type == CURLINFO_DATA_IN ? "IN" : "OUT");
-       * https_log_data(LOG_DEBUG, data, size);
+      /* DLOG_REQ("data %s", type == CURLINFO_DATA_IN ? "IN" : "OUT");
+       * https_log_data(LOG_DEBUG, ctx, data, size);
        * return 0; */
     // uninformative
     case CURLINFO_SSL_DATA_OUT:
@@ -159,7 +170,7 @@ static int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype
 
   // for extra debugging purpose
   // if (type != CURLINFO_TEXT) {
-  //   https_log_data(LOG_DEBUG, data, size);
+  //   https_log_data(LOG_DEBUG, ctx, data, size);
   // }
 
   // process lines one-by one
@@ -170,8 +181,8 @@ static int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype
       // skip empty string and curl info Expire
       if (start != NULL && (pos - start) > 0 &&
           strncmp(start, "Expire", sizeof("Expire") - 1) != 0) {
-        // https_log_data(LOG_DEBUG, start, pos - start);
-        DLOG("%s%.*s", prefix, pos - start, start);
+        // https_log_data(LOG_DEBUG, ctx, start, pos - start);
+        DLOG_REQ("%s%.*s", prefix, pos - start, start);
         start = NULL;
       }
     } else if (start == NULL) {
@@ -184,9 +195,10 @@ static int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype
 static void https_fetch_ctx_init(https_client_t *client,
                                  struct https_fetch_ctx *ctx, const char *url,
                                  const char* data, size_t datalen,
-                                 struct curl_slist *resolv,
+                                 struct curl_slist *resolv, uint16_t id,
                                  https_response_cb cb, void *cb_data) {
   ctx->curl = curl_easy_init(); // if fails, first setopt will fail
+  ctx->id = id;
   ctx->cb = cb;
   ctx->cb_data = cb_data;
   ctx->buf = NULL;
@@ -194,15 +206,16 @@ static void https_fetch_ctx_init(https_client_t *client,
   ctx->next = client->fetches;
   client->fetches = ctx;
 
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_RESOLVE, resolv);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_RESOLVE, resolv);
 
-  DLOG("Requesting HTTP/1.1: %d\n", client->opt->use_http_1_1);
+  DLOG_REQ("Requesting HTTP/1.1: %d", client->opt->use_http_1_1);
   CURLcode easy_code = curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION,
                                         client->opt->use_http_1_1 ?
                                         CURL_HTTP_VERSION_1_1 :
                                         CURL_HTTP_VERSION_2_0);
   if (easy_code != CURLE_OK) {
-    ELOG("CURLOPT_HTTP_VERSION error %d: %s", easy_code, curl_easy_strerror(easy_code));
+    ELOG_REQ("CURLOPT_HTTP_VERSION error %d: %s",
+             easy_code, curl_easy_strerror(easy_code));
     if (!client->opt->use_http_1_1) {
       ELOG("Try to run application with -x argument! Forcing HTTP/1.1 version.");
       client->opt->use_http_1_1 = 1;
@@ -210,43 +223,44 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
 
   if (logging_debug_enabled()) {
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_VERBOSE, 1L);
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_DEBUGFUNCTION, https_curl_debug);
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_DEBUGDATA, ctx);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_VERBOSE, 1L);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_DEBUGFUNCTION, https_curl_debug);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_DEBUGDATA, ctx);
   }
   if (logging_debug_enabled() || client->stat || client->opt->dscp) {
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_OPENSOCKETDATA, client);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETDATA, client);
   }
   if (logging_debug_enabled() || client->stat) {
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_CLOSESOCKETDATA, client);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETDATA, client);
   }
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_URL, url);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_HTTPHEADER, client->header_list);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_POSTFIELDSIZE, datalen);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_POSTFIELDS, data);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_WRITEFUNCTION, &write_buffer);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_WRITEDATA, ctx);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_URL, url);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_HTTPHEADER, client->header_list);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_POSTFIELDSIZE, datalen);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_POSTFIELDS, data);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_WRITEFUNCTION, &write_buffer);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_WRITEDATA, ctx);
 #ifdef CURLOPT_MAXAGE_CONN
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_TCP_KEEPALIVE, 1L);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_TCP_KEEPIDLE, 50L);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_TCP_KEEPINTVL, 50L);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_MAXAGE_CONN, 300L);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPALIVE, 1L);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPIDLE, 50L);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPINTVL, 50L);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_MAXAGE_CONN, 300L);
 #endif
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_FOLLOWLOCATION, 0);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_NOSIGNAL, 0);
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_TIMEOUT, 10 /* seconds */);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_USERAGENT, "dns-to-https-proxy/0.2");
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_FOLLOWLOCATION, 0);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_NOSIGNAL, 0);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, 10 /* seconds */);
   // We know Google supports this, so force it.
-  ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
   if (client->opt->curl_proxy) {
-    DLOG("Using curl proxy: %s", client->opt->curl_proxy);
-    ASSERT_CURL_EASY_SETOPT(ctx->curl, CURLOPT_PROXY, client->opt->curl_proxy);
+    DLOG_REQ("Using curl proxy: %s", client->opt->curl_proxy);
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_PROXY, client->opt->curl_proxy);
   }
   CURLMcode multi_code = curl_multi_add_handle(client->curlm, ctx->curl);
   if (multi_code != CURLM_OK) {
-    FLOG("curl_multi_add_handle error %d: %s", multi_code, curl_multi_strerror(multi_code));
+    FLOG_REQ("curl_multi_add_handle error %d: %s",
+             multi_code, curl_multi_strerror(multi_code));
   }
 }
 
@@ -260,16 +274,16 @@ static int https_fetch_ctx_process_response(https_client_t *client,
 
   if ((res = curl_easy_getinfo(
         ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
-    ELOG("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
+    ELOG_REQ("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
   } else {
     if (long_resp == 200) {
       faulty_response = 0;
     } else if (long_resp == 0) {
-      ELOG("No response");
+      ELOG_REQ("No response");
     } else {
-      ELOG("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
+      ELOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen >= 0) {
-        https_log_data(LOG_ERROR, ctx->buf, ctx->buflen);
+        https_log_data(LOG_ERROR, ctx, ctx->buf, ctx->buflen);
       }
     }
   }
@@ -278,11 +292,11 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   {
     if ((res = curl_easy_getinfo(
           ctx->curl, CURLINFO_CONTENT_TYPE, &str_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
     } else {
       if (str_resp == NULL ||
           strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
-        ELOG("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
+        ELOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
         faulty_response = 1;
       }
     }
@@ -291,24 +305,24 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   if (logging_debug_enabled() || faulty_response || ctx->buflen == 0) {
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
     } else if (str_resp != NULL) {
-      ELOG("Request would be redirected to: %s", str_resp);
+      ELOG_REQ("Request would be redirected to: %s", str_resp);
       if (strcmp(str_resp, client->opt->resolver_url) != 0) {
         ELOG("Please update Resolver URL to avoid redirection!");
       }
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
     } else if (long_resp != CURLE_OK) {
-      ELOG("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
+      ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
     } else if (long_resp != 0) {
-      ELOG("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
+      ELOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
         ELOG("Try to run application with -4 argument!");
       }
@@ -318,9 +332,9 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   if (logging_debug_enabled() || client->stat) {
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_NUM_CONNECTS , &long_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_NUM_CONNECTS: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_NUM_CONNECTS: %s", curl_easy_strerror(res));
     } else {
-      DLOG("CURLINFO_NUM_CONNECTS: %d", long_resp);
+      DLOG_REQ("CURLINFO_NUM_CONNECTS: %d", long_resp);
       if (long_resp == 0 && client->stat) {
         stat_connection_reused(client->stat);
       }
@@ -330,33 +344,33 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   if (logging_debug_enabled()) {
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
     } else {
-      DLOG("CURLINFO_EFFECTIVE_URL: %s", str_resp);
+      DLOG_REQ("CURLINFO_EFFECTIVE_URL: %s", str_resp);
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
     } else {
       switch (long_resp) {
         case CURL_HTTP_VERSION_1_0:
-          DLOG("CURLINFO_HTTP_VERSION: 1.0");
+          DLOG_REQ("CURLINFO_HTTP_VERSION: 1.0");
           break;
         case CURL_HTTP_VERSION_1_1:
-          DLOG("CURLINFO_HTTP_VERSION: 1.1");
+          DLOG_REQ("CURLINFO_HTTP_VERSION: 1.1");
           break;
         case CURL_HTTP_VERSION_2_0:
-          DLOG("CURLINFO_HTTP_VERSION: 2");
+          DLOG_REQ("CURLINFO_HTTP_VERSION: 2");
           break;
         default:
-          DLOG("CURLINFO_HTTP_VERSION: %d", long_resp);
+          DLOG_REQ("CURLINFO_HTTP_VERSION: %d", long_resp);
       }
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
-      ELOG("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
+      ELOG_REQ("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
     } else if (long_resp != CURLPROTO_HTTPS) {
-      DLOG("CURLINFO_PROTOCOL: %d", long_resp);
+      DLOG_REQ("CURLINFO_PROTOCOL: %d", long_resp);
     }
 
     double namelookup_time = NAN;
@@ -377,11 +391,11 @@ static int https_fetch_ctx_process_response(https_client_t *client,
                           CURLINFO_STARTTRANSFER_TIME, &starttransfer_time) != CURLE_OK ||
         curl_easy_getinfo(ctx->curl,
                           CURLINFO_TOTAL_TIME, &total_time) != CURLE_OK) {
-      ELOG("Error getting timing");
+      ELOG_REQ("Error getting timing");
     } else {
-      DLOG("Times: %lf, %lf, %lf, %lf, %lf, %lf",
-           namelookup_time, connect_time, appconnect_time, pretransfer_time,
-           starttransfer_time, total_time);
+      DLOG_REQ("Times: %lf, %lf, %lf, %lf, %lf, %lf",
+               namelookup_time, connect_time, appconnect_time, pretransfer_time,
+               starttransfer_time, total_time);
     }
   }
 
@@ -396,10 +410,10 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
     if (cur == ctx) {
       CURLMcode code = curl_multi_remove_handle(client->curlm, ctx->curl);
       if (code != CURLM_OK) {
-        FLOG("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
+        FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
       }
       if (https_fetch_ctx_process_response(client, ctx) != 0) {
-        ILOG("Response was faulty, skipping DNS reply.");
+        ILOG_REQ("Response was faulty, skipping DNS reply.");
         free(ctx->buf);
         ctx->buf = NULL;
         ctx->buflen = 0;
@@ -549,14 +563,14 @@ void https_client_init(https_client_t *c, options_t *opt,
 
 void https_client_fetch(https_client_t *c, const char *url,
                         const char* postdata, size_t postdata_len,
-                        struct curl_slist *resolv, https_response_cb cb,
-                        void *data) {
-  struct https_fetch_ctx *new_ctx =
+                        struct curl_slist *resolv, uint16_t id,
+                        https_response_cb cb, void *data) {
+  struct https_fetch_ctx *ctx =
       (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
-  if (!new_ctx) {
-    FLOG("Out of mem");
+  if (!ctx) {
+    FLOG_REQ("Out of mem");
   }
-  https_fetch_ctx_init(c, new_ctx, url, postdata, postdata_len, resolv, cb, data);
+  https_fetch_ctx_init(c, ctx, url, postdata, postdata_len, resolv, id, cb, data);
 }
 
 void https_client_reset(https_client_t *c) {

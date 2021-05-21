@@ -78,17 +78,27 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
 }
 
 static void https_resp_cb(void *data, char *buf, size_t buflen) {
-  DLOG("buflen %u\n", buflen);
   request_t *req = (request_t *)data;
+  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (req == NULL) {
-    FLOG("data NULL");
+    FLOG("%04hX: data NULL", req->tx_id);
   }
   free((void*)req->dns_req);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
-    dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
-  }
-  if (req->stat) {
-    stat_request_end(req->stat, buflen, ev_now(req->dns_server->loop) - req->start_tstamp);
+    if (buflen < (int)sizeof(uint16_t)) {
+      WLOG("%04hX: Malformed response received (too short)", req->tx_id);
+    } else {
+      uint16_t response_id = ntohs(*((uint16_t*)buf));
+      if (req->tx_id != response_id) {
+        WLOG("DNS request and response IDs are not matching: %hX != %hX",
+             req->tx_id, response_id);
+      } else {
+        dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        if (req->stat) {
+          stat_request_end(req->stat, buflen, ev_now(req->dns_server->loop) - req->start_tstamp);
+        }
+      }
+    }
   }
   free(req);
 }
@@ -98,20 +108,20 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
                           char *dns_req, size_t dns_req_len) {
   app_state_t *app = (app_state_t *)data;
 
-  DLOG("Received request for id: %04x, len: %d", tx_id, dns_req_len);
+  DLOG("Received request for id: %hX, len: %d", tx_id, dns_req_len);
 
   // If we're not yet bootstrapped, don't answer. libcurl will fall back to
   // gethostbyname() which can cause a DNS loop due to the nameserver listed
   // in resolv.conf being or depending on https_dns_proxy itself.
   if(app->using_dns_poller && (app->resolv == NULL || app->resolv->data == NULL)) {
-    WLOG("Query received before bootstrapping is completed, discarding.");
+    WLOG("%04hX: Query received before bootstrapping is completed, discarding.", tx_id);
     free(dns_req);
     return;
   }
 
   request_t *req = (request_t *)calloc(1, sizeof(request_t));
   if (req == NULL) {
-    FLOG("Out of mem");
+    FLOG("%04hX: Out of mem", tx_id);
   }
   req->tx_id = tx_id;
   memcpy(&req->raddr, addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
@@ -124,7 +134,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     stat_request_begin(app->stat, dns_req_len);
   }
   https_client_fetch(app->https_client, app->resolver_url,
-                     dns_req, dns_req_len, app->resolv, https_resp_cb, req);
+                     dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
 }
 
 static int addr_list_reduced(const char* full_list, const char* list) {
