@@ -101,7 +101,8 @@ static void https_fetch_ctx_init(https_client_t *client,
   if (easy_code != CURLE_OK) {
     ELOG("CURLOPT_HTTP_VERSION error %d: %s", easy_code, curl_easy_strerror(easy_code));
     if (!client->opt->use_http_1_1) {
-      ELOG("Try to run application with -x argument!");
+      ELOG("Try to run application with -x argument! Forcing HTTP/1.1 version.");
+      client->opt->use_http_1_1 = 1;
     }
   }
 
