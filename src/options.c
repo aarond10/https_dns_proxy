@@ -34,11 +34,12 @@ void options_init(struct Options *opt) {
   opt->resolver_url = "https://dns.google/dns-query";
   opt->curl_proxy = NULL;
   opt->use_http_1_1 = 0;
+  opt->stats_interval = 0;
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxs:V")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -87,6 +88,8 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     case 'V': // version
       printf("%s\n", GIT_VERSION);
       exit(0);
+    case 's': // stats interval
+      opt->stats_interval = atoi(optarg);
       break;
     case '?':
       printf("Unknown option '-%c'\n", c);
@@ -144,6 +147,10 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     printf("DNS servers polling interval must be between 5 and 3600.\n");
     return -1;
   }
+  if (opt->stats_interval < 0 || opt->stats_interval > 3600) {
+    printf("Statistic interval must be between 0 and 3600.\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -184,6 +191,9 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("                         connections.\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl. (false)\n");
+  printf("  -s statistic_interval  Optional statistic printout interval.\n"\
+         "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
+         defaults.stats_interval);
   printf("  -v                     Increase logging verbosity. (INFO)\n");
   printf("  -V                     Print version and exit.\n");
   options_cleanup(&defaults);

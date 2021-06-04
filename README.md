@@ -73,12 +73,18 @@ $ make
 This method work fine on most Linux operating system, which uses systemd.  
 Like: Raspberry Pi OS / Raspbian, Debian, Ubuntu, etc.
 
-To install the program binary and systemd service, simply execute the following after build:
+To install the program binary, systemd service and munin plugin (if munin is pre-installed),
+simply execute the following after build:
 ```
 $ sudo make install
 ```
 
-To overwrite default options use:
+To activate munin plugin, restart munin services:
+```
+$ sudo systemctl restart munin munin-node
+```
+
+To overwrite default service options use:
 ```
 $ sudo systemctl edit https_dns_proxy.service
 ```
@@ -167,6 +173,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
                          connections.
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)
+  -s statistic_interval  Optional statistic printout interval.
+                         (Default: 0, Disabled: 0, Min: 1, Max: 3600)
   -v                     Increase logging verbosity. (INFO)
   -V                     Print version and exit.
 ```
