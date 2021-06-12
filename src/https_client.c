@@ -66,13 +66,13 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
 
   if (sock != -1) {
     if (addr->family == AF_INET) {
-        (void)setsockopt(sock, IPPROTO_IP, IP_TOS,
-                         (int *)client->opt->dscp, sizeof(int));
+        setsockopt(sock, IPPROTO_IP, IP_TOS,
+                   &client->opt->dscp, sizeof(client->opt->dscp));
     }
 #if defined(IPV6_TCLASS)
     else if (addr->family == AF_INET6) {
-        (void)setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
-                         (int *)client->opt->dscp, sizeof(int));
+        setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
+                   &client->opt->dscp, sizeof(client->opt->dscp));
     }
 #endif
   }
@@ -400,7 +400,7 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
                      struct ev_timer *w, int __attribute__((unused)) revents) {
   https_client_t *c = (https_client_t *)w->data;
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
-                                          &c->still_running);
+                                            &c->still_running);
   if (code != CURLM_OK) {
     FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
   }
