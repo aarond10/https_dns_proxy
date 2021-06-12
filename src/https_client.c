@@ -6,6 +6,7 @@
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>
 
 #include "https_client.h"
 #include "logging.h"
@@ -80,11 +81,15 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
   return sock;
 }
 
-static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t item)
+static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t sock)
 {
   https_client_t *client = (https_client_t *)clientp;
 
-  DLOG("curl closed socket: %d", item);
+  if (close(sock) == 0) {
+    DLOG("curl closed socket: %d", sock);
+  } else {
+    FLOG("Could not close curl socket %d:%s", errno, strerror(errno));
+  }
 
   if (client->stat) {
     stat_connection_closed(client->stat);
