@@ -1,3 +1,15 @@
+// Statistics tracking
+//
+// Connection, request and latency statistics are accumulated in a struct
+// and output periodically via a libev timer callback.
+//
+// stat_init() initializes this struct and starts the timer if required.
+// stat_stop() stops the timer for shutdown.
+// stat_cleanup() prints the final measurement.
+// stat_request_(begin|end) and
+// stat_connection_(open|closed|reused) update the tallies.
+//
+
 #ifndef _STAT_H_
 #define _STAT_H_
 
