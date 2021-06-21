@@ -68,19 +68,16 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   int len = recvfrom(w->fd, buf, REQUEST_MAX, 0, (struct sockaddr*)&raddr,
                      &tmp_addrlen);
   if (len < 0) {
-    WLOG("recvfrom failed: %s", strerror(errno));
+    ELOG("recvfrom failed: %s", strerror(errno));
     return;
   }
 
   if (len < (int)sizeof(uint16_t)) {
-    DLOG("Malformed request received (too short).");
+    WLOG("Malformed request received (too short).");
     return;
   }
 
-  uint16_t net_tx_id = 0;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  memcpy(&net_tx_id, buf, sizeof(net_tx_id));
-  uint16_t tx_id = ntohs(net_tx_id);
+  uint16_t tx_id = ntohs(*((uint16_t*)buf));
   d->cb(d, d->cb_data, (struct sockaddr*)&raddr, tx_id, buf, len);
 }
 

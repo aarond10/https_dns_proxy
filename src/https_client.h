@@ -15,6 +15,8 @@ typedef void (*https_response_cb)(void *data, char *buf, size_t buflen);
 struct https_fetch_ctx {
   CURL *curl;
 
+  uint16_t id;
+
   https_response_cb cb;
   void *cb_data;
 
@@ -44,8 +46,8 @@ void https_client_init(https_client_t *c, options_t *opt,
 
 void https_client_fetch(https_client_t *c, const char *url,
                         const char* postdata, size_t postdata_len,
-                        struct curl_slist *resolv, https_response_cb cb,
-                        void *data);
+                        struct curl_slist *resolv, uint16_t id,
+                        https_response_cb cb, void *data);
 
 // Used to reset state of libcurl because streaming connections + IP changes
 // seem to cause curl to flip out.
