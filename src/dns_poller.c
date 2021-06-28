@@ -73,7 +73,7 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
                     struct hostent *h) {
   dns_poller_t *d = (dns_poller_t *)arg;
   d->request_ongoing = 0;
-  ev_tstamp interval = 0;  // retry by default
+  ev_tstamp interval = 5;  // retry by default after some time
 
   if (status != ARES_SUCCESS) {
     WLOG("DNS lookup failed: %s", ares_strerror(status));
