@@ -67,8 +67,8 @@ target_link_libraries(${TARGET_NAME} ${LIBS})
 define_file_basename_for_sources("https_dns_proxy")
 
 set_source_files_properties(
-  src/options.c PROPERTIES
-  COMPILE_FLAGS "-DGIT_VERSION='\"${GIT_VERSION}\"'")
+  src/main.c src/options.c
+  PROPERTIES COMPILE_FLAGS "-DGIT_VERSION='\"${GIT_VERSION}\"'")
 
 if(CLANG_TIDY_EXE)
   set_target_properties(
