@@ -14,6 +14,10 @@ jobs:
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+
     steps:
     - uses: actions/checkout@v2
     
@@ -21,8 +25,12 @@ jobs:
       run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential
 
     - name: Configure CMake
+      env:
+        CC: ${{ matrix.compiler }}
       run: cmake -B ${{github.workspace}}/
 
     - name: Build
+      env:
+        CC: ${{ matrix.compiler }}
       # Build your program with the given configuration
       run: make -C ${{github.workspace}}/
