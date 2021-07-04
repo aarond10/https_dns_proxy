@@ -22,7 +22,7 @@ jobs:
     - uses: actions/checkout@v2
     
     - name: Setup Dependencies
-      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential
+      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang clang-tidy
 
     - name: Configure CMake
       env:
