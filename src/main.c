@@ -226,6 +226,19 @@ int main(int argc, char *argv[]) {
   // through to errors about use of uninitialized values in our code. :(
   curl_global_init(CURL_GLOBAL_DEFAULT);
 
+  curl_version_info_data *curl_ver = curl_version_info(CURLVERSION_NOW);
+  if (!(curl_ver->features & CURL_VERSION_HTTP2)) {
+    WLOG("HTTP/2 is not supported by current libcurl");
+  }
+#ifdef CURL_VERSION_HTTP3
+  if (!(curl_ver->features & CURL_VERSION_HTTP3))
+  {
+    WLOG("HTTP/3 is not supported by current libcurl");
+  }
+#else
+  WLOG("HTTP/3 was not available at build time, it will not work at all");
+#endif
+
   // Note: This calls ev_default_loop(0) which never cleans up.
   //       valgrind will report a leak. :(
   struct ev_loop *loop = EV_DEFAULT;

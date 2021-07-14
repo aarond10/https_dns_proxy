@@ -212,6 +212,60 @@ int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
   return 0;
 }
 
+static const char * http_version_str(const long version) {
+  switch (version) {
+    case CURL_HTTP_VERSION_1_0:
+      return "1.0";
+    case CURL_HTTP_VERSION_1_1:
+      return "1.1";
+    case CURL_HTTP_VERSION_2_0: // fallthrough
+    case CURL_HTTP_VERSION_2TLS:
+      return "2";
+#ifdef CURL_VERSION_HTTP3
+    case CURL_HTTP_VERSION_3:
+      return "3";
+#endif
+    default:
+      FLOG("Unsupported HTTP version: %d", version);
+  }
+  return "UNKNOWN"; // unreachable code
+}
+
+static void https_set_request_version(https_client_t *client,
+                                      struct https_fetch_ctx *ctx) {
+  long http_version_int = CURL_HTTP_VERSION_2TLS;
+  switch (client->opt->use_http_version) {
+    case 1:
+      http_version_int = CURL_HTTP_VERSION_1_1;
+      // fallthrough
+    case 2:
+      break;
+    case 3:
+#ifdef CURL_VERSION_HTTP3
+      http_version_int = CURL_HTTP_VERSION_3;
+#endif
+      break;
+    default:
+      FLOG_REQ("Invalid HTTP version: %d", client->opt->use_http_version);
+  }
+  DLOG_REQ("Requesting HTTP/%s", http_version_str(http_version_int));
+
+  CURLcode easy_code = curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION, http_version_int);
+  if (easy_code != CURLE_OK) {
+    ELOG_REQ("Setting HTTP/%s version failed with %d: %s",
+             http_version_str(http_version_int), easy_code, curl_easy_strerror(easy_code));
+
+    if (client->opt->use_http_version == 3) {
+      ELOG("Try to run application without -q argument!");  // fallback unknown for current request
+      client->opt->use_http_version = 2;
+    } else if (client->opt->use_http_version == 2) {
+      ELOG("Try to run application with -x argument! Falling back to HTTP/1.1 version.");
+      client->opt->use_http_version = 1;
+      // TODO: consider CURLMOPT_PIPELINING setting??
+    }
+  }
+}
+
 static void https_fetch_ctx_init(https_client_t *client,
                                  struct https_fetch_ctx *ctx, const char *url,
                                  const char* data, size_t datalen,
@@ -228,20 +282,7 @@ static void https_fetch_ctx_init(https_client_t *client,
 
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_RESOLVE, resolv);
 
-  DLOG_REQ("Requesting HTTP/1.1: %d", client->opt->use_http_1_1);
-  CURLcode easy_code = curl_easy_setopt(ctx->curl, CURLOPT_HTTP_VERSION,
-                                        client->opt->use_http_1_1 ?
-                                        CURL_HTTP_VERSION_1_1 :
-                                        CURL_HTTP_VERSION_2_0);
-  if (easy_code != CURLE_OK) {
-    // hopefully errors will be logged once
-    ELOG_REQ("CURLOPT_HTTP_VERSION error %d: %s",
-             easy_code, curl_easy_strerror(easy_code));
-    if (!client->opt->use_http_1_1) {
-      ELOG("Try to run application with -x argument! Forcing HTTP/1.1 version.");
-      client->opt->use_http_1_1 = 1;
-    }
-  }
+  https_set_request_version(client, ctx);
 
   if (logging_debug_enabled()) {
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_VERBOSE, 1L);
@@ -322,9 +363,10 @@ static int https_fetch_ctx_process_response(https_client_t *client,
           uploaded_bytes > 0) {
         WLOG_REQ("Connecting and sending request to resolver was successful, "
                  "but no response was sent back");
-        if (client->opt->use_http_1_1) {
+        if (client->opt->use_http_version == 1) {
           // for example Unbound DoH servers does not support HTTP/1.x, only HTTP/2
-          WLOG("Resolver may not support current HTTP/1.1 protocol version");
+          WLOG("Resolver may not support current HTTP/%s protocol version",
+               http_version_str(client->opt->use_http_version));
         }
       } else {
         // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
@@ -404,20 +446,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
-    } else {
-      switch (long_resp) {
-        case CURL_HTTP_VERSION_1_0:
-          DLOG_REQ("CURLINFO_HTTP_VERSION: 1.0");
-          break;
-        case CURL_HTTP_VERSION_1_1:
-          DLOG_REQ("CURLINFO_HTTP_VERSION: 1.1");
-          break;
-        case CURL_HTTP_VERSION_2_0:
-          DLOG_REQ("CURLINFO_HTTP_VERSION: 2");
-          break;
-        default:
-          DLOG_REQ("CURLINFO_HTTP_VERSION: %d", long_resp);
-      }
+    } else if (long_resp != CURL_HTTP_VERSION_NONE) {
+      DLOG_REQ("CURLINFO_HTTP_VERSION: %s", http_version_str(long_resp));
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
