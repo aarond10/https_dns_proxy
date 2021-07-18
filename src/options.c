@@ -39,7 +39,7 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxs:V")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxs:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -85,15 +85,17 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     case 'x': // http/1.1
       opt->use_http_1_1 = 1;
       break;
-    case 'V': // version
-      printf("%s\n", GIT_VERSION);
-      exit(0);
     case 's': // stats interval
       opt->stats_interval = atoi(optarg);
       break;
     case '?':
       printf("Unknown option '-%c'\n", c);
+      // fallthrough
+    case 'h':
       return -1;
+    case 'V': // version
+      printf("%s\n", GIT_VERSION);
+      exit(0);
     default:
       printf("Unknown state!");
       exit(EXIT_FAILURE);
@@ -159,9 +161,9 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);
   printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
-  printf("        [-r <resolver_url>] [-e <subnet_addr>]\n");
-  printf("        [-t <proxy_server>] [-l <logfile>] -c <dscp_codepoint>\n");
-  printf("        [-x] [-v]+\n\n");
+  printf("        [-i <polling_interval>] [-4] [-r <resolver_url>]\n");
+  printf("        [-t <proxy_server>] [-l <logfile>] [-c <dscp_codepoint>]\n");
+  printf("        [-x] [-q] [-s <statistic_interval>] [-v]+ [-V] [-h]\n\n");
   printf("  -a listen_addr         Local IPv4/v6 address to bind to. (%s)\n",
          defaults.listen_addr);
   printf("  -p listen_port         Local port to bind to. (%d)\n",
@@ -196,6 +198,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
          defaults.stats_interval);
   printf("  -v                     Increase logging verbosity. (INFO)\n");
   printf("  -V                     Print version and exit.\n");
+  printf("  -h                     Print help and exit.\n");
   options_cleanup(&defaults);
 }
 
