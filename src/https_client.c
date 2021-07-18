@@ -290,11 +290,22 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     if (long_resp == 200) {
       faulty_response = 0;
     } else if (long_resp == 0) {
-      // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
-      // example: server side closes the connection or curl force closes connections
-      // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
-      // it is 118 seconds)
-      WLOG_REQ("No response (probably connection has been closed or timed out)");
+      curl_off_t uploaded_bytes = 0;
+      if (curl_easy_getinfo(ctx->curl, CURLINFO_SIZE_UPLOAD_T, &uploaded_bytes) == CURLE_OK &&
+          uploaded_bytes > 0) {
+        ELOG_REQ("Connecting and sending request to resolver was successful, "
+                 "but no response was sent back");
+        if (client->opt->use_http_1_1) {
+          // for example Unbound DoH servers does not support HTTP/1.x, only HTTP/2
+          ELOG("Resolver may not support current HTTP/1.1 protocol version");
+        }
+      } else {
+        // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
+        // example: server side closes the connection or curl force closes connections
+        // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
+        // it is 118 seconds)
+        WLOG_REQ("No response (probably connection has been closed or timed out)");
+      }
     } else {
       ELOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen >= 0) {
