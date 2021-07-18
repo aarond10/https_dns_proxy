@@ -39,8 +39,14 @@
     } \
   } while(0);
 
+#define GET_PTR(type, var_name, from) \
+  type *var_name = (type *)(from); \
+  if ((var_name) == NULL) { \
+    FLOG("Unexpected NULL pointer for " #var_name "(" #type ")"); \
+  }
+
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
-  struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
+  GET_PTR(struct https_fetch_ctx, ctx, userp);
   char *new_buf = (char *)realloc(
       ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
@@ -58,7 +64,7 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
 
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
                                          struct curl_sockaddr *addr) {
-  https_client_t *client = (https_client_t *)clientp;
+  GET_PTR(https_client_t, client, clientp);
 
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
 
@@ -92,7 +98,7 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
 
 static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t sock)
 {
-  https_client_t *client = (https_client_t *)clientp;
+  GET_PTR(https_client_t, client, clientp);
 
   if (close(sock) == 0) {
     DLOG("curl closed socket: %d", sock);
@@ -144,7 +150,7 @@ static
 int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype type,
                      char *data, size_t size, void *userp)
 {
-  struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
+  GET_PTR(struct https_fetch_ctx, ctx, userp);
   const char *prefix = "";
 
   switch (type) {
@@ -463,10 +469,7 @@ static void check_multi_info(https_client_t *c) {
 
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     struct ev_io *w, int revents) {
-  https_client_t *c = (https_client_t *)w->data;
-  if (c == NULL) {
-    FLOG("c is NULL");
-  }
+  GET_PTR(https_client_t, c, w->data);
   CURLMcode code = curl_multi_socket_action(
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
                        (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
@@ -479,7 +482,7 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
                      struct ev_timer *w, int __attribute__((unused)) revents) {
-  https_client_t *c = (https_client_t *)w->data;
+  GET_PTR(https_client_t, c, w->data);
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
                                             &c->still_running);
   if (code != CURLM_OK) {
@@ -499,12 +502,9 @@ static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock)
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
                          void *userp, void __attribute__((unused)) *sockp) {
-  https_client_t *c = (https_client_t *)userp;
+  GET_PTR(https_client_t, c, userp);
   if (!curl) {
     FLOG("Unexpected NULL pointer for CURL");
-  }
-  if (!c) {
-    FLOG("Unexpected NULL pointer for https_client_t");
   }
   // stop and release used event
   struct ev_io *io_event_ptr = get_io_event(c->io_events, sock);
@@ -532,7 +532,7 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
 
 static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
                           long timeout_ms, void *userp) {
-  https_client_t *c = (https_client_t *)userp;
+  GET_PTR(https_client_t, c, userp);
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms >= 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
