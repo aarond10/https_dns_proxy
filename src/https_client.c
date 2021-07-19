@@ -25,7 +25,7 @@
 
 #define ASSERT_CURL_MULTI_SETOPT(curlm, option, param) \
   do { \
-    CURLMcode code = curl_multi_setopt(curlm, option, param); \
+    CURLMcode code = curl_multi_setopt((curlm), (option), (param)); \
     if (code != CURLM_OK) { \
       FLOG(#option " error %d: %s", code, curl_multi_strerror(code)); \
     } \
@@ -33,7 +33,7 @@
 
 #define ASSERT_CURL_EASY_SETOPT(ctx, option, param) \
   do { \
-    CURLcode code = curl_easy_setopt(ctx->curl, option, param); \
+    CURLcode code = curl_easy_setopt((ctx)->curl, (option), (param)); \
     if (code != CURLE_OK) { \
       FLOG_REQ(#option " error %d: %s", code, curl_easy_strerror(code)); \
     } \
@@ -117,16 +117,21 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
     char str[width + 1];
     size_t hex_off = 0;
     size_t str_off = 0;
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(hex, 0, sizeof(hex));
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(str, 0, sizeof(str));
 
     for (size_t c = 0; c < width; c++) {
       if (i+c < size) {
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
                             "%02x ", (unsigned char)ptr[i+c]);
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         str_off += snprintf(str + str_off, sizeof(str) - str_off,
                             "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
       } else {
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
       }
     }
@@ -572,7 +577,7 @@ void https_client_fetch(https_client_t *c, const char *url,
   struct https_fetch_ctx *ctx =
       (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
   if (!ctx) {
-    FLOG_REQ("Out of mem");
+    FLOG("Out of mem");
   }
   https_fetch_ctx_init(c, ctx, url, postdata, postdata_len, resolv, id, cb, data);
 }
