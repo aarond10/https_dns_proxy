@@ -183,6 +183,17 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -h                     Print help and exit.
 ```
 
+## Testing
+
+Functional tests can be executed using [Robot Framework](https://robotframework.org/).
+
+dig command is expected to be available.
+
+```
+pip3 install robotframework
+python3 -m robot.run tests/robot/functional_tests.robot
+```
+
 ## TODO
 
 * Add some tests.

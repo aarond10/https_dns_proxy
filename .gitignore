@@ -13,3 +13,6 @@ install_manifest.txt
 .ninja_log
 build.ninja
 rules.ninja
+log.html
+output.xml
+report.html
