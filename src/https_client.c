@@ -147,7 +147,7 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
 }
 
 static
-int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype type,
+int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
                      char *data, size_t size, void *userp)
 {
   GET_PTR(struct https_fetch_ctx, ctx, userp);
@@ -308,7 +308,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       }
     } else {
       ELOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
-      if (ctx->buflen >= 0) {
+      if (ctx->buflen > 0) {
         https_log_data(LOG_ERROR, ctx, ctx->buf, ctx->buflen);
       }
     }
