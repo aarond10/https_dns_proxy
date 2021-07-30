@@ -25,7 +25,7 @@
 
 #define ASSERT_CURL_MULTI_SETOPT(curlm, option, param) \
   do { \
-    CURLMcode code = curl_multi_setopt(curlm, option, param); \
+    CURLMcode code = curl_multi_setopt((curlm), (option), (param)); \
     if (code != CURLM_OK) { \
       FLOG(#option " error %d: %s", code, curl_multi_strerror(code)); \
     } \
@@ -33,14 +33,20 @@
 
 #define ASSERT_CURL_EASY_SETOPT(ctx, option, param) \
   do { \
-    CURLcode code = curl_easy_setopt(ctx->curl, option, param); \
+    CURLcode code = curl_easy_setopt((ctx)->curl, (option), (param)); \
     if (code != CURLE_OK) { \
       FLOG_REQ(#option " error %d: %s", code, curl_easy_strerror(code)); \
     } \
   } while(0);
 
+#define GET_PTR(type, var_name, from) \
+  type *var_name = (type *)(from); \
+  if ((var_name) == NULL) { \
+    FLOG("Unexpected NULL pointer for " #var_name "(" #type ")"); \
+  }
+
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
-  struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
+  GET_PTR(struct https_fetch_ctx, ctx, userp);
   char *new_buf = (char *)realloc(
       ctx->buf, ctx->buflen + size * nmemb + 1);
   if (new_buf == NULL) {
@@ -58,7 +64,7 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
 
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
                                          struct curl_sockaddr *addr) {
-  https_client_t *client = (https_client_t *)clientp;
+  GET_PTR(https_client_t, client, clientp);
 
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
 
@@ -92,7 +98,7 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
 
 static int closesocket_callback(void __attribute__((unused)) *clientp, curl_socket_t sock)
 {
-  https_client_t *client = (https_client_t *)clientp;
+  GET_PTR(https_client_t, client, clientp);
 
   if (close(sock) == 0) {
     DLOG("curl closed socket: %d", sock);
@@ -117,16 +123,21 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
     char str[width + 1];
     size_t hex_off = 0;
     size_t str_off = 0;
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(hex, 0, sizeof(hex));
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(str, 0, sizeof(str));
 
     for (size_t c = 0; c < width; c++) {
       if (i+c < size) {
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
                             "%02x ", (unsigned char)ptr[i+c]);
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         str_off += snprintf(str + str_off, sizeof(str) - str_off,
                             "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
       } else {
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
       }
     }
@@ -136,10 +147,10 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
 }
 
 static
-int https_curl_debug(CURL * __attribute__((unused)) handle, curl_infotype type,
+int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
                      char *data, size_t size, void *userp)
 {
-  struct https_fetch_ctx *ctx = (struct https_fetch_ctx *)userp;
+  GET_PTR(struct https_fetch_ctx, ctx, userp);
   const char *prefix = "";
 
   switch (type) {
@@ -279,14 +290,25 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     if (long_resp == 200) {
       faulty_response = 0;
     } else if (long_resp == 0) {
-      // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
-      // example: server side closes the connection or curl force closes connections
-      // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
-      // it is 118 seconds)
-      WLOG_REQ("No response (probably connection has been closed or timed out)");
+      curl_off_t uploaded_bytes = 0;
+      if (curl_easy_getinfo(ctx->curl, CURLINFO_SIZE_UPLOAD_T, &uploaded_bytes) == CURLE_OK &&
+          uploaded_bytes > 0) {
+        ELOG_REQ("Connecting and sending request to resolver was successful, "
+                 "but no response was sent back");
+        if (client->opt->use_http_1_1) {
+          // for example Unbound DoH servers does not support HTTP/1.x, only HTTP/2
+          ELOG("Resolver may not support current HTTP/1.1 protocol version");
+        }
+      } else {
+        // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
+        // example: server side closes the connection or curl force closes connections
+        // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
+        // it is 118 seconds)
+        WLOG_REQ("No response (probably connection has been closed or timed out)");
+      }
     } else {
       ELOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
-      if (ctx->buflen >= 0) {
+      if (ctx->buflen > 0) {
         https_log_data(LOG_ERROR, ctx, ctx->buf, ctx->buflen);
       }
     }
@@ -458,10 +480,7 @@ static void check_multi_info(https_client_t *c) {
 
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     struct ev_io *w, int revents) {
-  https_client_t *c = (https_client_t *)w->data;
-  if (c == NULL) {
-    FLOG("c is NULL");
-  }
+  GET_PTR(https_client_t, c, w->data);
   CURLMcode code = curl_multi_socket_action(
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
                        (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
@@ -474,7 +493,7 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
                      struct ev_timer *w, int __attribute__((unused)) revents) {
-  https_client_t *c = (https_client_t *)w->data;
+  GET_PTR(https_client_t, c, w->data);
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
                                             &c->still_running);
   if (code != CURLM_OK) {
@@ -494,12 +513,9 @@ static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock)
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
                          void *userp, void __attribute__((unused)) *sockp) {
-  https_client_t *c = (https_client_t *)userp;
+  GET_PTR(https_client_t, c, userp);
   if (!curl) {
     FLOG("Unexpected NULL pointer for CURL");
-  }
-  if (!c) {
-    FLOG("Unexpected NULL pointer for https_client_t");
   }
   // stop and release used event
   struct ev_io *io_event_ptr = get_io_event(c->io_events, sock);
@@ -527,7 +543,7 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
 
 static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
                           long timeout_ms, void *userp) {
-  https_client_t *c = (https_client_t *)userp;
+  GET_PTR(https_client_t, c, userp);
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms >= 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
@@ -572,7 +588,7 @@ void https_client_fetch(https_client_t *c, const char *url,
   struct https_fetch_ctx *ctx =
       (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
   if (!ctx) {
-    FLOG_REQ("Out of mem");
+    FLOG("Out of mem");
   }
   https_fetch_ctx_init(c, ctx, url, postdata, postdata_len, resolv, id, cb, data);
 }

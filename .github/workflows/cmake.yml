@@ -21,6 +21,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     
+    - name: Update APT
+      run: sudo apt-get update
+
     - name: Setup Dependencies
       run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang clang-tidy
 
