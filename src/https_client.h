@@ -14,6 +14,7 @@ typedef void (*https_response_cb)(void *data, char *buf, size_t buflen);
 // Internal: Holds state on an individual transfer.
 struct https_fetch_ctx {
   CURL *curl;
+  char curl_errbuf[CURL_ERROR_SIZE];
 
   uint16_t id;
 
