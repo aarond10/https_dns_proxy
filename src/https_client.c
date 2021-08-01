@@ -6,7 +6,7 @@
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>
+#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "https_client.h"
 #include "logging.h"

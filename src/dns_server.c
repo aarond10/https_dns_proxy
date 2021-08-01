@@ -65,8 +65,8 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   struct sockaddr_storage raddr;
   /* recvfrom can write to addrlen */
   socklen_t tmp_addrlen = d->addrlen;
-  int len = recvfrom(w->fd, buf, REQUEST_MAX, 0, (struct sockaddr*)&raddr,
-                     &tmp_addrlen);
+  ssize_t len = recvfrom(w->fd, buf, REQUEST_MAX, 0, (struct sockaddr*)&raddr,
+                         &tmp_addrlen);
   if (len < 0) {
     ELOG("recvfrom failed: %s", strerror(errno));
     return;
@@ -96,7 +96,7 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
 }
 
 void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
-                        int blen) {
+                        size_t blen) {
   ssize_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
   if(len == -1) {
     DLOG("sendto failed: %s", strerror(errno));

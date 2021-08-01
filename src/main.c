@@ -17,21 +17,23 @@
 #include "stat.h"
 
 // Holds app state required for dns_server_cb.
+// NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
   const char *resolver_url;
-  uint8_t using_dns_poller;
   stat_t *stat;
+  uint8_t using_dns_poller;
 } app_state_t;
 
+// NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
-  uint16_t tx_id;
-  struct sockaddr_storage raddr;
   dns_server_t *dns_server;
   char* dns_req;
-  ev_tstamp start_tstamp;
   stat_t *stat;
+  ev_tstamp start_tstamp;
+  uint16_t tx_id;
+  struct sockaddr_storage raddr;
 } request_t;
 
 // Very very basic hostname parsing.
