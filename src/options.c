@@ -180,7 +180,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
          "                         (Default: %d, Min: 5, Max: 3600)\n",
          defaults.bootstrap_dns_polling_interval);
   printf("  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.\n");
-  printf("  -r resolver_url        The HTTPS path to the resolver URL. default: %s\n",
+  printf("  -r resolver_url        The HTTPS path to the resolver URL. Default: %s\n",
          defaults.resolver_url);
   printf("  -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
   printf("                         Remote name resolution will be used if the protocol\n");
@@ -196,7 +196,9 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -s statistic_interval  Optional statistic printout interval.\n"\
          "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
          defaults.stats_interval);
-  printf("  -v                     Increase logging verbosity. (INFO)\n");
+  printf("  -v                     Increase logging verbosity. (Default: error)\n");
+  printf("                         Levels: fatal, stats, error, warning, info, debug\n");
+  printf("                         Request issues are logged on warning level.\n");
   printf("  -V                     Print version and exit.\n");
   printf("  -h                     Print help and exit.\n");
   options_cleanup(&defaults);

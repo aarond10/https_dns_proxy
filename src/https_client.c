@@ -51,7 +51,7 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   size_t write_size = size * nmemb;
   size_t new_size = ctx->buflen + write_size;
   if (new_size > DOH_MAX_RESPONSE_SIZE) {
-    ELOG_REQ("Response size is too large!");
+    WLOG_REQ("Response size is too large!");
     return 0;
   }
   char *new_buf = (char *)realloc(ctx->buf, new_size + 1);
@@ -234,6 +234,7 @@ static void https_fetch_ctx_init(https_client_t *client,
                                         CURL_HTTP_VERSION_1_1 :
                                         CURL_HTTP_VERSION_2_0);
   if (easy_code != CURLE_OK) {
+    // hopefully errors will be logged once
     ELOG_REQ("CURLOPT_HTTP_VERSION error %d: %s",
              easy_code, curl_easy_strerror(easy_code));
     if (!client->opt->use_http_1_1) {
@@ -300,12 +301,12 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       faulty_response = 0;
       break;
     case CURLE_WRITE_ERROR:
-      ELOG_REQ("Response content was too large");
+      WLOG_REQ("Response content was too large");
       break;
     default:
-      ELOG_REQ("curl request failed with %d: %s", res, curl_easy_strerror(res));
+      WLOG_REQ("curl request failed with %d: %s", res, curl_easy_strerror(res));
       if (ctx->curl_errbuf[0] != 0) {
-        ELOG_REQ("curl error message: %s", ctx->curl_errbuf);
+        WLOG_REQ("curl error message: %s", ctx->curl_errbuf);
       }
   }
 
@@ -319,23 +320,24 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       curl_off_t uploaded_bytes = 0;
       if (curl_easy_getinfo(ctx->curl, CURLINFO_SIZE_UPLOAD_T, &uploaded_bytes) == CURLE_OK &&
           uploaded_bytes > 0) {
-        ELOG_REQ("Connecting and sending request to resolver was successful, "
+        WLOG_REQ("Connecting and sending request to resolver was successful, "
                  "but no response was sent back");
         if (client->opt->use_http_1_1) {
           // for example Unbound DoH servers does not support HTTP/1.x, only HTTP/2
-          ELOG("Resolver may not support current HTTP/1.1 protocol version");
+          WLOG("Resolver may not support current HTTP/1.1 protocol version");
         }
       } else {
         // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
         // example: server side closes the connection or curl force closes connections
         // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
         // it is 118 seconds)
+        // also: when no internet connection, this floods the log for every failed request
         WLOG_REQ("No response (probably connection has been closed or timed out)");
       }
     } else {
-      ELOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
+      WLOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen > 0) {
-        https_log_data(LOG_ERROR, ctx, ctx->buf, ctx->buflen);
+        https_log_data(LOG_WARNING, ctx, ctx->buf, ctx->buflen);
       }
     }
   }
@@ -347,7 +349,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       ELOG_REQ("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
     } else if (str_resp == NULL ||
         strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
-      ELOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
+      WLOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
       faulty_response = 1;
     }
   }
@@ -357,24 +359,25 @@ static int https_fetch_ctx_process_response(https_client_t *client,
             ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
     } else if (str_resp != NULL) {
-      ELOG_REQ("Request would be redirected to: %s", str_resp);
+      WLOG_REQ("Request would be redirected to: %s", str_resp);
       if (strcmp(str_resp, client->opt->resolver_url) != 0) {
-        ELOG("Please update Resolver URL to avoid redirection!");
+        WLOG("Please update Resolver URL to avoid redirection!");
       }
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
     } else if (long_resp != CURLE_OK) {
-      ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
+      WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
     } else if (long_resp != 0) {
-      ELOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
+      WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
-        ELOG("Try to run application with -4 argument!");
+        // this can't be fixed here with option overwrite because of dns_poller
+        WLOG("Try to run application with -4 argument!");
       }
     }
   }
