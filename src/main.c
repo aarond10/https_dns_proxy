@@ -238,6 +238,9 @@ int main(int argc, char *argv[]) {
 #else
   WLOG("HTTP/3 was not available at build time, it will not work at all");
 #endif
+  if (!(curl_ver->features & CURL_VERSION_IPV6)) {
+    WLOG("IPv6 is not supported by current libcurl");
+  }
 
   // Note: This calls ev_default_loop(0) which never cleans up.
   //       valgrind will report a leak. :(

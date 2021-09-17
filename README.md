@@ -182,6 +182,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
 ## TODO
 
 * Add some tests.
+* Improve IPv6 handling and add automatic fallback to IPv4
 
 ## Authors
 
