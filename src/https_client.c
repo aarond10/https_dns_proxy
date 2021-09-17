@@ -73,8 +73,12 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
   GET_PTR(https_client_t, client, clientp);
 
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
-
-  DLOG("curl opened socket: %d", sock);
+  if (sock != -1) {
+    DLOG("curl opened socket: %d", sock);
+  } else {
+    ELOG("Could not open curl socket %d:%s", errno, strerror(errno));
+    return CURL_SOCKET_BAD;
+  }
 
   if (client->stat) {
     stat_connection_opened(client->stat);
@@ -85,18 +89,16 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
     return sock;
   }
 
-  if (sock != -1) {
-    if (addr->family == AF_INET) {
-        setsockopt(sock, IPPROTO_IP, IP_TOS,
-                   &client->opt->dscp, sizeof(client->opt->dscp));
-    }
-#if defined(IPV6_TCLASS)
-    else if (addr->family == AF_INET6) {
-        setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
-                   &client->opt->dscp, sizeof(client->opt->dscp));
-    }
-#endif
+  if (addr->family == AF_INET) {
+    setsockopt(sock, IPPROTO_IP, IP_TOS,
+               &client->opt->dscp, sizeof(client->opt->dscp));
   }
+#if defined(IPV6_TCLASS)
+  else if (addr->family == AF_INET6) {
+    setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
+               &client->opt->dscp, sizeof(client->opt->dscp));
+  }
+#endif
 #endif
 
   return sock;
@@ -109,7 +111,8 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   if (close(sock) == 0) {
     DLOG("curl closed socket: %d", sock);
   } else {
-    FLOG("Could not close curl socket %d:%s", errno, strerror(errno));
+    ELOG("Could not close curl socket %d:%s", errno, strerror(errno));
+    return 1;
   }
 
   if (client->stat) {
@@ -282,20 +285,33 @@ static void https_fetch_ctx_init(https_client_t *client,
 }
 
 static int https_fetch_ctx_process_response(https_client_t *client,
-                                            struct https_fetch_ctx *ctx)
+                                            struct https_fetch_ctx *ctx,
+                                            int curl_result_code)
 {
   CURLcode res = 0;
   long long_resp = 0;
   char *str_resp = NULL;
   int faulty_response = 1;
 
+  switch (curl_result_code) {
+    case CURLE_OK:
+      DLOG_REQ("curl request succeeded");
+      faulty_response = 0;
+      break;
+    case CURLE_WRITE_ERROR:
+      ELOG_REQ("Response content was too large");
+      break;
+    default:
+      ELOG_REQ("curl request failed with %d: %s", res, curl_easy_strerror(res));
+  }
+
   if ((res = curl_easy_getinfo(
         ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
     ELOG_REQ("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
-  } else {
-    if (long_resp == 200) {
-      faulty_response = 0;
-    } else if (long_resp == 0) {
+    faulty_response = 1;
+  } else if (long_resp != 200) {
+    faulty_response = 1;
+    if (long_resp == 0) {
       curl_off_t uploaded_bytes = 0;
       if (curl_easy_getinfo(ctx->curl, CURLINFO_SIZE_UPLOAD_T, &uploaded_bytes) == CURLE_OK &&
           uploaded_bytes > 0) {
@@ -325,12 +341,10 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     if ((res = curl_easy_getinfo(
           ctx->curl, CURLINFO_CONTENT_TYPE, &str_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
-    } else {
-      if (str_resp == NULL ||
-          strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
-        ELOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
-        faulty_response = 1;
-      }
+    } else if (str_resp == NULL ||
+        strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
+      ELOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
+      faulty_response = 1;
     }
   }
 
@@ -435,7 +449,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
 }
 
 static void https_fetch_ctx_cleanup(https_client_t *client,
-                                    struct https_fetch_ctx *ctx) {
+                                    struct https_fetch_ctx *ctx,
+                                    int curl_result_code) {
   struct https_fetch_ctx *last = NULL;
   struct https_fetch_ctx *cur = client->fetches;
   while (cur) {
@@ -444,8 +459,15 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
       if (code != CURLM_OK) {
         FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
       }
-      if (https_fetch_ctx_process_response(client, ctx) != 0) {
+      int drop_reply = 0;
+      if (curl_result_code < 0) {
+        WLOG_REQ("Request was aborted.");
+        drop_reply = 1;
+      } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
         ILOG_REQ("Response was faulty, skipping DNS reply.");
+        drop_reply = 1;
+      }
+      if (drop_reply) {
         free(ctx->buf);
         ctx->buf = NULL;
         ctx->buflen = 0;
@@ -475,7 +497,7 @@ static void check_multi_info(https_client_t *c) {
       struct https_fetch_ctx *n = c->fetches;
       while (n) {
         if (n->curl == msg->easy_handle) {
-          https_fetch_ctx_cleanup(c, n);
+          https_fetch_ctx_cleanup(c, n, msg->data.result);
           break;
         }
         n = n->next;
@@ -609,7 +631,7 @@ void https_client_reset(https_client_t *c) {
 
 void https_client_cleanup(https_client_t *c) {
   while (c->fetches) {
-    https_fetch_ctx_cleanup(c, c->fetches);
+    https_fetch_ctx_cleanup(c, c->fetches, -1);
   }
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
