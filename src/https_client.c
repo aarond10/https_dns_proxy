@@ -605,10 +605,7 @@ void https_client_init(https_client_t *c, options_t *opt,
   c->opt = opt;
   c->stat = stat;
 
-  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING,
-                           c->opt->use_http_1_1 ?
-                           CURLPIPE_HTTP1 :
-                           CURLPIPE_MULTIPLEX);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, MAX_TOTAL_CONNECTIONS);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
