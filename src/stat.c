@@ -55,6 +55,7 @@ void stat_request_end(stat_t *s, size_t resp_len, ev_tstamp latency)
   if (resp_len) {
     s->responses_size += resp_len;
     s->responses++;
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
     s->query_times_sum += (latency * 1000);
   }
 }

@@ -6,13 +6,14 @@
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>
+#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
 
 #define DOH_CONTENT_TYPE "application/dns-message"
+#define DOH_MAX_RESPONSE_SIZE 65535
 
 // the following macros require to have ctx pointer to https_fetch_ctx structure
 // else: compilation failure will occur
@@ -47,19 +48,24 @@
 
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   GET_PTR(struct https_fetch_ctx, ctx, userp);
-  char *new_buf = (char *)realloc(
-      ctx->buf, ctx->buflen + size * nmemb + 1);
+  size_t write_size = size * nmemb;
+  size_t new_size = ctx->buflen + write_size;
+  if (new_size > DOH_MAX_RESPONSE_SIZE) {
+    WLOG_REQ("Response size is too large!");
+    return 0;
+  }
+  char *new_buf = (char *)realloc(ctx->buf, new_size + 1);
   if (new_buf == NULL) {
     ELOG_REQ("Out of memory!");
     return 0;
   }
   ctx->buf = new_buf;
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  memcpy(&(ctx->buf[ctx->buflen]), buf, size * nmemb);
-  ctx->buflen += size * nmemb;
+  memcpy(&(ctx->buf[ctx->buflen]), buf, write_size);
+  ctx->buflen = new_size;
   // We always expect to receive valid non-null ASCII but just to be safe...
   ctx->buf[ctx->buflen] = '\0';
-  return size * nmemb;
+  return write_size;
 }
 
 static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
@@ -67,8 +73,12 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
   GET_PTR(https_client_t, client, clientp);
 
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
-
-  DLOG("curl opened socket: %d", sock);
+  if (sock != -1) {
+    DLOG("curl opened socket: %d", sock);
+  } else {
+    ELOG("Could not open curl socket %d:%s", errno, strerror(errno));
+    return CURL_SOCKET_BAD;
+  }
 
   if (client->stat) {
     stat_connection_opened(client->stat);
@@ -79,18 +89,16 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
     return sock;
   }
 
-  if (sock != -1) {
-    if (addr->family == AF_INET) {
-        setsockopt(sock, IPPROTO_IP, IP_TOS,
-                   &client->opt->dscp, sizeof(client->opt->dscp));
-    }
-#if defined(IPV6_TCLASS)
-    else if (addr->family == AF_INET6) {
-        setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
-                   &client->opt->dscp, sizeof(client->opt->dscp));
-    }
-#endif
+  if (addr->family == AF_INET) {
+    setsockopt(sock, IPPROTO_IP, IP_TOS,
+               &client->opt->dscp, sizeof(client->opt->dscp));
   }
+#if defined(IPV6_TCLASS)
+  else if (addr->family == AF_INET6) {
+    setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
+               &client->opt->dscp, sizeof(client->opt->dscp));
+  }
+#endif
 #endif
 
   return sock;
@@ -103,7 +111,8 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   if (close(sock) == 0) {
     DLOG("curl closed socket: %d", sock);
   } else {
-    FLOG("Could not close curl socket %d:%s", errno, strerror(errno));
+    ELOG("Could not close curl socket %d:%s", errno, strerror(errno));
+    return 1;
   }
 
   if (client->stat) {
@@ -225,6 +234,7 @@ static void https_fetch_ctx_init(https_client_t *client,
                                         CURL_HTTP_VERSION_1_1 :
                                         CURL_HTTP_VERSION_2_0);
   if (easy_code != CURLE_OK) {
+    // hopefully errors will be logged once
     ELOG_REQ("CURLOPT_HTTP_VERSION error %d: %s",
              easy_code, curl_easy_strerror(easy_code));
     if (!client->opt->use_http_1_1) {
@@ -264,6 +274,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, 10 /* seconds */);
   // We know Google supports this, so force it.
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_ERRORBUFFER, ctx->curl_errbuf); // zeroed by calloc
   if (client->opt->curl_proxy) {
     DLOG_REQ("Using curl proxy: %s", client->opt->curl_proxy);
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_PROXY, client->opt->curl_proxy);
@@ -276,40 +287,57 @@ static void https_fetch_ctx_init(https_client_t *client,
 }
 
 static int https_fetch_ctx_process_response(https_client_t *client,
-                                            struct https_fetch_ctx *ctx)
+                                            struct https_fetch_ctx *ctx,
+                                            int curl_result_code)
 {
   CURLcode res = 0;
   long long_resp = 0;
   char *str_resp = NULL;
   int faulty_response = 1;
 
+  switch (curl_result_code) {
+    case CURLE_OK:
+      DLOG_REQ("curl request succeeded");
+      faulty_response = 0;
+      break;
+    case CURLE_WRITE_ERROR:
+      WLOG_REQ("Response content was too large");
+      break;
+    default:
+      WLOG_REQ("curl request failed with %d: %s", res, curl_easy_strerror(res));
+      if (ctx->curl_errbuf[0] != 0) {
+        WLOG_REQ("curl error message: %s", ctx->curl_errbuf);
+      }
+  }
+
   if ((res = curl_easy_getinfo(
         ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
     ELOG_REQ("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
-  } else {
-    if (long_resp == 200) {
-      faulty_response = 0;
-    } else if (long_resp == 0) {
+    faulty_response = 1;
+  } else if (long_resp != 200) {
+    faulty_response = 1;
+    if (long_resp == 0) {
       curl_off_t uploaded_bytes = 0;
       if (curl_easy_getinfo(ctx->curl, CURLINFO_SIZE_UPLOAD_T, &uploaded_bytes) == CURLE_OK &&
           uploaded_bytes > 0) {
-        ELOG_REQ("Connecting and sending request to resolver was successful, "
+        WLOG_REQ("Connecting and sending request to resolver was successful, "
                  "but no response was sent back");
         if (client->opt->use_http_1_1) {
           // for example Unbound DoH servers does not support HTTP/1.x, only HTTP/2
-          ELOG("Resolver may not support current HTTP/1.1 protocol version");
+          WLOG("Resolver may not support current HTTP/1.1 protocol version");
         }
       } else {
         // in case of HTTP/1.1 this can happen very often depending on DNS query frequency
         // example: server side closes the connection or curl force closes connections
         // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
         // it is 118 seconds)
+        // also: when no internet connection, this floods the log for every failed request
         WLOG_REQ("No response (probably connection has been closed or timed out)");
       }
     } else {
-      ELOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
+      WLOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen > 0) {
-        https_log_data(LOG_ERROR, ctx, ctx->buf, ctx->buflen);
+        https_log_data(LOG_WARNING, ctx, ctx->buf, ctx->buflen);
       }
     }
   }
@@ -319,12 +347,10 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     if ((res = curl_easy_getinfo(
           ctx->curl, CURLINFO_CONTENT_TYPE, &str_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
-    } else {
-      if (str_resp == NULL ||
-          strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
-        ELOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
-        faulty_response = 1;
-      }
+    } else if (str_resp == NULL ||
+        strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
+      WLOG_REQ("Invalid response Content-Type: %s", str_resp ? str_resp : "UNSET");
+      faulty_response = 1;
     }
   }
 
@@ -333,24 +359,25 @@ static int https_fetch_ctx_process_response(https_client_t *client,
             ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
     } else if (str_resp != NULL) {
-      ELOG_REQ("Request would be redirected to: %s", str_resp);
+      WLOG_REQ("Request would be redirected to: %s", str_resp);
       if (strcmp(str_resp, client->opt->resolver_url) != 0) {
-        ELOG("Please update Resolver URL to avoid redirection!");
+        WLOG("Please update Resolver URL to avoid redirection!");
       }
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
     } else if (long_resp != CURLE_OK) {
-      ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
+      WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
     }
     if ((res = curl_easy_getinfo(
             ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
       ELOG_REQ("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
     } else if (long_resp != 0) {
-      ELOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
+      WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
-        ELOG("Try to run application with -4 argument!");
+        // this can't be fixed here with option overwrite because of dns_poller
+        WLOG("Try to run application with -4 argument!");
       }
     }
   }
@@ -429,7 +456,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
 }
 
 static void https_fetch_ctx_cleanup(https_client_t *client,
-                                    struct https_fetch_ctx *ctx) {
+                                    struct https_fetch_ctx *ctx,
+                                    int curl_result_code) {
   struct https_fetch_ctx *last = NULL;
   struct https_fetch_ctx *cur = client->fetches;
   while (cur) {
@@ -438,8 +466,15 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
       if (code != CURLM_OK) {
         FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
       }
-      if (https_fetch_ctx_process_response(client, ctx) != 0) {
+      int drop_reply = 0;
+      if (curl_result_code < 0) {
+        WLOG_REQ("Request was aborted.");
+        drop_reply = 1;
+      } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
         ILOG_REQ("Response was faulty, skipping DNS reply.");
+        drop_reply = 1;
+      }
+      if (drop_reply) {
         free(ctx->buf);
         ctx->buf = NULL;
         ctx->buflen = 0;
@@ -469,7 +504,7 @@ static void check_multi_info(https_client_t *c) {
       struct https_fetch_ctx *n = c->fetches;
       while (n) {
         if (n->curl == msg->easy_handle) {
-          https_fetch_ctx_cleanup(c, n);
+          https_fetch_ctx_cleanup(c, n, msg->data.result);
           break;
         }
         n = n->next;
@@ -570,10 +605,7 @@ void https_client_init(https_client_t *c, options_t *opt,
   c->opt = opt;
   c->stat = stat;
 
-  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING,
-                           c->opt->use_http_1_1 ?
-                           CURLPIPE_HTTP1 :
-                           CURLPIPE_MULTIPLEX);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, MAX_TOTAL_CONNECTIONS);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
@@ -603,7 +635,7 @@ void https_client_reset(https_client_t *c) {
 
 void https_client_cleanup(https_client_t *c) {
   while (c->fetches) {
-    https_fetch_ctx_cleanup(c, c->fetches);
+    https_fetch_ctx_cleanup(c, c->fetches, -1);
   }
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);

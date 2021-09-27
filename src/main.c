@@ -17,21 +17,23 @@
 #include "stat.h"
 
 // Holds app state required for dns_server_cb.
+// NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
   https_client_t *https_client;
   struct curl_slist *resolv;
   const char *resolver_url;
-  uint8_t using_dns_poller;
   stat_t *stat;
+  uint8_t using_dns_poller;
 } app_state_t;
 
+// NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
-  uint16_t tx_id;
-  struct sockaddr_storage raddr;
   dns_server_t *dns_server;
   char* dns_req;
-  ev_tstamp start_tstamp;
   stat_t *stat;
+  ev_tstamp start_tstamp;
+  uint16_t tx_id;
+  struct sockaddr_storage raddr;
 } request_t;
 
 // Very very basic hostname parsing.
@@ -64,9 +66,9 @@ static int hostname_from_uri(const char* uri,
   return 1;
 }
 
-static void sigint_cb(struct ev_loop *loop,
-                      ev_signal __attribute__((__unused__)) *w,
-                      int __attribute__((__unused__)) revents) {
+static void signal_shutdown_cb(struct ev_loop *loop,
+                               ev_signal __attribute__((__unused__)) *w,
+                               int __attribute__((__unused__)) revents) {
   ILOG("Shutting down gracefully. To force exit, send signal again.");
   ev_break(loop, EVBREAK_ALL);
 }
@@ -266,8 +268,13 @@ int main(int argc, char *argv[]) {
 
   ev_signal sigint;
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  ev_signal_init(&sigint, sigint_cb, SIGINT);
+  ev_signal_init(&sigint, signal_shutdown_cb, SIGINT);
   ev_signal_start(loop, &sigint);
+
+  ev_signal sigterm;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  ev_signal_init(&sigterm, signal_shutdown_cb, SIGTERM);
+  ev_signal_start(loop, &sigterm);
 
   logging_flush_init(loop);
 
@@ -296,6 +303,7 @@ int main(int argc, char *argv[]) {
   curl_slist_free_all(app.resolv);
 
   logging_flush_cleanup(loop);
+  ev_signal_stop(loop, &sigterm);
   ev_signal_stop(loop, &sigint);
   ev_signal_stop(loop, &sigpipe);
   dns_server_stop(&dns_server);

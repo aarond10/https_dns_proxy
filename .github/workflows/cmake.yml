@@ -1,10 +1,6 @@
 name: CMake
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+on: [push, pull_request]
 
 jobs:
   build:
@@ -12,20 +8,23 @@ jobs:
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     strategy:
       matrix:
-        compiler: [gcc, clang]
+        compiler: [gcc-10, clang-12]
 
     steps:
     - uses: actions/checkout@v2
-    
+
     - name: Update APT
       run: sudo apt-get update
 
     - name: Setup Dependencies
-      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang clang-tidy
+      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-12 ${{ matrix.compiler }}
+
+    - name: Set clang-tidy
+      run: sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-12 100
 
     - name: Configure CMake
       env:

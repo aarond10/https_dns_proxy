@@ -12,7 +12,7 @@ static FILE *logf = NULL;        // NOLINT(cppcoreguidelines-avoid-non-const-glo
 static int loglevel = LOG_ERROR; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_timer logging_timer;   // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-static const char *SeverityStr[] = {
+static const char * const SeverityStr[] = {
   "[D]",
   "[I]",
   "[W]",
@@ -63,6 +63,7 @@ int logging_debug_enabled() {
   return loglevel <= LOG_DEBUG;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion) because of severity check
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (severity < loglevel) {
     return;
