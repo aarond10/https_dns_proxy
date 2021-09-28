@@ -301,7 +301,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       faulty_response = 0;
       break;
     case CURLE_WRITE_ERROR:
-      WLOG_REQ("Response content was too large");
+      WLOG_REQ("curl request failed with write error (probably response content was too large)");
       break;
     default:
       WLOG_REQ("curl request failed with %d: %s", res, curl_easy_strerror(res));
