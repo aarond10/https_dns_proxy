@@ -187,4 +187,5 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
 
 * Aaron Drew (aarond10@gmail.com): Original https_dns_proxy.
 * Soumya ([github.com/soumya92](https://github.com/soumya92)): RFC 8484 implementation.
+* baranyaib90 ([github.com/baranyaib90](https://github.com/baranyaib90)): fixes and improvements.
 
