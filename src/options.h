@@ -41,8 +41,10 @@ struct Options {
   // e.g. "socks5://127.0.0.1:1080"
   const char *curl_proxy;
 
-  // Hack to fix OpenWRT issues due to dropping of HTTP/2 support from libcurl.
-  int use_http_1_1;
+  // 1 = Use only HTTP/1.1 for limited OpenWRT libcurl (which is not built with HTTP/2 support)
+  // 2 = Use only HTTP/2 default
+  // 3 = Use only HTTP/3 QUIC
+  int use_http_version;
 
   // Print statistic interval
   int stats_interval;

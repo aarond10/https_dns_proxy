@@ -21,7 +21,10 @@ jobs:
       run: sudo apt-get update
 
     - name: Setup Dependencies
-      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-12 ${{ matrix.compiler }}
+      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-12 ${{ matrix.compiler }} dnsutils python3-pip
+
+    - name: Setup Robot Framework
+      run: sudo pip3 install robotframework
 
     - name: Set clang-tidy
       run: sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-12 100
@@ -36,3 +39,12 @@ jobs:
         CC: ${{ matrix.compiler }}
       # Build your program with the given configuration
       run: make -C ${{github.workspace}}/
+
+    - name: Test
+      run: make -C ${{github.workspace}}/ test ARGS="--verbose"
+
+    - uses: actions/upload-artifact@v2
+      if: ${{ success() || failure() }}
+      with:
+        name: robot-logs-${{ matrix.compiler }}
+        path: ${{github.workspace}}/tests/robot/*.html

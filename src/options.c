@@ -15,6 +15,8 @@
 #define O_CLOEXEC 0
 #endif
 
+#define DEFAULT_HTTP_VERSION 2
+
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
@@ -33,13 +35,13 @@ void options_init(struct Options *opt) {
   opt->ipv4 = 0;
   opt->resolver_url = "https://dns.google/dns-query";
   opt->curl_proxy = NULL;
-  opt->use_http_1_1 = 0;
+  opt->use_http_version = DEFAULT_HTTP_VERSION;
   opt->stats_interval = 0;
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxs:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqs:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -82,8 +84,15 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
         opt->loglevel--;
       }
       break;
-    case 'x': // http/1.1
-      opt->use_http_1_1 = 1;
+    case 'x': // http/1.1 fallthrough
+    case 'q': // http/3
+      if (opt->use_http_version == DEFAULT_HTTP_VERSION) {
+        opt->use_http_version = (c == 'x' ? 1 : 3);
+      } else {
+        printf("HTTP version already set to: HTTP/%s\n",
+               opt->use_http_version == 1 ? "1.1" : "3");
+        return -1;
+      }
       break;
     case 's': // stats interval
       opt->stats_interval = atoi(optarg);
@@ -193,6 +202,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("                         connections.\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl. (false)\n");
+  printf("  -q                     Use HTTP/3 (QUIC) only. (false)\n");
   printf("  -s statistic_interval  Optional statistic printout interval.\n"\
          "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
          defaults.stats_interval);
