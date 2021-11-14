@@ -16,8 +16,10 @@ endfunction()
 
 # CONFIG
 
-set(CMAKE_BUILD_TYPE "Debug")
-#set(CMAKE_BUILD_TYPE "Release")
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release")
+  message(STATUS "Setting build type to '${CMAKE_BUILD_TYPE}' as none was specified.")
+endif()
 
 set(CMAKE_C_FLAGS "-Wall -Wextra --pedantic -Wno-strict-aliasing -Wno-variadic-macros")
 set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
