@@ -122,7 +122,7 @@ There's also a WebUI package available for OpenWrt (`luci-app-https-dns-proxy`) 
 
 There is also an externally maintained [AUR package](https://aur.archlinux.org/packages/https-dns-proxy-git/) for latest git version. You can install as follows:
 ```
-user@arch:~# yaourt -S https-dns-proxy-git
+user@arch:~# yay -S https-dns-proxy-git
 ```
 
 ### Docker install
