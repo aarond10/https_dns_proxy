@@ -114,7 +114,7 @@ endif()
 
 configure_file(${TARGET_NAME}.service.in ${TARGET_NAME}.service)
 
-install(FILES ${TARGET_NAME}.service
+install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}.service
         DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system/)
 
 # TESTING
