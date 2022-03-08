@@ -21,6 +21,10 @@ if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Setting build type to '${CMAKE_BUILD_TYPE}' as none was specified.")
 endif()
 
+if (NOT CMAKE_INSTALL_BINDIR)
+  set(CMAKE_INSTALL_BINDIR bin)
+endif()
+
 set(CMAKE_C_FLAGS "-Wall -Wextra --pedantic -Wno-strict-aliasing -Wno-variadic-macros")
 set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
@@ -98,7 +102,7 @@ endif()
 
 # INSTALL
 
-install(TARGETS ${TARGET_NAME} DESTINATION bin)
+install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 set(SERVICE_EXTRA_OPTIONS "")
 if(IS_DIRECTORY "/etc/munin/plugins" AND
@@ -114,7 +118,7 @@ endif()
 
 configure_file(${TARGET_NAME}.service.in ${TARGET_NAME}.service)
 
-install(FILES ${TARGET_NAME}.service
+install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}.service
         DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system/)
 
 # TESTING
