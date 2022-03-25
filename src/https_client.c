@@ -486,44 +486,36 @@ static int https_fetch_ctx_process_response(https_client_t *client,
 }
 
 static void https_fetch_ctx_cleanup(https_client_t *client,
+                                    struct https_fetch_ctx *prev,
                                     struct https_fetch_ctx *ctx,
                                     int curl_result_code) {
-  struct https_fetch_ctx *last = NULL;
-  struct https_fetch_ctx *cur = client->fetches;
-  while (cur) {
-    if (cur == ctx) {
-      CURLMcode code = curl_multi_remove_handle(client->curlm, ctx->curl);
-      if (code != CURLM_OK) {
-        FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
-      }
-      int drop_reply = 0;
-      if (curl_result_code < 0) {
-        WLOG_REQ("Request was aborted.");
-        drop_reply = 1;
-      } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
-        ILOG_REQ("Response was faulty, skipping DNS reply.");
-        drop_reply = 1;
-      }
-      if (drop_reply) {
-        free(ctx->buf);
-        ctx->buf = NULL;
-        ctx->buflen = 0;
-      }
-      // callback must be called to avoid memleak
-      ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
-      curl_easy_cleanup(ctx->curl);
-      free(ctx->buf);
-      if (last) {
-        last->next = ctx->next;
-      } else {
-        client->fetches = ctx->next;
-      }
-      free(ctx);
-      return;
-    }
-    last = cur;
-    cur = cur->next;
+  CURLMcode code = curl_multi_remove_handle(client->curlm, ctx->curl);
+  if (code != CURLM_OK) {
+    FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
   }
+  int drop_reply = 0;
+  if (curl_result_code < 0) {
+    WLOG_REQ("Request was aborted.");
+    drop_reply = 1;
+  } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
+    ILOG_REQ("Response was faulty, skipping DNS reply.");
+    drop_reply = 1;
+  }
+  if (drop_reply) {
+    free(ctx->buf);
+    ctx->buf = NULL;
+    ctx->buflen = 0;
+  }
+  // callback must be called to avoid memleak
+  ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
+  curl_easy_cleanup(ctx->curl);
+  free(ctx->buf);
+  if (prev) {
+    prev->next = ctx->next;
+  } else {
+    client->fetches = ctx->next;
+  }
+  free(ctx);
 }
 
 static void check_multi_info(https_client_t *c) {
@@ -531,13 +523,15 @@ static void check_multi_info(https_client_t *c) {
   int msgs_left = 0;
   while ((msg = curl_multi_info_read(c->curlm, &msgs_left))) {
     if (msg->msg == CURLMSG_DONE) {
-      struct https_fetch_ctx *n = c->fetches;
-      while (n) {
-        if (n->curl == msg->easy_handle) {
-          https_fetch_ctx_cleanup(c, n, msg->data.result);
+      struct https_fetch_ctx *prev = NULL;
+      struct https_fetch_ctx *cur = c->fetches;
+      while (cur) {
+        if (cur->curl == msg->easy_handle) {
+          https_fetch_ctx_cleanup(c, prev, cur, msg->data.result);
           break;
         }
-        n = n->next;
+        prev = cur;
+        cur = cur->next;
       }
     }
   }
@@ -665,7 +659,7 @@ void https_client_reset(https_client_t *c) {
 
 void https_client_cleanup(https_client_t *c) {
   while (c->fetches) {
-    https_fetch_ctx_cleanup(c, c->fetches, -1);
+    https_fetch_ctx_cleanup(c, NULL, c->fetches, -1);
   }
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
