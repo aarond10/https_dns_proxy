@@ -16,3 +16,4 @@ rules.ninja
 log.html
 output.xml
 report.html
+custom_curl/
