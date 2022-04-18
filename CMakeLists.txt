@@ -95,6 +95,7 @@ set(SRC_LIST ${SRC_LIST})
 add_executable(${TARGET_NAME} ${SRC_LIST})
 set(LIBS ${LIBS} cares curl ev resolv)
 target_link_libraries(${TARGET_NAME} ${LIBS})
+set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 11)
 
 define_file_basename_for_sources("https_dns_proxy")
 
