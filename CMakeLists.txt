@@ -57,8 +57,17 @@ endif()
 # LIBRARY DEPENDENCIES
 
 find_path(LIBCARES_INCLUDE_DIR ares.h)
-find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
 find_path(LIBEV_INCLUDE_DIR ev.h)
+
+if(CUSTOM_LIBCURL_INSTALL_PATH)
+  message(STATUS "Using custom libcurl from: ${CUSTOM_LIBCURL_INSTALL_PATH}")
+  set(LIBCURL_INCLUDE_DIR "${CUSTOM_LIBCURL_INSTALL_PATH}/include")
+  link_directories(BEFORE "${CUSTOM_LIBCURL_INSTALL_PATH}/lib")
+else()
+  message(STATUS "Using system libcurl")
+  find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
+endif()
+
 include_directories(
   ${LIBCARES_INCLUDE_DIR} ${LIBCURL_INCLUDE_DIR}
   ${LIBEV_INCLUDE_DIR} src)
@@ -86,6 +95,7 @@ set(SRC_LIST ${SRC_LIST})
 add_executable(${TARGET_NAME} ${SRC_LIST})
 set(LIBS ${LIBS} cares curl ev resolv)
 target_link_libraries(${TARGET_NAME} ${LIBS})
+set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 11)
 
 define_file_basename_for_sources("https_dns_proxy")
 

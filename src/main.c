@@ -263,11 +263,14 @@ int main(int argc, char *argv[]) {
   dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
                   dns_server_cb, &app);
 
+  if (opt.gid != (uid_t)-1 && setgroups(1, &opt.gid)) {
+    FLOG("Failed to set groups");
+  }
   if (opt.gid != (uid_t)-1 && setgid(opt.gid)) {
-    FLOG("Failed to set gid.");
+    FLOG("Failed to set gid");
   }
   if (opt.uid != (uid_t)-1 && setuid(opt.uid)) {
-    FLOG("Failed to set uid.");
+    FLOG("Failed to set uid");
   }
 
   if (opt.daemonize) {

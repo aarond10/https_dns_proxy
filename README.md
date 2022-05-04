@@ -66,6 +66,20 @@ $ cmake .
 $ make
 ```
 
+### Build with HTTP/3 support
+
+* If system libcurl supports it by default nothing else has to be done
+
+* If a custom build of libcurl supports HTTP/3 which is installed in a different location, that can be set when running cmake:
+```
+$ cmake -D CUSTOM_LIBCURL_INSTALL_PATH=/absolute/path/to/custom/libcurl/install .
+```
+
+* Just to test HTTP/3 support for development purpose, simply run the following command and wait for a long time:
+```
+$ ./development_build_with_http3.sh
+```
+
 ## INSTALL
 
 ### Install built program
