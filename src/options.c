@@ -41,7 +41,7 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqs:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqs:C:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -96,6 +96,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 's': // stats interval
       opt->stats_interval = atoi(optarg);
+      break;
+    case 'C': // CA info
+      opt->ca_info = optarg;
       break;
     case '?':
       printf("Unknown option '-%c'\n", c);
@@ -206,6 +209,8 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -s statistic_interval  Optional statistic printout interval.\n"\
          "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
          defaults.stats_interval);
+  printf("  -C path                Optional directory containing CA "
+         "certificates.\n");
   printf("  -v                     Increase logging verbosity. (Default: error)\n");
   printf("                         Levels: fatal, stats, error, warning, info, debug\n");
   printf("                         Request issues are logged on warning level.\n");
