@@ -209,8 +209,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -s statistic_interval  Optional statistic printout interval.\n"\
          "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
          defaults.stats_interval);
-  printf("  -C path                Optional directory containing CA "
-         "certificates.\n");
+  printf("  -C path                Optional file containing CA certificates.\n");
   printf("  -v                     Increase logging verbosity. (Default: error)\n");
   printf("                         Levels: fatal, stats, error, warning, info, debug\n");
   printf("                         Request issues are logged on warning level.\n");
