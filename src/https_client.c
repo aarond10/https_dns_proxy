@@ -320,6 +320,9 @@ static void https_fetch_ctx_init(https_client_t *client,
     DLOG_REQ("Using curl proxy: %s", client->opt->curl_proxy);
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_PROXY, client->opt->curl_proxy);
   }
+  if (client->opt->ca_info) {
+    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CAINFO, client->opt->ca_info);
+  }
   CURLMcode multi_code = curl_multi_add_handle(client->curlm, ctx->curl);
   if (multi_code != CURLM_OK) {
     FLOG_REQ("curl_multi_add_handle error %d: %s",

@@ -48,6 +48,9 @@ struct Options {
 
   // Print statistic interval
   int stats_interval;
+
+  // Path to a file containing CA certificates
+  const char *ca_info;
 };
 typedef struct Options options_t;
 
