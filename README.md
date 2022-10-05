@@ -122,7 +122,7 @@ root@OpenWrt:~# /etc/init.d/https-dns-proxy enable
 root@OpenWrt:~# /etc/init.d/https-dns-proxy start
 ```
 
-OpenWrt's init script automatically updates the `dnsmasq` config to include only DoH servers on its start and restores old settings on stop. Additional information on OpenWrt-specific configuration is available at the [README](https://github.com/openwrt/packages/blob/master/net/https-dns-proxy/files/README.md).
+OpenWrt's init script automatically updates the `dnsmasq` config to include only DoH servers on its start and restores old settings on stop. Additional information on OpenWrt-specific configuration is available at the [README](https://docs.openwrt.melmac.net/https-dns-proxy/).
 
 If you are using any other resolver on your router you will need to manually replace any previously used servers with entries like:
 
