@@ -37,6 +37,7 @@ void options_init(struct Options *opt) {
   opt->curl_proxy = NULL;
   opt->use_http_version = DEFAULT_HTTP_VERSION;
   opt->stats_interval = 0;
+  opt->ca_info = NULL;
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
