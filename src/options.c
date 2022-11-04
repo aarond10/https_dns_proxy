@@ -22,7 +22,7 @@ const char * options_sw_version() {
 #ifdef SW_VERSION
   return SW_VERSION;
 #else
-  return "UNKNOWN";
+  return "2023.01.01-atLeast";  // update date sometimes, like 1-2 times a year
 #endif
 }
 

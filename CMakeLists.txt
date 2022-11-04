@@ -60,10 +60,8 @@ else()
 endif()
 
 if(NOT SW_VERSION)
-  set(SW_VERSION "UNKNOWN")
+  message(WARNING "Version unset, using hardcoded!")
 endif()
-
-message(STATUS "Version is set to: ${SW_VERSION}")
 
 # LIBRARY DEPENDENCIES
 
@@ -110,9 +108,12 @@ set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 11)
 
 define_file_basename_for_sources("https_dns_proxy")
 
-set_source_files_properties(
-  src/options.c
-  PROPERTIES COMPILE_FLAGS "-DSW_VERSION='\"${SW_VERSION}\"'")
+
+if(SW_VERSION)
+  set_source_files_properties(
+    src/options.c
+    PROPERTIES COMPILE_FLAGS "-DSW_VERSION='\"${SW_VERSION}\"'")
+endif()
 
 if(CLANG_TIDY_EXE)
   set_target_properties(
