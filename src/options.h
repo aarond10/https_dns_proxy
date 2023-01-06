@@ -57,6 +57,7 @@ typedef struct Options options_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
+const char * options_sw_version();
 void options_init(struct Options *opt);
 int options_parse_args(struct Options *opt, int argc, char **argv);
 void options_show_usage(int argc, char **argv);

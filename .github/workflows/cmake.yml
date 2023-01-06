@@ -21,7 +21,7 @@ jobs:
       run: sudo apt-get update
 
     - name: Setup Dependencies
-      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-12 ${{ matrix.compiler }} dnsutils python3-pip
+      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-12 ${{ matrix.compiler }} dnsutils python3-pip valgrind
 
     - name: Setup Robot Framework
       run: sudo pip3 install robotframework
@@ -47,4 +47,6 @@ jobs:
       if: ${{ success() || failure() }}
       with:
         name: robot-logs-${{ matrix.compiler }}
-        path: ${{github.workspace}}/tests/robot/*.html
+        path: |
+          ${{github.workspace}}/tests/robot/*.html
+          ${{github.workspace}}/tests/robot/valgrind-*.log

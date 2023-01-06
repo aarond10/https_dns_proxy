@@ -17,6 +17,15 @@
 
 #define DEFAULT_HTTP_VERSION 2
 
+
+const char * options_sw_version() {
+#ifdef SW_VERSION
+  return SW_VERSION;
+#else
+  return "2023.01.01-atLeast";  // update date sometimes, like 1-2 times a year
+#endif
+}
+
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
@@ -107,7 +116,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     case 'h':
       return -1;
     case 'V': // version
-      printf("%s\n", GIT_VERSION);
+      printf("%s\n", options_sw_version());
       exit(0);
     default:
       printf("Unknown state!");

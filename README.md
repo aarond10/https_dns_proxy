@@ -201,7 +201,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
 
 Functional tests can be executed using [Robot Framework](https://robotframework.org/).
 
-dig command is expected to be available.
+dig and valgrind commands are expected to be available.
 
 ```
 pip3 install robotframework

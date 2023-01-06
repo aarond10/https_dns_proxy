@@ -35,6 +35,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-zero-variadic-macro-arguments -Wno-
 endif()
 
 # VERSION
+# It is possible to define external default value like: cmake -DSW_VERSION=1.2-custom
 
 find_package(Git)
 if(Git_FOUND)
@@ -43,15 +44,23 @@ if(Git_FOUND)
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     OUTPUT_VARIABLE GIT_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Version: ${GIT_VERSION}")
+
+  if(GIT_VERSION)
+    set(SW_VERSION "${GIT_VERSION}")
+  else()
+    message(WARNING "Could not find out version from git command!")
+  endif()
 
   # May not update version in some cases (example: git commit --amend)
   set_property(GLOBAL APPEND
     PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/.git/index")
 else()
-  set(GIT_VERSION "UNKNOWN")
-  message(WARNING "Could not find git command! Version is set to: ${GIT_VERSION}")
+  message(WARNING "Could not find git command!")
+endif()
+
+if(NOT SW_VERSION)
+  message(WARNING "Version unset, using hardcoded!")
 endif()
 
 # LIBRARY DEPENDENCIES
@@ -99,9 +108,12 @@ set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 11)
 
 define_file_basename_for_sources("https_dns_proxy")
 
-set_source_files_properties(
-  src/main.c src/options.c
-  PROPERTIES COMPILE_FLAGS "-DGIT_VERSION='\"${GIT_VERSION}\"'")
+
+if(SW_VERSION)
+  set_source_files_properties(
+    src/options.c
+    PROPERTIES COMPILE_FLAGS "-DSW_VERSION='\"${SW_VERSION}\"'")
+endif()
 
 if(CLANG_TIDY_EXE)
   set_target_properties(
