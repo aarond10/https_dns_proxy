@@ -97,9 +97,15 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
 
 void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
                         size_t blen) {
+  errno = 0;   
   ssize_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
-  if(len == -1) {
-    DLOG("sendto failed: %s", strerror(errno));
+  if(len == -1) { 
+    if (errno == EMSGSIZE && blen > 1) {      
+      dns_server_respond(d, raddr, buf, blen/2);
+      dns_server_respond(d, raddr, buf + blen/2, blen/2 + blen % 1);
+    }
+    else
+      DLOG("sendto failed: %s", strerror(errno));
   }
 }
 

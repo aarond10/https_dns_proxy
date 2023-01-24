@@ -13,7 +13,10 @@
 #include "options.h"
 
 #define DOH_CONTENT_TYPE "application/dns-message"
+
+#ifndef DOH_MAX_RESPONSE_SIZE
 #define DOH_MAX_RESPONSE_SIZE 65535
+#endif
 
 // the following macros require to have ctx pointer to https_fetch_ctx structure
 // else: compilation failure will occur
