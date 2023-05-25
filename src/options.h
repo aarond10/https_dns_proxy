@@ -51,7 +51,7 @@ struct Options {
 
   // Path to a file containing CA certificates
   const char *ca_info;
-};
+} __attribute__((aligned(128)));
 typedef struct Options options_t;
 
 #ifdef __cplusplus
