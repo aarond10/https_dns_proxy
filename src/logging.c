@@ -78,10 +78,10 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  fprintf(logf, "%s %8lu.%06lu %s:%d ", SeverityStr[severity],
+  fprintf(logf, "%s %8llu.%06llu %s:%d ", SeverityStr[severity],
           (uint64_t)tv.tv_sec,
           (uint64_t)tv.tv_usec, file, line);
-
+  
   va_list args;
   va_start(args, fmt);
   vfprintf(logf, fmt, args);
