@@ -1,0 +1,18 @@
+{
+   ignore dlopen
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_dl_open
+}
+{
+   curl version ldap dependency
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:ldap_int_sasl_init
+   fun:ldap_int_initialize
+   fun:ldap_get_option
+   fun:curl_version
+   fun:main
+}

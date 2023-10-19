@@ -20,11 +20,11 @@ DEFAULT_HTTP_VERSION = 2
 };
 
 
-const char * options_sw_version() {
+const char * options_sw_version(void) {
 #ifdef SW_VERSION
   return SW_VERSION;
 #else
-  return "2023.01.01-atLeast";  // update date sometimes, like 1-2 times a year
+  return "2023.10.10-atLeast";  // update date sometimes, like 1-2 times a year
 #endif
 }
 

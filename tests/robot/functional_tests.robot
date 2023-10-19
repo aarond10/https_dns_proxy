@@ -33,7 +33,7 @@ Start Proxy
 
 Start Proxy With Valgrind
   [Arguments]  @{args}
-  @{default_args} =  Create List  --track-fds=yes  --time-stamp=yes  --log-file=valgrind-%p.log
+  @{default_args} =  Create List  --track-fds=yes  --time-stamp=yes  --log-file=valgrind-%p.log  --suppressions=valgrind.supp
   ...  --gen-suppressions=all  --tool=memcheck  --leak-check=full  --leak-resolution=high
   ...  --show-leak-kinds=all  --track-origins=yes  --keep-stacktraces=alloc-and-free
   ...  ${BINARY_PATH}  -v  -v  -v  -4  -p  ${PORT}
@@ -41,9 +41,9 @@ Start Proxy With Valgrind
   ${proxy} =  Start Process  valgrind  @{proces_args}
   ...  stderr=STDOUT  alias=proxy
   Set Test Variable  ${proxy}
-  Set Test Variable  ${dig_timeout}  4
+  Set Test Variable  ${dig_timeout}  10
   Set Test Variable  ${dig_retry}  2
-  Sleep  3  # wait for valgrind to fire up the proxy
+  Sleep  6  # wait for valgrind to fire up the proxy
   Common Test Setup
 
 Stop Proxy
@@ -68,7 +68,7 @@ Start Dig
 
 Stop Dig
   [Arguments]  ${handle}
-  ${result} =  Wait For Process  ${handle}  timeout=10 secs
+  ${result} =  Wait For Process  ${handle}  timeout=15 secs
   Log  ${result.stdout}
   Should Be Equal As Integers  ${result.rc}  0
   Should Contain  ${result.stdout}  ANSWER SECTION
