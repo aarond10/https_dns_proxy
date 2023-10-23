@@ -46,7 +46,8 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
     FLOG("Error creating socket");
   }
 
-  if ((res = bind(sock, ai->ai_addr, ai->ai_addrlen)) < 0) {
+  res = bind(sock, ai->ai_addr, ai->ai_addrlen);
+  if (res < 0) {
     FLOG("Error binding %s:%d: %s (%d)", listen_addr, listen_port,
          strerror(errno), res);
   }

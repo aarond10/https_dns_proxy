@@ -32,7 +32,7 @@ void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
   opt->logfile = "-";
-  opt->logfd = -1;
+  opt->logfd = STDOUT_FILENO;
   opt->loglevel = LOG_ERROR;
   opt->daemonize = 0;
   opt->dscp = 0;
@@ -126,16 +126,16 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     }
   }
   if (opt->user) {
-    struct passwd *p = NULL;
-    if (!(p = getpwnam(opt->user)) || !p->pw_uid) {
+    struct passwd *p = getpwnam(opt->user);
+    if (!p || !p->pw_uid) {
       printf("Username (%s) invalid.\n", opt->user);
       return -1;
     }
     opt->uid = p->pw_uid;
   }
   if (opt->group) {
-    struct group *g = NULL;
-    if (!(g = getgrnam(opt->group)) || !g->gr_gid) {
+    struct group *g = getgrnam(opt->group);
+    if (!g || !g->gr_gid) {
       printf("Group (%s) invalid.\n", opt->group);
       return -1;
     }
@@ -154,13 +154,13 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
            "----------------------------\n");
     sleep(1);
   }
-  if (opt->logfile == NULL ||
-      !strcmp(opt->logfile, "-")) {
-    opt->logfd = STDOUT_FILENO;
-  } else if ((opt->logfd = open(opt->logfile,
-                                O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC,
-                                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) <= 0) {
-    printf("Logfile '%s' is not writable.\n", opt->logfile);
+  if (opt->logfile != NULL && strcmp(opt->logfile, "-") != 0) {
+    opt->logfd = open(opt->logfile,
+                      O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC,
+                      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+    if (opt->logfd <= 0) {
+      printf("Could not open logfile '%s' for writing.\n", opt->logfile);
+    }
   }
   if (opt->resolver_url == NULL ||
       strncmp(opt->resolver_url, "https://", 8) != 0) {

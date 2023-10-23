@@ -53,8 +53,8 @@ static int hostname_from_uri(const char* uri,
   if (!isalpha(*(end - 1))) { return 0; }  // last digit non-alpha.
 
   // If using basic authentication in URL, chop off prefix.
-  char *tmp = NULL;
-  if ((tmp = strchr(uri, '@'))) {
+  char *tmp = strchr(uri, '@');
+  if (tmp) {
     tmp++;
     if (tmp < end) {
       uri = tmp;

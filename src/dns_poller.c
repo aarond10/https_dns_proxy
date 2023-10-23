@@ -135,8 +135,8 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      int bootstrap_dns_polling_interval,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
-  int r = 0;
-  if ((r = ares_library_init(ARES_LIB_INIT_ALL)) != ARES_SUCCESS) {
+  int r = ares_library_init(ARES_LIB_INIT_ALL);
+  if (r != ARES_SUCCESS) {
     FLOG("ares_library_init error: %s", ares_strerror(r));
   }
 
@@ -148,11 +148,13 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   };
   int optmask = ARES_OPT_TIMEOUTMS | ARES_OPT_TRIES | ARES_OPT_SOCK_STATE_CB;
 
-  if ((r = ares_init_options(&d->ares, &options, optmask)) != ARES_SUCCESS) {
+  r = ares_init_options(&d->ares, &options, optmask);
+  if (r != ARES_SUCCESS) {
     FLOG("ares_init_options error: %s", ares_strerror(r));
   }
 
-  if((r = ares_set_servers_ports_csv(d->ares, bootstrap_dns)) != ARES_SUCCESS) {
+  r = ares_set_servers_ports_csv(d->ares, bootstrap_dns);
+  if (r != ARES_SUCCESS) {
     FLOG("ares_set_servers_ports_csv error: %s", ares_strerror(r));
   }
 
