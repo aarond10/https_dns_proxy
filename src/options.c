@@ -15,7 +15,9 @@
 #define O_CLOEXEC 0
 #endif
 
-#define DEFAULT_HTTP_VERSION 2
+enum {
+DEFAULT_HTTP_VERSION = 2
+};
 
 
 const char * options_sw_version() {
