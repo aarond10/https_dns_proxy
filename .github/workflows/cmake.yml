@@ -8,26 +8,27 @@ jobs:
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     strategy:
+      fail-fast: false
       matrix:
-        compiler: [gcc-10, clang-12]
+        compiler: [gcc-12, clang-15]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@main
 
     - name: Update APT
       run: sudo apt-get update
 
     - name: Setup Dependencies
-      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-12 ${{ matrix.compiler }} dnsutils python3-pip valgrind
+      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy-15 ${{ matrix.compiler }} dnsutils python3-pip valgrind
 
     - name: Setup Robot Framework
       run: sudo pip3 install robotframework
 
     - name: Set clang-tidy
-      run: sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-12 100
+      run: sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-15 100
 
     - name: Configure CMake
       env:
@@ -43,7 +44,7 @@ jobs:
     - name: Test
       run: make -C ${{github.workspace}}/ test ARGS="--verbose"
 
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       if: ${{ success() || failure() }}
       with:
         name: robot-logs-${{ matrix.compiler }}

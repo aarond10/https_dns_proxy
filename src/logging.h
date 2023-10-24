@@ -16,10 +16,10 @@ void logging_flush_init(struct ev_loop *loop);
 void logging_flush_cleanup(struct ev_loop *loop);
 
 // Cleans up and flushes open logs.
-void logging_cleanup();
+void logging_cleanup(void);
 
 // Returns 1 if debug logging is enabled.
-int logging_debug_enabled();
+int logging_debug_enabled(void);
 
 // Internal. Don't use.
 void _log(const char *file, int line, int severity, const char *fmt, ...);

@@ -13,7 +13,9 @@
 #include "options.h"
 
 #define DOH_CONTENT_TYPE "application/dns-message"
-#define DOH_MAX_RESPONSE_SIZE 65535
+enum {
+DOH_MAX_RESPONSE_SIZE = 65535
+};
 
 // the following macros require to have ctx pointer to https_fetch_ctx structure
 // else: compilation failure will occur
@@ -354,8 +356,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       }
   }
 
-  if ((res = curl_easy_getinfo(
-        ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp)) != CURLE_OK) {
+  res = curl_easy_getinfo(ctx->curl, CURLINFO_RESPONSE_CODE, &long_resp);
+  if (res != CURLE_OK) {
     ELOG_REQ("CURLINFO_RESPONSE_CODE: %s", curl_easy_strerror(res));
     faulty_response = 1;
   } else if (long_resp != 200) {
@@ -389,8 +391,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
 
   if (!faulty_response)
   {
-    if ((res = curl_easy_getinfo(
-          ctx->curl, CURLINFO_CONTENT_TYPE, &str_resp)) != CURLE_OK) {
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_CONTENT_TYPE, &str_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_CONTENT_TYPE: %s", curl_easy_strerror(res));
     } else if (str_resp == NULL ||
         strncmp(str_resp, DOH_CONTENT_TYPE, sizeof(DOH_CONTENT_TYPE) - 1) != 0) {  // at least, start with it
@@ -400,8 +402,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   }
 
   if (logging_debug_enabled() || faulty_response || ctx->buflen == 0) {
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_REDIRECT_URL, &str_resp)) != CURLE_OK) {
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_REDIRECT_URL, &str_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_REDIRECT_URL: %s", curl_easy_strerror(res));
     } else if (str_resp != NULL) {
       WLOG_REQ("Request would be redirected to: %s", str_resp);
@@ -409,14 +411,16 @@ static int https_fetch_ctx_process_response(https_client_t *client,
         WLOG("Please update Resolver URL to avoid redirection!");
       }
     }
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp)) != CURLE_OK) {
+
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
     } else if (long_resp != CURLE_OK) {
       WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
     }
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_OS_ERRNO, &long_resp)) != CURLE_OK) {
+
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_OS_ERRNO, &long_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
     } else if (long_resp != 0) {
       WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
@@ -428,8 +432,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   }
 
   if (logging_debug_enabled() || client->stat) {
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_NUM_CONNECTS , &long_resp)) != CURLE_OK) {
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_NUM_CONNECTS , &long_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_NUM_CONNECTS: %s", curl_easy_strerror(res));
     } else {
       DLOG_REQ("CURLINFO_NUM_CONNECTS: %d", long_resp);
@@ -440,20 +444,22 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   }
 
   if (logging_debug_enabled()) {
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp)) != CURLE_OK) {
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
     } else {
       DLOG_REQ("CURLINFO_EFFECTIVE_URL: %s", str_resp);
     }
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_HTTP_VERSION, &long_resp)) != CURLE_OK) {
+
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_HTTP_VERSION, &long_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_HTTP_VERSION: %s", curl_easy_strerror(res));
     } else if (long_resp != CURL_HTTP_VERSION_NONE) {
       DLOG_REQ("CURLINFO_HTTP_VERSION: %s", http_version_str(long_resp));
     }
-    if ((res = curl_easy_getinfo(
-            ctx->curl, CURLINFO_PROTOCOL, &long_resp)) != CURLE_OK) {
+
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_PROTOCOL, &long_resp);
+    if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
     } else if (long_resp != CURLPROTO_HTTPS) {
       DLOG_REQ("CURLINFO_PROTOCOL: %d", long_resp);

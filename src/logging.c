@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
@@ -26,7 +27,7 @@ static void logging_timer_cb(struct ev_loop __attribute__((unused)) *loop,
                              ev_timer __attribute__((unused)) *w,
                              int __attribute__((unused)) revents) {
   if (logf) {
-    fflush(logf);
+    (void)fflush(logf);
   }
 }
 
@@ -47,20 +48,20 @@ void logging_flush_cleanup(struct ev_loop *loop) {
 
 void logging_init(int fd, int level) {
   if (logf) {
-    fclose(logf);
+    (void)fclose(logf);
   }
   logf = fdopen(fd, "a");
   loglevel = level;
 }
 
-void logging_cleanup() {
+void logging_cleanup(void) {
   if (logf) {
-    fclose(logf);
+    (void)fclose(logf);
   }
   logf = NULL;
 }
 
-int logging_debug_enabled() {
+int logging_debug_enabled(void) {
   return loglevel <= LOG_DEBUG;
 }
 
@@ -78,18 +79,18 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  fprintf(logf, "%s %8lu.%06lu %s:%d ", SeverityStr[severity],
+  (void)fprintf(logf, "%s %8"PRIu64".%06"PRIu64" %s:%d ", SeverityStr[severity],
           (uint64_t)tv.tv_sec,
           (uint64_t)tv.tv_usec, file, line);
 
   va_list args;
   va_start(args, fmt);
-  vfprintf(logf, fmt, args);
+  (void)vfprintf(logf, fmt, args);
   va_end(args);
-  fprintf(logf, "\n");
+  (void)fprintf(logf, "\n");
 
   if (severity >= LOG_FLUSH_LEVEL) {
-    fflush(logf);
+    (void)fflush(logf);
   }
   if (severity == LOG_FATAL) {
 #ifdef DEBUG

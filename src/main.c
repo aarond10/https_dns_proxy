@@ -53,8 +53,8 @@ static int hostname_from_uri(const char* uri,
   if (!isalpha(*(end - 1))) { return 0; }  // last digit non-alpha.
 
   // If using basic authentication in URL, chop off prefix.
-  char *tmp = NULL;
-  if ((tmp = strchr(uri, '@'))) {
+  char *tmp = strchr(uri, '@');
+  if (tmp) {
     tmp++;
     if (tmp < end) {
       uri = tmp;
@@ -169,7 +169,7 @@ static void dns_poll_cb(const char* hostname, void *data,
   memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (app->resolv && app->resolv->data) {
     char * old_addr_list = strstr(app->resolv->data, ":443:");
     if (old_addr_list) {

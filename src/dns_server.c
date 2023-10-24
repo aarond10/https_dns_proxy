@@ -10,6 +10,12 @@
 #include "dns_server.h"
 #include "logging.h"
 
+
+enum {
+REQUEST_MAX = 1500  // A default MTU. We don't do TCP so any bigger is likely a waste
+};
+
+
 // Creates and bind a listening UDP socket for incoming requests.
 static int get_listen_sock(const char *listen_addr, int listen_port,
                            unsigned int *addrlen) {
@@ -40,7 +46,8 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
     FLOG("Error creating socket");
   }
 
-  if ((res = bind(sock, ai->ai_addr, ai->ai_addrlen)) < 0) {
+  res = bind(sock, ai->ai_addr, ai->ai_addrlen);
+  if (res < 0) {
     FLOG("Error binding %s:%d: %s (%d)", listen_addr, listen_port,
          strerror(errno), res);
   }
@@ -50,9 +57,6 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
   ILOG("Listening on %s:%d", listen_addr, listen_port);
   return sock;
 }
-
-// A default MTU. We don't do TCP so any bigger is likely a waste.
-#define REQUEST_MAX 1500
 
 static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
                        ev_io *w, int __attribute__((unused)) revents) {

@@ -1,5 +1,5 @@
-project(HttpsDnsProxy C)
 cmake_minimum_required(VERSION 3.7)
+project(HttpsDnsProxy C)
 
 # FUNCTIONS
 
@@ -26,7 +26,7 @@ if (NOT CMAKE_INSTALL_BINDIR)
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra --pedantic -Wno-strict-aliasing -Wno-variadic-macros")
-set(CMAKE_C_FLAGS_DEBUG "-g -DDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-gdwarf-4 -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
 if ((CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 9) OR
@@ -92,7 +92,7 @@ if(NOT CLANG_TIDY_EXE)
   message(STATUS "clang-tidy not found.")
 else()
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-  set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-checks=*,-clang-analyzer-alpha.*,-misc-unused-parameters,-cert-err34-c,-google-readability-todo,-hicpp-signed-bitwise,-cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-gnu-folding-constant,-gnu-zero-variadic-macro-arguments,-readability-function-cognitive-complexity,-concurrency-mt-unsafe")
+  set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo")
 endif()
 
 # BUILD
