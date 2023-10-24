@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
@@ -78,7 +79,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  (void)fprintf(logf, "%s %8lu.%06lu %s:%d ", SeverityStr[severity],
+  (void)fprintf(logf, "%s %8"PRIu64".%06"PRIu64" %s:%d ", SeverityStr[severity],
           (uint64_t)tv.tv_sec,
           (uint64_t)tv.tv_usec, file, line);
 
