@@ -36,34 +36,33 @@ typedef struct {
   struct sockaddr_storage raddr;
 } request_t;
 
-// Very very basic hostname parsing.
-// Note: Performs basic checks to see if last digit is non-alpha.
-// Non-alpha hostnames are assumed to be IP addresses. e.g. foo.1
-// Returns non-zero on success, zero on failure.
-static int hostname_from_uri(const char* uri,
-                             char* hostname, int hostname_len) {
-  if (strncmp(uri, "https://", 8) != 0) { return 0; }  // not https://
-  uri += 8;
-  const char *end = uri;
-  while (*end && *end != '/') { end++; }
-  if (end - uri >= hostname_len) {
-    return 0;
-  }
-  if (end == uri) { return 0; }  // empty string.
-  if (!isalpha(*(end - 1))) { return 0; }  // last digit non-alpha.
+static int is_ipv4_address(char *str) {
+    struct in6_addr addr;
+    return inet_pton(AF_INET, str, &addr) == 1;
+}
 
-  // If using basic authentication in URL, chop off prefix.
-  char *tmp = strchr(uri, '@');
-  if (tmp) {
-    tmp++;
-    if (tmp < end) {
-      uri = tmp;
+static int hostname_from_url(const char* url_in,
+                             char* hostname, const size_t hostname_len) {
+  int res = 0;
+  CURLU *url = curl_url();
+  if (url != NULL) {
+    CURLUcode rc = curl_url_set(url, CURLUPART_URL, url_in, 0);
+    if (rc == CURLUE_OK) {
+      char *host = NULL;
+      rc = curl_url_get(url, CURLUPART_HOST, &host, 0);
+      const size_t host_len = strlen(host);
+      if (rc == CURLUE_OK && host_len < hostname_len &&
+          host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
+          !is_ipv4_address(host)) {
+        strncpy(hostname, host, hostname_len-1); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+        hostname[hostname_len-1] = '\0';
+        res = 1; // success
+      }
+      curl_free(host);
     }
+    curl_url_cleanup(url);
   }
-
-  strncpy(hostname, uri, end - uri); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  hostname[end - uri] = 0;
-  return 1;
+  return res;
 }
 
 static void signal_shutdown_cb(struct ev_loop *loop,
@@ -298,9 +297,9 @@ int main(int argc, char *argv[]) {
   logging_flush_init(loop);
 
   dns_poller_t dns_poller;
-  char hostname[255];  // Domain names shouldn't exceed 253 chars.
+  char hostname[255] = {0};  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
-    if (hostname_from_uri(opt.resolver_url, hostname, 254)) {
+    if (hostname_from_url(opt.resolver_url, hostname, sizeof(hostname))) {
       app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
                       opt.bootstrap_dns_polling_interval, hostname,
