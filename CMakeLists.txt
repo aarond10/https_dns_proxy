@@ -83,16 +83,22 @@ include_directories(
 
 # CLANG TIDY
 
-find_program(
-  CLANG_TIDY_EXE
-  NAMES "clang-tidy"
-  DOC "Path to clang-tidy executable"
-  )
-if(NOT CLANG_TIDY_EXE)
-  message(STATUS "clang-tidy not found.")
+option(USE_CLANG_TIDY "Use clang-tidy during compilation" ON)
+
+if(USE_CLANG_TIDY)
+  find_program(
+    CLANG_TIDY_EXE
+    NAMES "clang-tidy"
+    DOC "Path to clang-tidy executable"
+    )
+  if(NOT CLANG_TIDY_EXE)
+    message(STATUS "clang-tidy not found.")
+  else()
+    message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo")
+  endif()
 else()
-  message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-  set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo")
+  message(STATUS "Not using clang-tidy.")
 endif()
 
 # BUILD
