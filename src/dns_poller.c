@@ -1,4 +1,3 @@
-#include <math.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netdb.h>       // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
 
