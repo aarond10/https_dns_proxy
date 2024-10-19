@@ -1,12 +1,14 @@
 #ifndef _LOGGING_H_
 #define _LOGGING_H_
 
+#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <ev.h>
+#include <ev.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 // Initializes logging.
 // Writes logs to descriptor 'fd' for log levels above or equal to 'level'.
 void logging_init(int fd, int level);
@@ -23,6 +25,7 @@ int logging_debug_enabled(void);
 
 // Internal. Don't use.
 void _log(const char *file, int line, int severity, const char *fmt, ...);
+
 #ifdef __cplusplus
 }
 #endif

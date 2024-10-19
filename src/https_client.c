@@ -3,6 +3,7 @@
 #include <ev.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdint.h>
 #include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
@@ -11,6 +12,7 @@
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
+#include "stat.h"
 
 #define DOH_CONTENT_TYPE "application/dns-message"
 enum {
@@ -162,7 +164,7 @@ int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
                      char *data, size_t size, void *userp)
 {
   GET_PTR(struct https_fetch_ctx, ctx, userp);
-  const char *prefix = "";
+  const char *prefix = NULL;
 
   switch (type) {
     case CURLINFO_TEXT:
@@ -458,11 +460,11 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       DLOG_REQ("CURLINFO_HTTP_VERSION: %s", http_version_str(long_resp));
     }
 
-    res = curl_easy_getinfo(ctx->curl, CURLINFO_PROTOCOL, &long_resp);
+    res = curl_easy_getinfo(ctx->curl, CURLINFO_SCHEME, &str_resp);
     if (res != CURLE_OK) {
-      ELOG_REQ("CURLINFO_PROTOCOL: %s", curl_easy_strerror(res));
-    } else if (long_resp != CURLPROTO_HTTPS) {
-      DLOG_REQ("CURLINFO_PROTOCOL: %d", long_resp);
+      ELOG_REQ("CURLINFO_SCHEME: %s", curl_easy_strerror(res));
+    } else if (strcasecmp(str_resp, "https") != 0) {
+      DLOG_REQ("CURLINFO_SCHEME: %s", str_resp);
     }
 
     double namelookup_time = NAN;
