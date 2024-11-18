@@ -10,7 +10,7 @@
 /* logs of this severity or higher are flushed immediately after write */
 #define LOG_FLUSH_LEVEL LOG_WARNING
 
-static FILE *logf = NULL;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static FILE *logfile = NULL;     // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static int loglevel = LOG_ERROR; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_timer logging_timer;   // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -23,11 +23,11 @@ static const char * const SeverityStr[] = {
   "[F]"
 };
 
-static void logging_timer_cb(struct ev_loop __attribute__((unused)) *loop,
+void logging_timer_cb(struct ev_loop __attribute__((unused)) *loop,
                              ev_timer __attribute__((unused)) *w,
                              int __attribute__((unused)) revents) {
-  if (logf) {
-    (void)fflush(logf);
+  if (logfile) {
+    (void)fflush(logfile);
   }
 }
 
@@ -47,18 +47,18 @@ void logging_flush_cleanup(struct ev_loop *loop) {
 }
 
 void logging_init(int fd, int level) {
-  if (logf) {
-    (void)fclose(logf);
+  if (logfile) {
+    (void)fclose(logfile);
   }
-  logf = fdopen(fd, "a");
+  logfile = fdopen(fd, "a");
   loglevel = level;
 }
 
 void logging_cleanup(void) {
-  if (logf) {
-    (void)fclose(logf);
+  if (logfile) {
+    (void)fclose(logfile);
   }
-  logf = NULL;
+  logfile = NULL;
 }
 
 int logging_debug_enabled(void) {
@@ -73,24 +73,28 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (severity < 0 || severity >= LOG_MAX) {
     FLOG("Unknown log severity: %d\n", severity);
   }
-  if (!logf) {
-    logf = fdopen(STDOUT_FILENO, "w");
+  if (!logfile) {
+    logfile = fdopen(STDOUT_FILENO, "w");
   }
 
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  (void)fprintf(logf, "%s %8"PRIu64".%06"PRIu64" %s:%d ", SeverityStr[severity],
+
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  (void)fprintf(logfile, "%s %8"PRIu64".%06"PRIu64" %s:%d ", SeverityStr[severity],
           (uint64_t)tv.tv_sec,
           (uint64_t)tv.tv_usec, file, line);
 
   va_list args;
   va_start(args, fmt);
-  (void)vfprintf(logf, fmt, args);
+  (void)vfprintf(logfile, fmt, args);
   va_end(args);
-  (void)fprintf(logf, "\n");
+
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  (void)fprintf(logfile, "\n");
 
   if (severity >= LOG_FLUSH_LEVEL) {
-    (void)fflush(logf);
+    (void)fflush(logfile);
   }
   if (severity == LOG_FATAL) {
 #ifdef DEBUG

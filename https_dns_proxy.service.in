@@ -7,9 +7,10 @@ After=network.target
 
 [Service]
 Type=simple
+DynamicUser=yes
 Restart=on-failure
 ExecStart=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/https_dns_proxy \
-  -u nobody -g nogroup -v -v ${SERVICE_EXTRA_OPTIONS}
+  -v -v ${SERVICE_EXTRA_OPTIONS}
 TimeoutStopSec=10
 
 [Install]

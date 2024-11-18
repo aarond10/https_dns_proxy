@@ -64,7 +64,7 @@ Start Dig
   [Arguments]  ${domain}=google.com
   ${handle} =  Start Process  dig  +timeout\=${dig_timeout}  +retry\=${dig_retry}  @127.0.0.1  -p  ${PORT}  ${domain}
   ...  stderr=STDOUT  alias=dig
-  [Return]  ${handle}
+  RETURN  ${handle}
 
 Stop Dig
   [Arguments]  ${handle}
