@@ -8,7 +8,9 @@
 #include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ares.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 
+#include "curlite.h"
 #include "dns_poller.h"
 #include "dns_server.h"
 #include "https_client.h"

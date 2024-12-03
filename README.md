@@ -43,7 +43,7 @@ only makes sense if you trust your DoH provider.
 
 ## Build
 
-Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.64.0)`, `libev (>=4.25)`.
+Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.55.0)`, `libev (>=4.25)`.
 
 On Debian-derived systems those are libc-ares-dev,
 libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
@@ -218,4 +218,5 @@ python3 -m robot.run tests/robot/functional_tests.robot
 * Aaron Drew (aarond10@gmail.com): Original https_dns_proxy.
 * Soumya ([github.com/soumya92](https://github.com/soumya92)): RFC 8484 implementation.
 * baranyaib90 ([github.com/baranyaib90](https://github.com/baranyaib90)): fixes and improvements.
+* Hacksign ([github.com/Hacksign](https://github.com/Hacksign)): Lower libcur dependency to version 7.55.0 to fit more old systems.
 
