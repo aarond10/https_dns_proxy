@@ -76,6 +76,14 @@ else()
   message(STATUS "Using system libcurl")
   find_path(LIBCURL_INCLUDE_DIR curl/curl.h)
 endif()
+file(READ "${LIBCURL_INCLUDE_DIR}/curl/curlver.h" curlver_header)
+string(REGEX MATCH "#define LIBCURL_VERSION \"([\-a-zA-Z0-9\.]+)\"" curl_version "${curlver_header}")
+set(LIBCURL_VERSION ${CMAKE_MATCH_1})
+message(STATUS "Curl version: ${LIBCURL_VERSION}")
+if (${LIBCURL_VERSION} VERSION_LESS "7.62.0")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CURLITE=1 -DHAVE_SYS_SOCKET_H=1")
+  message(STATUS "Detect old version of curl, use curlite.h/curlite.c")
+endif()
 
 include_directories(
   ${LIBCARES_INCLUDE_DIR} ${LIBCURL_INCLUDE_DIR}
