@@ -49,11 +49,12 @@ void options_init(struct Options *opt) {
   opt->use_http_version = DEFAULT_HTTP_VERSION;
   opt->stats_interval = 0;
   opt->ca_info = NULL;
+  opt->flight_recorder_size = 0;
 }
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqs:C:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqs:C:F:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -111,6 +112,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       break;
     case 'C': // CA info
       opt->ca_info = optarg;
+      break;
+    case 'F': // Flight recorder size
+      opt->flight_recorder_size = atoi(optarg);
       break;
     case '?':
       printf("Unknown option '-%c'\n", c);
@@ -177,6 +181,11 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     printf("Statistic interval must be between 0 and 3600.\n");
     return -1;
   }
+  if (opt->flight_recorder_size != 0 &&
+      (opt->flight_recorder_size < 100 || opt->flight_recorder_size > 100000)) {
+    printf("Flight recorder limit must be between 100 and 100000.\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -187,7 +196,8 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
   printf("        [-i <polling_interval>] [-4] [-r <resolver_url>]\n");
   printf("        [-t <proxy_server>] [-l <logfile>] [-c <dscp_codepoint>]\n");
-  printf("        [-x] [-q] [-s <statistic_interval>] [-v]+ [-V] [-h]\n\n");
+  printf("        [-x] [-q] [-s <statistic_interval>] [-F <log_limit>]\n");
+  printf("        [-v]+ [-V] [-h]\n\n");
   printf("  -a listen_addr         Local IPv4/v6 address to bind to. (%s)\n",
          defaults.listen_addr);
   printf("  -p listen_port         Local port to bind to. (%d)\n",
@@ -225,13 +235,17 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -v                     Increase logging verbosity. (Default: error)\n");
   printf("                         Levels: fatal, stats, error, warning, info, debug\n");
   printf("                         Request issues are logged on warning level.\n");
+  printf("  -F log_limit           Flight recorder: storing desired amount of logs from all levels\n"\
+         "                         in memory and dumping them on fatal error or on SIGUSR2 signal.\n"
+         "                         (Default: %u, Min: 100, Max: 100000)\n",
+         defaults.flight_recorder_size);
   printf("  -V                     Print version and exit.\n");
   printf("  -h                     Print help and exit.\n");
   options_cleanup(&defaults);
 }
 
 void options_cleanup(struct Options *opt) {
-  if (opt->logfd > 0) {
+  if (opt->logfd != STDOUT_FILENO && opt->logfd > 0) {
     close(opt->logfd);
   }
 }

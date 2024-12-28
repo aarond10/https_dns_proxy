@@ -162,7 +162,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
         [-d] [-u <user>] [-g <group>] [-b <dns_servers>]
         [-i <polling_interval>] [-4] [-r <resolver_url>]
         [-t <proxy_server>] [-l <logfile>] [-c <dscp_codepoint>]
-        [-x] [-q] [-s <statistic_interval>] [-v]+ [-V] [-h]
+        [-x] [-q] [-s <statistic_interval>] [-F <log_limit>]
+        [-v]+ [-V] [-h]
 
   -a listen_addr         Local IPv4/v6 address to bind to. (127.0.0.1)
   -p listen_port         Local port to bind to. (5053)
@@ -190,9 +191,13 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -q                     Use HTTP/3 (QUIC) only. (false)
   -s statistic_interval  Optional statistic printout interval.
                          (Default: 0, Disabled: 0, Min: 1, Max: 3600)
+  -C path                Optional file containing CA certificates.
   -v                     Increase logging verbosity. (Default: error)
                          Levels: fatal, stats, error, warning, info, debug
                          Request issues are logged on warning level.
+  -F log_limit           Flight recorder: storing desired amount of logs from all levels
+                         in memory and dumping them on fatal error or on SIGUSR2 signal.
+                         (Default: 0, Min: 100, Max: 100000)
   -V                     Print version and exit.
   -h                     Print help and exit.
 ```

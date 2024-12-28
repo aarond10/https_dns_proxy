@@ -213,7 +213,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  logging_init(opt.logfd, opt.loglevel);
+  logging_init(opt.logfd, opt.loglevel, opt.flight_recorder_size);
 
   ILOG("Version: %s", options_sw_version());
   ILOG("Built: " __DATE__ " " __TIME__);
@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
   ev_signal_init(&sigterm, signal_shutdown_cb, SIGTERM);
   ev_signal_start(loop, &sigterm);
 
-  logging_flush_init(loop);
+  logging_events_init(loop);
 
   dns_poller_t dns_poller;
   char hostname[255] = {0};  // Domain names shouldn't exceed 253 chars.
@@ -320,7 +320,7 @@ int main(int argc, char *argv[]) {
   }
   curl_slist_free_all(app.resolv);
 
-  logging_flush_cleanup(loop);
+  logging_events_cleanup(loop);
   ev_signal_stop(loop, &sigterm);
   ev_signal_stop(loop, &sigint);
   ev_signal_stop(loop, &sigpipe);

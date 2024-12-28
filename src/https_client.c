@@ -630,6 +630,7 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   if (!io_event_ptr) {
     ELOG("curl needed more IO event handler, than the number of maximum connections: %d", MAX_TOTAL_CONNECTIONS);
     dump_io_events(c->io_events);
+    logging_flight_recorder_dump();
     return -1;
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
