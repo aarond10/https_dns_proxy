@@ -36,7 +36,7 @@ typedef struct {
 
   ev_timer timer;
   ev_io io_events[MAX_TOTAL_CONNECTIONS];
-  int still_running;
+  int connections;
 
   options_t *opt;
   stat_t *stat;

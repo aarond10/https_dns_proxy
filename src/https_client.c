@@ -81,13 +81,19 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
                                          struct curl_sockaddr *addr) {
   GET_PTR(https_client_t, client, clientp);
 
+  if (client->connections >= MAX_TOTAL_CONNECTIONS) {
+    ELOG("curl needed more socket, than the number of maximum connections: %d", MAX_TOTAL_CONNECTIONS);
+    return CURL_SOCKET_BAD;
+  }
+
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
-  if (sock != -1) {
-    DLOG("curl opened socket: %d", sock);
-  } else {
+  if (sock == -1) {
     ELOG("Could not open curl socket %d:%s", errno, strerror(errno));
     return CURL_SOCKET_BAD;
   }
+
+  DLOG("curl opened socket: %d", sock);
+  client->connections++;
 
   if (client->stat) {
     stat_connection_opened(client->stat);
@@ -117,12 +123,13 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
 {
   GET_PTR(https_client_t, client, clientp);
 
-  if (close(sock) == 0) {
-    DLOG("curl closed socket: %d", sock);
-  } else {
+  if (close(sock) != 0) {
     ELOG("Could not close curl socket %d:%s", errno, strerror(errno));
     return 1;
   }
+
+  DLOG("curl closed socket: %d", sock);
+  client->connections--;
 
   if (client->stat) {
     stat_connection_closed(client->stat);
@@ -297,14 +304,10 @@ static void https_fetch_ctx_init(https_client_t *client,
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_DEBUGFUNCTION, https_curl_debug);
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_DEBUGDATA, ctx);
   }
-  if (logging_debug_enabled() || client->stat || client->opt->dscp) {
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETDATA, client);
-  }
-  if (logging_debug_enabled() || client->stat) {
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETDATA, client);
-  }
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETDATA, client);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETDATA, client);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_URL, url);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_HTTPHEADER, client->header_list);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_POSTFIELDSIZE, datalen);
@@ -564,10 +567,11 @@ static void check_multi_info(https_client_t *c) {
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     struct ev_io *w, int revents) {
   GET_PTR(https_client_t, c, w->data);
+  int ignore = 0;
   CURLMcode code = curl_multi_socket_action(
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
                        (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
-      &c->still_running);
+      &ignore);
   if (code == CURLM_OK) {
     check_multi_info(c);
   }
@@ -583,8 +587,9 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
                      struct ev_timer *w, int __attribute__((unused)) revents) {
   GET_PTR(https_client_t, c, w->data);
+  int ignore = 0;
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
-                                            &c->still_running);
+                                            &ignore);
   if (code != CURLM_OK) {
     ELOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
   }
