@@ -6,7 +6,10 @@
 #include "options.h"
 #include "stat.h"
 
-#define MAX_TOTAL_CONNECTIONS 8
+enum {
+  HTTPS_SOCKET_LIMIT = 12,
+  HTTPS_CONNECTION_LIMIT = 8,
+};
 
 // Callback type for receiving data when a transfer finishes.
 typedef void (*https_response_cb)(void *data, char *buf, size_t buflen);
@@ -35,7 +38,7 @@ typedef struct {
   struct https_fetch_ctx *fetches;
 
   ev_timer timer;
-  ev_io io_events[MAX_TOTAL_CONNECTIONS];
+  ev_io io_events[HTTPS_SOCKET_LIMIT];
   int connections;
 
   options_t *opt;
