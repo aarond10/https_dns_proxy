@@ -47,6 +47,7 @@ void options_init(struct Options *opt) {
   opt->resolver_url = "https://dns.google/dns-query";
   opt->curl_proxy = NULL;
   opt->use_http_version = DEFAULT_HTTP_VERSION;
+  opt->max_idle_time = 118;
   opt->stats_interval = 0;
   opt->ca_info = NULL;
   opt->flight_recorder_size = 0;
@@ -54,7 +55,7 @@ void options_init(struct Options *opt) {
 
 int options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqs:C:F:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqm:s:C:F:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -106,6 +107,9 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
                opt->use_http_version == 1 ? "1.1" : "3");
         return -1;
       }
+      break;
+    case 'm':
+      opt->max_idle_time = atoi(optarg);
       break;
     case 's': // stats interval
       opt->stats_interval = atoi(optarg);
@@ -177,6 +181,11 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     printf("DNS servers polling interval must be between 5 and 3600.\n");
     return -1;
   }
+  if (opt->max_idle_time < 0 ||
+      opt->max_idle_time > 3600) {
+    printf("Maximum idle time must be between 0 and 3600.\n");
+    return -1;
+  }
   if (opt->stats_interval < 0 || opt->stats_interval > 3600) {
     printf("Statistic interval must be between 0 and 3600.\n");
     return -1;
@@ -228,6 +237,9 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl. (false)\n");
   printf("  -q                     Use HTTP/3 (QUIC) only. (false)\n");
+  printf("  -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.\n"\
+         "                         (Default: %d, Min: 0, Max: 3600)\n",
+         defaults.max_idle_time);
   printf("  -s statistic_interval  Optional statistic printout interval.\n"\
          "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
          defaults.stats_interval);

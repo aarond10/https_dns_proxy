@@ -46,6 +46,8 @@ struct Options {
   // 3 = Use only HTTP/3 QUIC
   int use_http_version;
 
+  int max_idle_time;
+
   // Print statistic interval
   int stats_interval;
 

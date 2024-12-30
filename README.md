@@ -43,7 +43,7 @@ only makes sense if you trust your DoH provider.
 
 ## Build
 
-Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.64.0)`, `libev (>=4.25)`.
+Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.65.0)`, `libev (>=4.25)`.
 
 On Debian-derived systems those are libc-ares-dev,
 libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
@@ -189,6 +189,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl. (false)
   -q                     Use HTTP/3 (QUIC) only. (false)
+  -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.
+                         (Default: 118, Min: 0, Max: 3600)
   -s statistic_interval  Optional statistic printout interval.
                          (Default: 0, Disabled: 0, Min: 1, Max: 3600)
   -C path                Optional file containing CA certificates.
