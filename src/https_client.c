@@ -319,7 +319,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_USERAGENT, "https_dns_proxy/0.3");
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_FOLLOWLOCATION, 0);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_NOSIGNAL, 0);
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, 10 /* seconds */);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, client->connections > 0 ? 5 : 10 /* seconds */);
   // We know Google supports this, so force it.
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_ERRORBUFFER, ctx->curl_errbuf); // zeroed by calloc
