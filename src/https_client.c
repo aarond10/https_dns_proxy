@@ -50,6 +50,11 @@ DOH_MAX_RESPONSE_SIZE = 65535
     FLOG("Unexpected NULL pointer for " #var_name "(" #type ")"); \
   }
 
+static void https_fetch_ctx_cleanup(https_client_t *client,
+                                    struct https_fetch_ctx *prev,
+                                    struct https_fetch_ctx *ctx,
+                                    int curl_result_code);
+
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   GET_PTR(struct https_fetch_ctx, ctx, userp);
   size_t write_size = size * nmemb;
@@ -265,7 +270,6 @@ static void https_set_request_version(https_client_t *client,
     } else if (client->opt->use_http_version == 2) {
       ELOG("Try to run application with -x argument! Falling back to HTTP/1.1 version.");
       client->opt->use_http_version = 1;
-      // TODO: consider CURLMOPT_PIPELINING setting??
     }
   }
 }
@@ -313,6 +317,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPINTVL, 50L);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_MAXAGE_CONN, 300L);
 #endif
+  // FIXME: consider adding usage of: CURLOPT_PIPEWAIT
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_USERAGENT, "https_dns_proxy/0.3");
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_FOLLOWLOCATION, 0);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_NOSIGNAL, 0);
@@ -329,8 +334,13 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
   CURLMcode multi_code = curl_multi_add_handle(client->curlm, ctx->curl);
   if (multi_code != CURLM_OK) {
-    FLOG_REQ("curl_multi_add_handle error %d: %s",
-             multi_code, curl_multi_strerror(multi_code));
+    ELOG_REQ("curl_multi_add_handle error %d: %s", multi_code, curl_multi_strerror(multi_code));
+    if (multi_code == CURLM_ABORTED_BY_CALLBACK) {
+      WLOG_REQ("Resetting HTTPS client to recover from faulty state!");
+      https_client_reset(client);
+    } else {
+      https_fetch_ctx_cleanup(client, NULL, client->fetches, -1);  // dropping current failed request
+    }
   }
 }
 
@@ -506,10 +516,10 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   }
   int drop_reply = 0;
   if (curl_result_code < 0) {
-    WLOG_REQ("Request was aborted.");
+    WLOG_REQ("Request was aborted");
     drop_reply = 1;
   } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
-    ILOG_REQ("Response was faulty, skipping DNS reply.");
+    ILOG_REQ("Response was faulty, skipping DNS reply");
     drop_reply = 1;
   }
   if (drop_reply) {
@@ -545,6 +555,9 @@ static void check_multi_info(https_client_t *c) {
         cur = cur->next;
       }
     }
+    else {
+      ELOG("Unhandled curl message: %d", msg->msg);  // unlikely
+    }
   }
 }
 
@@ -555,10 +568,16 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
                        (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
       &c->still_running);
-  if (code != CURLM_OK) {
-    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+  if (code == CURLM_OK) {
+    check_multi_info(c);
   }
-  check_multi_info(c);
+  else {
+    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+    if (code == CURLM_ABORTED_BY_CALLBACK) {
+      WLOG("Resetting HTTPS client to recover from faulty state!");
+      https_client_reset(c);
+    }
+  }
 }
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
@@ -567,7 +586,7 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
                                             &c->still_running);
   if (code != CURLM_OK) {
-    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+    ELOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
   }
   check_multi_info(c);
 }
@@ -579,6 +598,15 @@ static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock)
     }
   }
   return NULL;
+}
+
+static void dump_io_events(struct ev_io io_events[]) {
+  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
+    ILOG("IO event #%d: fd=%d, events=%d/%s%s",
+         i+1, io_events[i].fd, io_events[i].events,
+         (io_events[i].events & EV_READ ? "R" : ""),
+         (io_events[i].events & EV_WRITE ? "W" : ""));
+  }
 }
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
@@ -600,7 +628,9 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   // reserve and start new event on unused slot
   io_event_ptr = get_io_event(c->io_events, 0);
   if (!io_event_ptr) {
-    FLOG("curl needed more event, than max connections: %d", MAX_TOTAL_CONNECTIONS);
+    ELOG("curl needed more IO event handler, than the number of maximum connections: %d", MAX_TOTAL_CONNECTIONS);
+    dump_io_events(c->io_events);
+    return -1;
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
