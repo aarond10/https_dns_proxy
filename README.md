@@ -159,47 +159,55 @@ Just run it as a daemon and point traffic at it. Commandline flags are:
 
 ```
 Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
-        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]
-        [-i <polling_interval>] [-4] [-r <resolver_url>]
-        [-t <proxy_server>] [-l <logfile>] [-c <dscp_codepoint>]
-        [-x] [-q] [-s <statistic_interval>] [-F <log_limit>]
-        [-v]+ [-V] [-h]
+        [-b <dns_servers>] [-i <polling_interval>] [-4]
+        [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]
+        [-d] [-u <user>] [-g <group>]
+        [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]
 
-  -a listen_addr         Local IPv4/v6 address to bind to. (127.0.0.1)
-  -p listen_port         Local port to bind to. (5053)
-  -d                     Daemonize.
-  -u user                Optional user to drop to if launched as root.
-  -g group               Optional group to drop to if launched as root.
+ DNS server
+  -a listen_addr         Local IPv4/v6 address to bind to. (Default: 127.0.0.1)
+  -p listen_port         Local port to bind to. (Default: 5053)
+
+ DNS client
   -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)
                          of DNS servers to resolve resolver host (e.g. dns.google).
                          When specifying a port for IPv6, enclose the address in [].
-                         (8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
+                         (Default: 8.8.8.8,1.1.1.1,8.8.4.4,1.0.0.1,145.100.185.15,145.100.185.16,185.49.141.37)
   -i polling_interval    Optional polling interval of DNS servers.
                          (Default: 120, Min: 5, Max: 3600)
   -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.
-  -r resolver_url        The HTTPS path to the resolver URL. Default: https://dns.google/dns-query
+
+ HTTPS client
+  -r resolver_url        The HTTPS path to the resolver URL. (Default: https://dns.google/dns-query)
   -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080
                          Remote name resolution will be used if the protocol
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
-  -l logfile             Path to file to log to. ("-")
-  -c dscp_codepoint      Optional DSCP codepoint[0-63] to set on upstream DNS server
-                         connections.
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
-                         or limited builds of libcurl. (false)
-  -q                     Use HTTP/3 (QUIC) only. (false)
+                         or limited builds of libcurl.
+  -q                     Use HTTP/3 (QUIC) only.
   -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.
                          (Default: 118, Min: 0, Max: 3600)
-  -s statistic_interval  Optional statistic printout interval.
-                         (Default: 0, Disabled: 0, Min: 1, Max: 3600)
-  -C path                Optional file containing CA certificates.
+  -C ca_path             Optional file containing CA certificates.
+  -c dscp_codepoint      Optional DSCP codepoint to set on upstream HTTPS server
+                         connections. (Min: 0, Max: 63)
+
+ Process
+  -d                     Daemonize.
+  -u user                Optional user to drop to if launched as root.
+  -g group               Optional group to drop to if launched as root.
+
+ Logging
   -v                     Increase logging verbosity. (Default: error)
                          Levels: fatal, stats, error, warning, info, debug
                          Request issues are logged on warning level.
+  -l logfile             Path to file to log to. (Default: standard output)
+  -s statistic_interval  Optional statistic printout interval.
+                         (Default: 0, Disabled: 0, Min: 1, Max: 3600)
   -F log_limit           Flight recorder: storing desired amount of logs from all levels
                          in memory and dumping them on fatal error or on SIGUSR2 signal.
-                         (Default: 0, Min: 100, Max: 100000)
+                         (Default: 0, Disabled: 0, Min: 100, Max: 100000)
   -V                     Print version and exit.
   -h                     Print help and exit.
 ```

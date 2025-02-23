@@ -202,54 +202,57 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   struct Options defaults;
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);
-  printf("        [-d] [-u <user>] [-g <group>] [-b <dns_servers>]\n");
-  printf("        [-i <polling_interval>] [-4] [-r <resolver_url>]\n");
-  printf("        [-t <proxy_server>] [-l <logfile>] [-c <dscp_codepoint>]\n");
-  printf("        [-x] [-q] [-s <statistic_interval>] [-F <log_limit>]\n");
-  printf("        [-v]+ [-V] [-h]\n\n");
-  printf("  -a listen_addr         Local IPv4/v6 address to bind to. (%s)\n",
+  printf("        [-b <dns_servers>] [-i <polling_interval>] [-4]\n");
+  printf("        [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
+  printf("        [-d] [-u <user>] [-g <group>] \n");
+  printf("        [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]\n");
+  printf("\n DNS server\n");
+  printf("  -a listen_addr         Local IPv4/v6 address to bind to. (Default: %s)\n",
          defaults.listen_addr);
-  printf("  -p listen_port         Local port to bind to. (%d)\n",
+  printf("  -p listen_port         Local port to bind to. (Default: %d)\n",
          defaults.listen_port);
-  printf("  -d                     Daemonize.\n");
-  printf("  -u user                Optional user to drop to if launched as root.\n");
-  printf("  -g group               Optional group to drop to if launched as root.\n");
+  printf("\n DNS client\n");
   printf("  -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)\n");
   printf("                         of DNS servers to resolve resolver host (e.g. dns.google).\n"\
          "                         When specifying a port for IPv6, enclose the address in [].\n"\
-         "                         (%s)\n",
+         "                         (Default: %s)\n",
          defaults.bootstrap_dns);
   printf("  -i polling_interval    Optional polling interval of DNS servers.\n"\
          "                         (Default: %d, Min: 5, Max: 3600)\n",
          defaults.bootstrap_dns_polling_interval);
   printf("  -4                     Force IPv4 hostnames for DNS resolvers non IPv6 networks.\n");
-  printf("  -r resolver_url        The HTTPS path to the resolver URL. Default: %s\n",
+  printf("\n HTTPS client\n");
+  printf("  -r resolver_url        The HTTPS path to the resolver URL. (Default: %s)\n",
          defaults.resolver_url);
   printf("  -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
   printf("                         Remote name resolution will be used if the protocol\n");
   printf("                         supports it (http, https, socks4a, socks5h), otherwise\n");
   printf("                         initial DNS resolution will still be done via the\n");
   printf("                         bootstrap DNS servers.\n");
-  printf("  -l logfile             Path to file to log to. (\"%s\")\n",
-         defaults.logfile);
-  printf("  -c dscp_codepoint      Optional DSCP codepoint[0-63] to set on upstream DNS server\n");
-  printf("                         connections.\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
-         "                         or limited builds of libcurl. (false)\n");
-  printf("  -q                     Use HTTP/3 (QUIC) only. (false)\n");
+         "                         or limited builds of libcurl.\n");
+  printf("  -q                     Use HTTP/3 (QUIC) only.\n");
   printf("  -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.\n"\
          "                         (Default: %d, Min: 0, Max: 3600)\n",
          defaults.max_idle_time);
-  printf("  -s statistic_interval  Optional statistic printout interval.\n"\
-         "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
-         defaults.stats_interval);
-  printf("  -C path                Optional file containing CA certificates.\n");
+  printf("  -C ca_path             Optional file containing CA certificates.\n");
+  printf("  -c dscp_codepoint      Optional DSCP codepoint to set on upstream HTTPS server\n");
+  printf("                         connections. (Min: 0, Max: 63)\n");
+  printf("\n Process\n");
+  printf("  -d                     Daemonize.\n");
+  printf("  -u user                Optional user to drop to if launched as root.\n");
+  printf("  -g group               Optional group to drop to if launched as root.\n");
+  printf("\n Logging\n");
   printf("  -v                     Increase logging verbosity. (Default: error)\n");
   printf("                         Levels: fatal, stats, error, warning, info, debug\n");
   printf("                         Request issues are logged on warning level.\n");
+  printf("  -l logfile             Path to file to log to. (Default: standard output)\n");
+  printf("  -s statistic_interval  Optional statistic printout interval.\n"\
+         "                         (Default: %d, Disabled: 0, Min: 1, Max: 3600)\n",
+         defaults.stats_interval);
   printf("  -F log_limit           Flight recorder: storing desired amount of logs from all levels\n"\
          "                         in memory and dumping them on fatal error or on SIGUSR2 signal.\n"
-         "                         (Default: %u, Min: 100, Max: 100000)\n",
+         "                         (Default: %u, Disabled: 0, Min: 100, Max: 100000)\n",
          defaults.flight_recorder_size);
   printf("  -V                     Print version and exit.\n");
   printf("  -h                     Print help and exit.\n");
