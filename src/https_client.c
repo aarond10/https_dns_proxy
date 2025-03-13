@@ -50,6 +50,11 @@ DOH_MAX_RESPONSE_SIZE = 65535
     FLOG("Unexpected NULL pointer for " #var_name "(" #type ")"); \
   }
 
+static void https_fetch_ctx_cleanup(https_client_t *client,
+                                    struct https_fetch_ctx *prev,
+                                    struct https_fetch_ctx *ctx,
+                                    int curl_result_code);
+
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   GET_PTR(struct https_fetch_ctx, ctx, userp);
   size_t write_size = size * nmemb;
@@ -76,13 +81,19 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
                                          struct curl_sockaddr *addr) {
   GET_PTR(https_client_t, client, clientp);
 
+  if (client->connections >= HTTPS_SOCKET_LIMIT) {
+    ELOG("curl needed more socket, than the number of maximum sockets: %d", HTTPS_SOCKET_LIMIT);
+    return CURL_SOCKET_BAD;
+  }
+
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
-  if (sock != -1) {
-    DLOG("curl opened socket: %d", sock);
-  } else {
+  if (sock == -1) {
     ELOG("Could not open curl socket %d:%s", errno, strerror(errno));
     return CURL_SOCKET_BAD;
   }
+
+  DLOG("curl opened socket: %d", sock);
+  client->connections++;
 
   if (client->stat) {
     stat_connection_opened(client->stat);
@@ -112,12 +123,13 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
 {
   GET_PTR(https_client_t, client, clientp);
 
-  if (close(sock) == 0) {
-    DLOG("curl closed socket: %d", sock);
-  } else {
+  if (close(sock) != 0) {
     ELOG("Could not close curl socket %d:%s", errno, strerror(errno));
     return 1;
   }
+
+  DLOG("curl closed socket: %d", sock);
+  client->connections--;
 
   if (client->stat) {
     stat_connection_closed(client->stat);
@@ -265,7 +277,6 @@ static void https_set_request_version(https_client_t *client,
     } else if (client->opt->use_http_version == 2) {
       ELOG("Try to run application with -x argument! Falling back to HTTP/1.1 version.");
       client->opt->use_http_version = 1;
-      // TODO: consider CURLMOPT_PIPELINING setting??
     }
   }
 }
@@ -293,30 +304,22 @@ static void https_fetch_ctx_init(https_client_t *client,
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_DEBUGFUNCTION, https_curl_debug);
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_DEBUGDATA, ctx);
   }
-  if (logging_debug_enabled() || client->stat || client->opt->dscp) {
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETDATA, client);
-  }
-  if (logging_debug_enabled() || client->stat) {
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETDATA, client);
-  }
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_OPENSOCKETDATA, client);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CLOSESOCKETDATA, client);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_URL, url);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_HTTPHEADER, client->header_list);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_POSTFIELDSIZE, datalen);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_POSTFIELDS, data);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_WRITEFUNCTION, &write_buffer);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_WRITEDATA, ctx);
-#ifdef CURLOPT_MAXAGE_CONN
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPALIVE, 1L);
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPIDLE, 50L);
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TCP_KEEPINTVL, 50L);
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_MAXAGE_CONN, 300L);
-#endif
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_MAXAGE_CONN, client->opt->max_idle_time);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_PIPEWAIT, client->opt->use_http_version > 1);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_USERAGENT, "https_dns_proxy/0.3");
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_FOLLOWLOCATION, 0);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_NOSIGNAL, 0);
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, 10 /* seconds */);
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, client->connections > 0 ? 5 : 10 /* seconds */);
   // We know Google supports this, so force it.
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_ERRORBUFFER, ctx->curl_errbuf); // zeroed by calloc
@@ -329,8 +332,13 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
   CURLMcode multi_code = curl_multi_add_handle(client->curlm, ctx->curl);
   if (multi_code != CURLM_OK) {
-    FLOG_REQ("curl_multi_add_handle error %d: %s",
-             multi_code, curl_multi_strerror(multi_code));
+    ELOG_REQ("curl_multi_add_handle error %d: %s", multi_code, curl_multi_strerror(multi_code));
+    if (multi_code == CURLM_ABORTED_BY_CALLBACK) {
+      WLOG_REQ("Resetting HTTPS client to recover from faulty state!");
+      https_client_reset(client);
+    } else {
+      https_fetch_ctx_cleanup(client, NULL, client->fetches, -1);  // dropping current failed request
+    }
   }
 }
 
@@ -506,10 +514,10 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   }
   int drop_reply = 0;
   if (curl_result_code < 0) {
-    WLOG_REQ("Request was aborted.");
+    WLOG_REQ("Request was aborted");
     drop_reply = 1;
   } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
-    ILOG_REQ("Response was faulty, skipping DNS reply.");
+    ILOG_REQ("Response was faulty, skipping DNS reply");
     drop_reply = 1;
   }
   if (drop_reply) {
@@ -545,40 +553,60 @@ static void check_multi_info(https_client_t *c) {
         cur = cur->next;
       }
     }
+    else {
+      ELOG("Unhandled curl message: %d", msg->msg);  // unlikely
+    }
   }
 }
 
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     struct ev_io *w, int revents) {
   GET_PTR(https_client_t, c, w->data);
+  int ignore = 0;
   CURLMcode code = curl_multi_socket_action(
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
                        (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
-      &c->still_running);
-  if (code != CURLM_OK) {
-    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+      &ignore);
+  if (code == CURLM_OK) {
+    check_multi_info(c);
   }
-  check_multi_info(c);
+  else {
+    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+    if (code == CURLM_ABORTED_BY_CALLBACK) {
+      WLOG("Resetting HTTPS client to recover from faulty state!");
+      https_client_reset(c);
+    }
+  }
 }
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
                      struct ev_timer *w, int __attribute__((unused)) revents) {
   GET_PTR(https_client_t, c, w->data);
+  int ignore = 0;
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
-                                            &c->still_running);
+                                            &ignore);
   if (code != CURLM_OK) {
-    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+    ELOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
   }
   check_multi_info(c);
 }
 
 static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock) {
-  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
+  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
     if (io_events[i].fd == sock) {
       return &io_events[i];
     }
   }
   return NULL;
+}
+
+static void dump_io_events(struct ev_io io_events[]) {
+  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
+    ILOG("IO event #%d: fd=%d, events=%d/%s%s",
+         i+1, io_events[i].fd, io_events[i].events,
+         (io_events[i].events & EV_READ ? "R" : ""),
+         (io_events[i].events & EV_WRITE ? "W" : ""));
+  }
 }
 
 static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
@@ -600,7 +628,10 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   // reserve and start new event on unused slot
   io_event_ptr = get_io_event(c->io_events, 0);
   if (!io_event_ptr) {
-    FLOG("curl needed more event, than max connections: %d", MAX_TOTAL_CONNECTIONS);
+    ELOG("curl needed more IO event handler, than the number of maximum sockets: %d", HTTPS_SOCKET_LIMIT);
+    dump_io_events(c->io_events);
+    logging_flight_recorder_dump();
+    return -1;
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
@@ -634,14 +665,15 @@ void https_client_init(https_client_t *c, options_t *opt,
     "Content-Type: " DOH_CONTENT_TYPE);
   c->fetches = NULL;
   c->timer.data = c;
-  for (int i = 0; i < MAX_TOTAL_CONNECTIONS; i++) {
+  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
     c->io_events[i].data = c;
   }
   c->opt = opt;
   c->stat = stat;
 
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
-  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, MAX_TOTAL_CONNECTIONS);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, HTTPS_CONNECTION_LIMIT);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_HOST_CONNECTIONS, HTTPS_CONNECTION_LIMIT);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERDATA, c);

@@ -35,7 +35,7 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
   // reserve and start new event on unused slot
   io_event_ptr = get_io_event(d, 0);
   if (!io_event_ptr) {
-    FLOG("c-ares needed more event, than nameservers count: %d", d->io_events_count);
+    FLOG("c-ares needed more IO event handler, than the number of provided nameservers: %d", d->io_events_count);
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
@@ -75,9 +75,9 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
   ev_tstamp interval = 5;  // retry by default after some time
 
   if (status != ARES_SUCCESS) {
-    WLOG("DNS lookup failed: %s", ares_strerror(status));
+    WLOG("DNS lookup of '%s' failed: %s", d->hostname, ares_strerror(status));
   } else if (!h || h->h_length < 1) {
-    WLOG("No hosts.");
+    WLOG("No hosts found for '%s'", d->hostname);
   } else {
     interval = d->polling_interval;
     d->cb(d->hostname, d->cb_data, get_addr_listing(h->h_addr_list, h->h_addrtype));
