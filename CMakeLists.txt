@@ -117,7 +117,7 @@ define_file_basename_for_sources("https_dns_proxy")
 
 if(SW_VERSION)
   set_source_files_properties(
-    src/options.c
+    src/main.c
     PROPERTIES COMPILE_FLAGS "-DSW_VERSION='\"${SW_VERSION}\"'")
 endif()
 

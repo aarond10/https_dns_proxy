@@ -205,38 +205,80 @@ static int proxy_supports_name_resolution(const char *proxy)
   return 0;
 }
 
+static const char * sw_version(void) {
+#ifdef SW_VERSION
+  return SW_VERSION;
+#else
+  return "2025.5.10-atLeast";  // update date sometimes, like 1-2 times a year
+#endif
+}
+
 int main(int argc, char *argv[]) {
   struct Options opt;
   options_init(&opt);
-  if (options_parse_args(&opt, argc, argv)) {
-    options_show_usage(argc, argv);
-    exit(1);
+  switch (options_parse_args(&opt, argc, argv)) {
+    case OPR_SUCCESS:
+      break;
+    case OPR_HELP:
+      options_show_usage(argc, argv);
+      exit(0);  // asking for help is not a problem
+    case OPR_VERSION: {
+      printf("%s\n", sw_version());
+      CURLcode init_res = curl_global_init(CURL_GLOBAL_DEFAULT);
+      curl_version_info_data *curl_ver = curl_version_info(CURLVERSION_NOW);
+      if (init_res == CURLE_OK && curl_ver != NULL) {
+        printf("Using: ev/%d.%d c-ares/%s %s\n",
+               ev_version_major(), ev_version_minor(),
+               ares_version(NULL), curl_version());
+        printf("Features: %s%s%s%s\n",
+               curl_ver->features & CURL_VERSION_HTTP2 ? "HTTP2 " : "",
+               curl_ver->features & CURL_VERSION_HTTP3 ? "HTTP3 " : "",
+               curl_ver->features & CURL_VERSION_HTTPS_PROXY ? "HTTPS-proxy " : "",
+               curl_ver->features & CURL_VERSION_IPV6 ? "IPv6" : "");
+        exit(0);
+      } else {
+        printf("\nFailed to get curl version info!\n");
+        exit(1);
+      }
+    }
+    case OPR_PARSING_ERROR:
+      printf("Failed to parse options!\n");
+      // fallthrough
+    case OPR_OPTION_ERROR:
+      printf("\n");
+      options_show_usage(argc, argv);
+      exit(1);
+    default:
+      abort();  // must not happen
   }
 
   logging_init(opt.logfd, opt.loglevel, opt.flight_recorder_size);
 
-  ILOG("Version: %s", options_sw_version());
+  ILOG("Version: %s", sw_version());
   ILOG("Built: " __DATE__ " " __TIME__);
-  ILOG("System c-ares: %s", ares_version(NULL));
-  ILOG("System libcurl: %s", curl_version());
+  ILOG("System ev library: %d.%d", ev_version_major(), ev_version_minor());
+  ILOG("System c-ares library: %s", ares_version(NULL));
+  ILOG("System curl library: %s", curl_version());
 
   // Note: curl intentionally uses uninitialized stack variables and similar
   // tricks to increase it's entropy pool. This confuses valgrind and leaks
   // through to errors about use of uninitialized values in our code. :(
-  curl_global_init(CURL_GLOBAL_DEFAULT);
+  CURLcode code = curl_global_init(CURL_GLOBAL_DEFAULT);
+  if (code != CURLE_OK) {
+    FLOG("Failed to initialize curl, error code %d: %s",
+         code, curl_easy_strerror(code));
+  }
 
   curl_version_info_data *curl_ver = curl_version_info(CURLVERSION_NOW);
+  if (curl_ver == NULL) {
+    FLOG("Failed to get curl version info!");
+  }
   if (!(curl_ver->features & CURL_VERSION_HTTP2)) {
     WLOG("HTTP/2 is not supported by current libcurl");
   }
-#ifdef CURL_VERSION_HTTP3
-  if (!(curl_ver->features & CURL_VERSION_HTTP3))
-  {
+  if (!(curl_ver->features & CURL_VERSION_HTTP3)) {
     WLOG("HTTP/3 is not supported by current libcurl");
   }
-#else
-  WLOG("HTTP/3 was not available at build time, it will not work at all");
-#endif
   if (!(curl_ver->features & CURL_VERSION_IPV6)) {
     WLOG("IPv6 is not supported by current libcurl");
   }

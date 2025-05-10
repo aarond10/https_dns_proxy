@@ -235,10 +235,8 @@ static const char * http_version_str(const long version) {
     case CURL_HTTP_VERSION_2_0: // fallthrough
     case CURL_HTTP_VERSION_2TLS:
       return "2";
-#ifdef CURL_VERSION_HTTP3
     case CURL_HTTP_VERSION_3:
       return "3";
-#endif
     default:
       FLOG("Unsupported HTTP version: %d", version);
   }
@@ -255,9 +253,7 @@ static void https_set_request_version(https_client_t *client,
     case 2:
       break;
     case 3:
-#ifdef CURL_VERSION_HTTP3
       http_version_int = CURL_HTTP_VERSION_3;
-#endif
       break;
     default:
       FLOG_REQ("Invalid HTTP version: %d", client->opt->use_http_version);
