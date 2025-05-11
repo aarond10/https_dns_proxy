@@ -59,12 +59,19 @@ struct Options {
 } __attribute__((aligned(128)));
 typedef struct Options options_t;
 
+enum OptionsParseResult {
+    OPR_SUCCESS,
+    OPR_HELP,
+    OPR_VERSION,
+    OPR_OPTION_ERROR,
+    OPR_PARSING_ERROR
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-const char * options_sw_version(void);
 void options_init(struct Options *opt);
-int options_parse_args(struct Options *opt, int argc, char **argv);
+enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv);
 void options_show_usage(int argc, char **argv);
 void options_cleanup(struct Options *opt);
 #ifdef __cplusplus

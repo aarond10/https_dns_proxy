@@ -43,7 +43,7 @@ only makes sense if you trust your DoH provider.
 
 ## Build
 
-Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.65.0)`, `libev (>=4.25)`.
+Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.66.0)`, `libev (>=4.25)`.
 
 On Debian-derived systems those are libc-ares-dev,
 libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
@@ -208,7 +208,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -F log_limit           Flight recorder: storing desired amount of logs from all levels
                          in memory and dumping them on fatal error or on SIGUSR2 signal.
                          (Default: 0, Disabled: 0, Min: 100, Max: 100000)
-  -V                     Print version and exit.
+  -V                     Print versions and exit.
   -h                     Print help and exit.
 ```
 

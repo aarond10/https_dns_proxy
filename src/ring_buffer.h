@@ -1,5 +1,5 @@
-#ifndef _FR_H_
-#define _FR_H_
+#ifndef _RING_BUFFER_H_
+#define _RING_BUFFER_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,4 +18,4 @@ void ring_buffer_push_back(struct ring_buffer *rb, char* data, uint32_t size);
 }
 #endif
 
-#endif // _FR_H_
+#endif // RING_BUFFER_H_

@@ -19,15 +19,6 @@ enum {
 DEFAULT_HTTP_VERSION = 2
 };
 
-
-const char * options_sw_version(void) {
-#ifdef SW_VERSION
-  return SW_VERSION;
-#else
-  return "2023.10.10-atLeast";  // update date sometimes, like 1-2 times a year
-#endif
-}
-
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
@@ -53,7 +44,7 @@ void options_init(struct Options *opt) {
   opt->flight_recorder_size = 0;
 }
 
-int options_parse_args(struct Options *opt, int argc, char **argv) {
+enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
   while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqm:s:C:F:hV")) != -1) {
     switch (c) {
@@ -105,7 +96,7 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       } else {
         printf("HTTP version already set to: HTTP/%s\n",
                opt->use_http_version == 1 ? "1.1" : "3");
-        return -1;
+        return OPR_OPTION_ERROR;
       }
       break;
     case 'm':
@@ -120,24 +111,21 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     case 'F': // Flight recorder size
       opt->flight_recorder_size = atoi(optarg);
       break;
-    case '?':
-      printf("Unknown option '-%c'\n", c);
-      // fallthrough
     case 'h':
-      return -1;
+      return OPR_HELP;
     case 'V': // version
-      printf("%s\n", options_sw_version());
-      exit(0);
+      return OPR_VERSION;
+    case '?':
     default:
-      printf("Unknown state!");
-      exit(EXIT_FAILURE);
+      return OPR_PARSING_ERROR;
     }
   }
+
   if (opt->user) {
     struct passwd *p = getpwnam(opt->user);
     if (!p || !p->pw_uid) {
       printf("Username (%s) invalid.\n", opt->user);
-      return -1;
+      return OPR_OPTION_ERROR;
     }
     opt->uid = p->pw_uid;
   }
@@ -145,13 +133,13 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
     struct group *g = getgrnam(opt->group);
     if (!g || !g->gr_gid) {
       printf("Group (%s) invalid.\n", opt->group);
-      return -1;
+      return OPR_OPTION_ERROR;
     }
     opt->gid = g->gr_gid;
   }
   if (opt->dscp < 0 || opt->dscp >63) {
       printf("DSCP code (%d) invalid:[0-63]\n", opt->dscp);
-      return -1;
+      return OPR_OPTION_ERROR;
   }
   opt->dscp <<= 2;
   // Get noisy about bad security practices.
@@ -174,28 +162,28 @@ int options_parse_args(struct Options *opt, int argc, char **argv) {
       strncmp(opt->resolver_url, "https://", 8) != 0) {
     printf("Resolver prefix (%s) must be a https:// address.\n",
            opt->resolver_url);
-    return -1;
+    return OPR_OPTION_ERROR;
   }
   if (opt->bootstrap_dns_polling_interval < 5 ||
       opt->bootstrap_dns_polling_interval > 3600) {
     printf("DNS servers polling interval must be between 5 and 3600.\n");
-    return -1;
+    return OPR_OPTION_ERROR;
   }
   if (opt->max_idle_time < 0 ||
       opt->max_idle_time > 3600) {
     printf("Maximum idle time must be between 0 and 3600.\n");
-    return -1;
+    return OPR_OPTION_ERROR;
   }
   if (opt->stats_interval < 0 || opt->stats_interval > 3600) {
     printf("Statistic interval must be between 0 and 3600.\n");
-    return -1;
+    return OPR_OPTION_ERROR;
   }
   if (opt->flight_recorder_size != 0 &&
       (opt->flight_recorder_size < 100 || opt->flight_recorder_size > 100000)) {
     printf("Flight recorder limit must be between 100 and 100000.\n");
-    return -1;
+    return OPR_OPTION_ERROR;
   }
-  return 0;
+  return OPR_SUCCESS;
 }
 
 void options_show_usage(int __attribute__((unused)) argc, char **argv) {
@@ -254,7 +242,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
          "                         in memory and dumping them on fatal error or on SIGUSR2 signal.\n"
          "                         (Default: %u, Disabled: 0, Min: 100, Max: 100000)\n",
          defaults.flight_recorder_size);
-  printf("  -V                     Print version and exit.\n");
+  printf("  -V                     Print versions and exit.\n");
   printf("  -h                     Print help and exit.\n");
   options_cleanup(&defaults);
 }

@@ -139,7 +139,7 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
 }
 
 static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
-                           char *ptr, size_t size)
+                           const char * prefix, char *ptr, size_t size)
 {
   const size_t width = 0x10;
 
@@ -167,7 +167,7 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
       }
     }
 
-    LOG_REQ(level, "%4.4lx: %s%s", (long)i, hex, str);
+    LOG_REQ(level, "%s%4.4lx: %s%s", prefix, (long)i, hex, str);
   }
 }
 
@@ -191,10 +191,8 @@ int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
     // not dumping DNS packets because of privacy
     case CURLINFO_DATA_OUT:
     case CURLINFO_DATA_IN:
-      // uncomment, to dump
-      /* DLOG_REQ("data %s", type == CURLINFO_DATA_IN ? "IN" : "OUT");
-       * https_log_data(LOG_DEBUG, ctx, data, size);
-       * return 0; */
+      https_log_data(LOG_DEBUG, ctx, (type == CURLINFO_DATA_IN ? "< " : "> "), data, size);
+      return 0;
     // uninformative
     case CURLINFO_SSL_DATA_OUT:
     case CURLINFO_SSL_DATA_IN:
@@ -206,7 +204,7 @@ int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
 
   // for extra debugging purpose
   // if (type != CURLINFO_TEXT) {
-  //   https_log_data(LOG_DEBUG, ctx, data, size);
+  //   https_log_data(LOG_DEBUG, ctx, "", data, size);
   // }
 
   // process lines one-by one
@@ -217,7 +215,7 @@ int https_curl_debug(CURL __attribute__((unused)) * handle, curl_infotype type,
       // skip empty string and curl info Expire
       if (start != NULL && (pos - start) > 0 &&
           strncmp(start, "Expire", sizeof("Expire") - 1) != 0) {
-        // https_log_data(LOG_DEBUG, ctx, start, pos - start);
+        // https_log_data(LOG_DEBUG, ctx, "", start, pos - start);
         DLOG_REQ("%s%.*s", prefix, pos - start, start);
         start = NULL;
       }
@@ -237,10 +235,8 @@ static const char * http_version_str(const long version) {
     case CURL_HTTP_VERSION_2_0: // fallthrough
     case CURL_HTTP_VERSION_2TLS:
       return "2";
-#ifdef CURL_VERSION_HTTP3
     case CURL_HTTP_VERSION_3:
       return "3";
-#endif
     default:
       FLOG("Unsupported HTTP version: %d", version);
   }
@@ -257,9 +253,7 @@ static void https_set_request_version(https_client_t *client,
     case 2:
       break;
     case 3:
-#ifdef CURL_VERSION_HTTP3
       http_version_int = CURL_HTTP_VERSION_3;
-#endif
       break;
     default:
       FLOG_REQ("Invalid HTTP version: %d", client->opt->use_http_version);
@@ -394,7 +388,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     } else {
       WLOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
       if (ctx->buflen > 0) {
-        https_log_data(LOG_WARNING, ctx, ctx->buf, ctx->buflen);
+        https_log_data(LOG_WARNING, ctx, "", ctx->buf, ctx->buflen);
       }
     }
   }
