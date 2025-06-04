@@ -354,7 +354,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       WLOG_REQ("curl request failed with write error (probably response content was too large)");
       break;
     default:
-      WLOG_REQ("curl request failed with %d: %s", res, curl_easy_strerror(res));
+      WLOG_REQ("curl request failed with %d: %s", curl_result_code, curl_easy_strerror(curl_result_code));
       if (ctx->curl_errbuf[0] != 0) {
         WLOG_REQ("curl error message: %s", ctx->curl_errbuf);
       }
