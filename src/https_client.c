@@ -451,7 +451,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     res = curl_easy_getinfo(ctx->curl, CURLINFO_EFFECTIVE_URL, &str_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_EFFECTIVE_URL: %s", curl_easy_strerror(res));
-    } else {
+    } else if (str_resp != NULL) {
       DLOG_REQ("CURLINFO_EFFECTIVE_URL: %s", str_resp);
     }
 
@@ -465,7 +465,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     res = curl_easy_getinfo(ctx->curl, CURLINFO_SCHEME, &str_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_SCHEME: %s", curl_easy_strerror(res));
-    } else if (strcasecmp(str_resp, "https") != 0) {
+    } else if (str_resp != NULL && strcasecmp(str_resp, "https") != 0) {
       DLOG_REQ("CURLINFO_SCHEME: %s", str_resp);
     }
 
