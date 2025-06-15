@@ -183,6 +183,10 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
     printf("Flight recorder limit must be between 100 and 100000.\n");
     return OPR_OPTION_ERROR;
   }
+  if (opt->listen_port < 0 || opt->listen_port > UINT16_MAX) {
+    printf("Listen port must be between 0 and %u.\n", UINT16_MAX);
+    return OPR_OPTION_ERROR;
+  }
   return OPR_SUCCESS;
 }
 

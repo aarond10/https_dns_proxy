@@ -1,6 +1,9 @@
 #ifndef _DNS_SERVER_H_
 #define _DNS_SERVER_H_
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <ev.h>
@@ -8,8 +11,7 @@
 struct dns_server_s;
 
 typedef void (*dns_req_received_cb)(struct dns_server_s *dns_server, void *data,
-                                    struct sockaddr* addr, uint16_t tx_id,
-                                    char *dns_req, size_t dns_req_len);
+                                    struct sockaddr* addr, char *dns_req, size_t dns_req_len);
 
 typedef struct dns_server_s {
   struct ev_loop *loop;
@@ -21,7 +23,7 @@ typedef struct dns_server_s {
 } dns_server_t;
 
 void dns_server_init(dns_server_t *d, struct ev_loop *loop,
-                     const char *listen_addr, int listen_port,
+                     struct addrinfo *listen_addrinfo,
                      dns_req_received_cb cb, void *data);
 
 // Sends a DNS response 'buf' of length 'blen' to 'raddr'.

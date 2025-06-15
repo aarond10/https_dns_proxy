@@ -6,7 +6,7 @@
 
 struct Options {
   const char *listen_addr;
-  uint16_t listen_port;
+  int listen_port;
 
   // Logfile.
   const char *logfile;

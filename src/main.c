@@ -105,10 +105,11 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
 }
 
 static void dns_server_cb(dns_server_t *dns_server, void *data,
-                          struct sockaddr* addr, uint16_t tx_id,
+                          struct sockaddr* tmp_remote_addr,
                           char *dns_req, size_t dns_req_len) {
   app_state_t *app = (app_state_t *)data;
 
+  uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
   DLOG("Received request for id: %hX, len: %d", tx_id, dns_req_len);
 
   // If we're not yet bootstrapped, don't answer. libcurl will fall back to
@@ -125,9 +126,9 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     FLOG("%04hX: Out of mem", tx_id);
   }
   req->tx_id = tx_id;
-  memcpy(&req->raddr, addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(&req->raddr, tmp_remote_addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   req->dns_server = dns_server;
-  req->dns_req = dns_req; // To free buffer after https request is complete.
+  req->dns_req = dns_req;  // To free buffer after https request is complete.
   req->start_tstamp = ev_now(dns_server->loop);
   req->stat = app->stat;
 
@@ -135,7 +136,7 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     stat_request_begin(app->stat, dns_req_len);
   }
   https_client_fetch(app->https_client, app->resolver_url,
-                     dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
+                     req->dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
 }
 
 static int addr_list_reduced(const char* full_list, const char* list) {
@@ -203,6 +204,23 @@ static int proxy_supports_name_resolution(const char *proxy)
     }
   }
   return 0;
+}
+
+static struct addrinfo * get_listen_address(const char *listen_addr) {
+  struct addrinfo *ai = NULL;
+  struct addrinfo hints;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memset(&hints, 0, sizeof(struct addrinfo));
+  /* prevent DNS lookups if leakage is our worry */
+  hints.ai_flags = AI_NUMERICHOST;
+
+  int res = getaddrinfo(listen_addr, NULL, &hints, &ai);
+  if (res != 0) {
+    FLOG("Error parsing listen address %s, getaddrinfo error: %s",
+         listen_addr, gai_strerror(res));
+  }
+
+  return ai;
 }
 
 static const char * sw_version(void) {
@@ -300,9 +318,14 @@ int main(int argc, char *argv[]) {
   app.using_dns_poller = 0;
   app.stat = (opt.stats_interval ? &stat : NULL);
 
+  struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
+  ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons(opt.listen_port);
+
   dns_server_t dns_server;
-  dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
-                  dns_server_cb, &app);
+  dns_server_init(&dns_server, loop, listen_addrinfo, dns_server_cb, &app);
+
+  freeaddrinfo(listen_addrinfo);
+  listen_addrinfo = NULL;
 
   if (opt.gid != (uid_t)-1 && setgroups(1, &opt.gid)) {
     FLOG("Failed to set groups");

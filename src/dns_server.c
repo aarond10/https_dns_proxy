@@ -1,60 +1,39 @@
 #include <ares.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <errno.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netdb.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <stdint.h>
 #include <string.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/socket.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_server.h"
 #include "logging.h"
 
 
-enum {
-REQUEST_MAX = 1500  // A default MTU. We don't do TCP so any bigger is likely a waste
-};
-
-
 // Creates and bind a listening UDP socket for incoming requests.
-static int get_listen_sock(const char *listen_addr, int listen_port,
-                           unsigned int *addrlen) {
-  struct addrinfo *ai = NULL;
-  struct addrinfo hints;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  memset(&hints, 0, sizeof(struct addrinfo));
-  /* prevent DNS lookups if leakage is our worry */
-  hints.ai_flags = AI_NUMERICHOST;
-
-  int res = getaddrinfo(listen_addr, NULL, &hints, &ai);
-  if(res != 0) {
-    FLOG("Error parsing listen address %s:%d (getaddrinfo): %s", listen_addr, listen_port,
-          gai_strerror(res));
-    if(ai) {
-      freeaddrinfo(ai);
-    }
-    return -1;
-  }
-
-  struct sockaddr_in *saddr = (struct sockaddr_in*) ai->ai_addr;
-
-  *addrlen = ai->ai_addrlen;
-  saddr->sin_port = htons(listen_port);
-
-  int sock = socket(ai->ai_family, SOCK_DGRAM, 0);
+static int get_listen_sock(struct addrinfo *listen_addrinfo) {
+  int sock = socket(listen_addrinfo->ai_family, SOCK_DGRAM, 0);
   if (sock < 0) {
-    FLOG("Error creating socket");
+    FLOG("Error creating socket: %s (%d)", strerror(errno), errno);
   }
 
-  res = bind(sock, ai->ai_addr, ai->ai_addrlen);
+  char ipstr[INET6_ADDRSTRLEN];
+  if (listen_addrinfo->ai_family == AF_INET) {
+      inet_ntop(AF_INET, &((struct sockaddr_in *)listen_addrinfo->ai_addr)->sin_addr, ipstr, sizeof(ipstr));
+  } else if (listen_addrinfo->ai_family == AF_INET6) {
+      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)listen_addrinfo->ai_addr)->sin6_addr, ipstr, sizeof(ipstr));
+  } else {
+    FLOG("Unknown address family: %d", listen_addrinfo->ai_family);
+  }
+
+  uint16_t port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
+
+  int res = bind(sock, listen_addrinfo->ai_addr, listen_addrinfo->ai_addrlen);
   if (res < 0) {
-    FLOG("Error binding %s:%d: %s (%d)", listen_addr, listen_port,
-         strerror(errno), res);
+    FLOG("Error binding on %s:%d UDP: %s (%d)", ipstr, port,
+         strerror(errno), errno);
   }
 
-  freeaddrinfo(ai);
+  ILOG("Listening on %s:%d UDP", ipstr, port);
 
-  ILOG("Listening on %s:%d", listen_addr, listen_port);
   return sock;
 }
 
@@ -62,14 +41,10 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
                        ev_io *w, int __attribute__((unused)) revents) {
   dns_server_t *d = (dns_server_t *)w->data;
 
-  char *buf = (char *)calloc(1, REQUEST_MAX + 1);
-  if (buf == NULL) {
-    FLOG("Out of mem");
-  }
-  struct sockaddr_storage raddr;
-  /* recvfrom can write to addrlen */
-  socklen_t tmp_addrlen = d->addrlen;
-  ssize_t len = recvfrom(w->fd, buf, REQUEST_MAX, 0, (struct sockaddr*)&raddr,
+  char tmp_buf[UINT16_MAX];  // stack buffer for largest UDP packet to support EDNS
+  struct sockaddr_storage tmp_raddr;
+  socklen_t tmp_addrlen = d->addrlen;  // recvfrom can write to addrlen
+  ssize_t len = recvfrom(w->fd, tmp_buf, UINT16_MAX, 0, (struct sockaddr*)&tmp_raddr,
                          &tmp_addrlen);
   if (len < 0) {
     ELOG("recvfrom failed: %s", strerror(errno));
@@ -81,15 +56,21 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
     return;
   }
 
-  uint16_t tx_id = ntohs(*((uint16_t*)buf));
-  d->cb(d, d->cb_data, (struct sockaddr*)&raddr, tx_id, buf, len);
+  char *dns_req = (char *)malloc(len);  // To free buffer after https request is complete.
+  if (dns_req == NULL) {
+    FLOG("Out of mem");
+  }
+  memcpy(dns_req, tmp_buf, len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+
+  d->cb(d, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, len);
 }
 
 void dns_server_init(dns_server_t *d, struct ev_loop *loop,
-                     const char *listen_addr, int listen_port,
+                     struct addrinfo *listen_addrinfo,
                      dns_req_received_cb cb, void *data) {
   d->loop = loop;
-  d->sock = get_listen_sock(listen_addr, listen_port, &d->addrlen);
+  d->sock = get_listen_sock(listen_addrinfo);
+  d->addrlen = listen_addrinfo->ai_addrlen;
   d->cb = cb;
   d->cb_data = data;
 
