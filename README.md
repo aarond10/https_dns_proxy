@@ -2,7 +2,7 @@
 
 `https_dns_proxy` is a light-weight DNS&lt;--&gt;HTTPS, non-caching translation
 proxy for the [RFC 8484][rfc-8484] DNS-over-HTTPS standard. It receives
-regular (UDP) DNS requests and issues them via DoH.
+regular (UDP or TCP) DNS requests and issues them via DoH.
 
 [Google's DNS-over-HTTPS][google-doh] service is default, but
 [Cloudflare's service][cloudflare-doh] also works with trivial commandline flag
@@ -158,7 +158,7 @@ docker run --name "https-dns-proxy" -p 5053:5053/udp  \
 Just run it as a daemon and point traffic at it. Commandline flags are:
 
 ```
-Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
+Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]
         [-b <dns_servers>] [-i <polling_interval>] [-4]
         [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]
         [-d] [-u <user>] [-g <group>]
@@ -167,6 +167,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
  DNS server
   -a listen_addr         Local IPv4/v6 address to bind to. (Default: 127.0.0.1)
   -p listen_port         Local port to bind to. (Default: 5053)
+  -T tcp_client_limit    Number of TCP clients to serve.
+                         (Default: 20, Disabled: 0, Min: 1, Max: 200)
 
  DNS client
   -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)

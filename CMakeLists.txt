@@ -25,12 +25,14 @@ if (NOT CMAKE_INSTALL_BINDIR)
   set(CMAKE_INSTALL_BINDIR bin)
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra --pedantic -Wno-strict-aliasing -Wno-variadic-macros")
+# TODO: add flags: -Wconversion -Wsign-conversion -Wfloat-conversion -Wcast-align -Wimplicit-fallthrough
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Wstrict-aliasing -Wformat=2 -Wunused -Wno-variadic-macros -Wnull-dereference -Wshadow")
 set(CMAKE_C_FLAGS_DEBUG "-gdwarf-4 -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
-if ((CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 9) OR
-    (CMAKE_C_COMPILER_ID MATCHES Clang AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10))
+if (((CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL  9) AND
+     (CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_LESS          14)) OR
+    ( CMAKE_C_COMPILER_ID MATCHES Clang AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10))
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-folding-constant")
 endif()
 

@@ -11,6 +11,7 @@
 
 #include "dns_poller.h"
 #include "dns_server.h"
+#include "dns_server_tcp.h"
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
@@ -24,11 +25,13 @@ typedef struct {
   const char *resolver_url;
   stat_t *stat;
   uint8_t using_dns_poller;
+  socklen_t addrlen;
 } app_state_t;
 
 // NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
-  dns_server_t *dns_server;
+  void *dns_server;
+  uint8_t is_tcp;
   char* dns_req;
   stat_t *stat;
   ev_tstamp start_tstamp;
@@ -94,9 +97,13 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
         WLOG("DNS request and response IDs are not matching: %hX != %hX",
              req->tx_id, response_id);
       } else {
-        dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        if (req->is_tcp) {
+          dns_server_tcp_respond((dns_server_tcp_t *)req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        } else {
+          dns_server_respond((dns_server_t *)req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        }
         if (req->stat) {
-          stat_request_end(req->stat, buflen, ev_now(req->dns_server->loop) - req->start_tstamp);
+          stat_request_end(req->stat, buflen, ev_now(req->stat->loop) - req->start_tstamp, req->is_tcp);
         }
       }
     }
@@ -104,7 +111,7 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
   free(req);
 }
 
-static void dns_server_cb(dns_server_t *dns_server, void *data,
+static void dns_server_cb(void *dns_server, uint8_t is_tcp, void *data,
                           struct sockaddr* tmp_remote_addr,
                           char *dns_req, size_t dns_req_len) {
   app_state_t *app = (app_state_t *)data;
@@ -126,14 +133,15 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     FLOG("%04hX: Out of mem", tx_id);
   }
   req->tx_id = tx_id;
-  memcpy(&req->raddr, tmp_remote_addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(&req->raddr, tmp_remote_addr, app->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   req->dns_server = dns_server;
+  req->is_tcp = is_tcp;
   req->dns_req = dns_req;  // To free buffer after https request is complete.
-  req->start_tstamp = ev_now(dns_server->loop);
   req->stat = app->stat;
 
   if (req->stat) {
-    stat_request_begin(app->stat, dns_req_len);
+    req->start_tstamp = ev_now(app->stat->loop);
+    stat_request_begin(app->stat, dns_req_len, is_tcp);
   }
   https_client_fetch(app->https_client, app->resolver_url,
                      req->dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
@@ -311,18 +319,24 @@ int main(int argc, char *argv[]) {
   https_client_t https_client;
   https_client_init(&https_client, &opt, (opt.stats_interval ? &stat : NULL), loop);
 
+  struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
+  ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons(opt.listen_port);
+
   app_state_t app;
   app.https_client = &https_client;
   app.resolv = NULL;
   app.resolver_url = opt.resolver_url;
   app.using_dns_poller = 0;
   app.stat = (opt.stats_interval ? &stat : NULL);
-
-  struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
-  ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons(opt.listen_port);
+  app.addrlen = listen_addrinfo->ai_addrlen;
 
   dns_server_t dns_server;
   dns_server_init(&dns_server, loop, listen_addrinfo, dns_server_cb, &app);
+
+  dns_server_tcp_t * dns_server_tcp = NULL;
+  if (opt.tcp_client_limit > 0) {
+    dns_server_tcp = dns_server_tcp_create(loop, listen_addrinfo, dns_server_cb, &app, opt.tcp_client_limit);
+  }
 
   freeaddrinfo(listen_addrinfo);
   listen_addrinfo = NULL;
@@ -390,6 +404,9 @@ int main(int argc, char *argv[]) {
   ev_signal_stop(loop, &sigint);
   ev_signal_stop(loop, &sigpipe);
   dns_server_stop(&dns_server);
+  if (dns_server_tcp != NULL) {
+    dns_server_tcp_stop(dns_server_tcp);
+  }
   stat_stop(&stat);
 
   DLOG("re-entering loop");
@@ -397,6 +414,11 @@ int main(int argc, char *argv[]) {
   DLOG("loop finished all events");
 
   dns_server_cleanup(&dns_server);
+  if (dns_server_tcp != NULL) {
+    dns_server_tcp_cleanup(dns_server_tcp);
+    free(dns_server_tcp);
+    dns_server_tcp = NULL;
+  }
   https_client_cleanup(&https_client);
   stat_cleanup(&stat);
 

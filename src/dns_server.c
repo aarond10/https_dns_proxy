@@ -52,7 +52,7 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   }
 
   if (len < (int)sizeof(uint16_t)) {
-    WLOG("Malformed request received (too short).");
+    WLOG("Malformed request received, too short: %d", len);
     return;
   }
 
@@ -62,7 +62,7 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   }
   memcpy(dns_req, tmp_buf, len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
 
-  d->cb(d, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, len);
+  d->cb(d, 0, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, len);
 }
 
 void dns_server_init(dns_server_t *d, struct ev_loop *loop,

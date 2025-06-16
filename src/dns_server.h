@@ -10,7 +10,7 @@
 
 struct dns_server_s;
 
-typedef void (*dns_req_received_cb)(struct dns_server_s *dns_server, void *data,
+typedef void (*dns_req_received_cb)(void *dns_server, uint8_t is_tcp, void *data,
                                     struct sockaddr* addr, char *dns_req, size_t dns_req_len);
 
 typedef struct dns_server_s {

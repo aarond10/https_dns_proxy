@@ -18,3 +18,4 @@ output.xml
 report.html
 custom_curl/
 valgrind-*.log
+tests/robot/__pycache__

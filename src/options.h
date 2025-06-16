@@ -8,6 +8,8 @@ struct Options {
   const char *listen_addr;
   int listen_port;
 
+  int tcp_client_limit;
+
   // Logfile.
   const char *logfile;
   int logfd;
