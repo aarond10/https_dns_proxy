@@ -7,8 +7,8 @@
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     ev_io *w, int revents) {
   dns_poller_t *d = (dns_poller_t *)w->data;
-  ares_process_fd(d->ares, (revents & EV_READ) ? w->fd : ARES_SOCKET_BAD,
-                  (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
+  ares_process_fd(d->ares, (revents & EV_READ)  ? w->fd : ARES_SOCKET_BAD,
+                           (revents & EV_WRITE) ? w->fd : ARES_SOCKET_BAD);
 }
 
 static struct ev_io * get_io_event(dns_poller_t *d, int sock) {
@@ -44,21 +44,43 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
   ev_io_start(d->loop, io_event_ptr);
 }
 
-static char *get_addr_listing(char** addr_list, const int af) {
+static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
   char *list = (char *)calloc(1, POLLER_ADDR_LIST_SIZE);
-  char *pos = list;
   if (list == NULL) {
     FLOG("Out of mem");
   }
-  for (int i = 0; addr_list[i]; i++) {
-    const char *res = ares_inet_ntop(af, addr_list[i], pos,
-                                     (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos));
+  char *pos = list;
+  unsigned ipv4 = 0;
+  unsigned ipv6 = 0;
+
+  for (struct ares_addrinfo_node *node = nodes; node != NULL; node = node->ai_next) {
+    const char *res = NULL;
+
+    if (node->ai_family == AF_INET) {
+      res = ares_inet_ntop(AF_INET, (const void *)&((struct sockaddr_in *)node->ai_addr)->sin_addr,
+                           pos, (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos));
+      ipv4++;
+    } else if (node->ai_family == AF_INET6) {
+      res = ares_inet_ntop(AF_INET6, (const void *)&((struct sockaddr_in6 *)node->ai_addr)->sin6_addr,
+                           pos, (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos));
+      ipv6++;
+    } else {
+      WLOG("Unhandled address family: %d", node->ai_family);
+      continue;
+    }
+
     if (res != NULL) {
       pos += strlen(pos);
       *pos = ',';
       pos++;
+    } else {
+      DLOG("Not enough space left for further IP addresses");  // test with POLLER_ADDR_LIST_SIZE = 10 value
+      break;
     }
   }
+
+  DLOG("Received %u IPv4 and %u IPv6 addresses", ipv4, ipv6);
+
   if (pos == list) {
     free((void*)list);
     list = NULL;
@@ -69,19 +91,20 @@ static char *get_addr_listing(char** addr_list, const int af) {
 }
 
 static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
-                    struct hostent *h) {
+                    struct ares_addrinfo *result) {
   dns_poller_t *d = (dns_poller_t *)arg;
   d->request_ongoing = 0;
   ev_tstamp interval = 5;  // retry by default after some time
 
   if (status != ARES_SUCCESS) {
     WLOG("DNS lookup of '%s' failed: %s", d->hostname, ares_strerror(status));
-  } else if (!h || h->h_length < 1) {
+  } else if (!result || result->nodes == NULL) {
     WLOG("No hosts found for '%s'", d->hostname);
   } else {
     interval = d->polling_interval;
-    d->cb(d->hostname, d->cb_data, get_addr_listing(h->h_addr_list, h->h_addrtype));
+    d->cb(d->hostname, d->cb_data, get_addr_listing(result->nodes));
   }
+  ares_freeaddrinfo(result);
 
   if (status != ARES_EDESTRUCTION) {
     DLOG("DNS poll interval changed to: %.0lf", interval);
@@ -106,9 +129,14 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
   dns_poller_t *d = (dns_poller_t *)w->data;
 
   if (d->request_ongoing) {
-    // process query timeouts
-    DLOG("Processing DNS queries");
+    DLOG("Processing DNS query timeouts");
+#if ARES_VERSION_MAJOR >= 1 && ARES_VERSION_MINOR >= 34
+    ares_process_fds(d->ares, NULL, 0, ARES_PROCESS_FLAG_NONE);
+#elif ARES_VERSION_MAJOR >= 1 && ARES_VERSION_MINOR >= 28
+    ares_process_fd(d->ares, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+#else
     ares_process(d->ares, NULL, NULL);
+#endif
   } else {
     DLOG("Starting DNS query");
     // Cancel any pending queries before making new ones. c-ares can't be depended on to
@@ -117,7 +145,14 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
     // free memory tied up by any "zombie" queries.
     ares_cancel(d->ares);
     d->request_ongoing = 1;
-    ares_gethostbyname(d->ares, d->hostname, d->family, ares_cb, d);
+
+    struct ares_addrinfo_hints hints;
+    memset(&hints, 0, sizeof(hints));  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+    hints.ai_flags  = ARES_AI_CANONNAME;
+    hints.ai_family = d->family;
+    hints.ai_socktype = SOCK_STREAM;
+
+    ares_getaddrinfo(d->ares, d->hostname, "https", &hints, ares_cb, d);
   }
 
   if (d->request_ongoing) {  // need to re-check, it might change!
