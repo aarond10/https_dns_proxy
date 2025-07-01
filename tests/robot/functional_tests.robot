@@ -31,6 +31,7 @@ Start Proxy
   Set Test Variable  ${dig_timeout}  2
   Set Test Variable  ${dig_retry}  0
   Sleep  0.5
+  Is Process Running  ${proxy}
   Common Test Setup
 
 Start Proxy With Valgrind
@@ -46,6 +47,7 @@ Start Proxy With Valgrind
   Set Test Variable  ${dig_timeout}  10
   Set Test Variable  ${dig_retry}  2
   Sleep  6  # wait for valgrind to fire up the proxy
+  Is Process Running  ${proxy}
   Common Test Setup
 
 Stop Proxy
@@ -74,17 +76,18 @@ Start Dig
   RETURN  ${handle}
 
 Stop Dig
-  [Arguments]  ${handle}
+  [Arguments]  ${handle}  ${expect}=${None}
   ${result} =  Wait For Process  ${handle}  timeout=20 secs
   Log  ${result.stdout}
   Should Be Equal As Integers  ${result.rc}  0
-  Should Contain  ${result.stdout}  ANSWER SECTION
+  ${expect}=  Set Variable If  $expect is None  ANSWER SECTION  ${expect}
+  Should Contain  ${result.stdout}  ${expect}
   RETURN  ${result.stdout}
 
 Run Dig
-  [Arguments]  ${domain}=google.com
+  [Arguments]  ${domain}=google.com  ${expect}=${None}
   ${handle} =  Start Dig  ${domain}
-  ${dig_output} =  Stop Dig  ${handle}
+  ${dig_output} =  Stop Dig  ${handle}  ${expect}
   RETURN  ${dig_output}
 
 Run Dig Parallel
@@ -97,11 +100,24 @@ Run Dig Parallel
     Stop Dig  ${handle}
   END
 
+
 Large Response Test
   [Documentation]  https://dnscheck.tools/#more
-  Set Test Variable  @{dig_options}  @{dig_options}  -t  txt  #  ask for TXT response
+  # use large buffer not to fragment UDP response, and ask for TXT response
+  Set Test Variable  @{dig_options}  @{dig_options}  +bufsize=5000  -t  txt
   ${dig_output} =  Run Dig  txtfill4096.test.dnscheck.tools
-  Should Contain  ${dig_output}  MSG SIZE \ rcvd: 4185  # expecting more than 4k large response
+  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: 4\\d{3}$  # expecting more than 4k large response
+
+Verify Truncation
+  [Arguments]  ${domain}  ${udp_buffer_size}  ${result_bytes_min}  ${result_bytes_max}  ${expect}=${None}
+  # ask for TXT response
+  Set Test Variable  @{dig_options}  +notcp  +ignore  +bufsize=${udp_buffer_size}  -t  txt
+  ${dig_output} =  Run Dig  ${domain}  ${expect}
+  Should Contain  ${dig_output}  flags: qr tc
+  # expecting response to be ${result_bytes_min} byte (could be flaky)
+  @{res} =  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: (\\d+)$  # expecting more than 4k large response
+  Should Be True  ${res}[1] >= ${result_bytes_min}
+  Should Be True  ${res}[1] <= ${result_bytes_max}
 
 
 *** Test Cases ***
@@ -167,3 +183,21 @@ Send TCP Requests Fragmented
   Should Contain  ${dns_reply}  google
 
   Close Tcp Client Connection
+
+Truncate UDP Small
+  Start Proxy
+  Wait Until Keyword Succeeds  5x  200ms
+  # too small buffer will be overridden to 512, so expecting more than 300 bytes
+  ...  Verify Truncation  microsoft.com  256  300  512
+
+Truncate UDP Large
+  Start Proxy
+  Wait Until Keyword Succeeds  5x  200ms
+  # expecting more than 1500 byte large response
+  ...  Verify Truncation  microsoft.com  2000  1500  2000
+
+Truncate UDP Impossible
+  Start Proxy
+  Wait Until Keyword Succeeds  5x  200ms
+  # the only TXT answer record has to be dropped to met limit
+  ...  Verify Truncation  txtfill4096.test.dnscheck.tools  4096  12  100  ANSWER: 0

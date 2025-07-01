@@ -33,6 +33,7 @@ typedef struct {
   void *dns_server;
   uint8_t is_tcp;
   char* dns_req;
+  size_t dns_req_len;
   stat_t *stat;
   ev_tstamp start_tstamp;
   uint16_t tx_id;
@@ -87,12 +88,11 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
   if (req == NULL) {
     FLOG("%04hX: data NULL", req->tx_id);
   }
-  free((void*)req->dns_req);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
-    if (buflen < (int)sizeof(uint16_t)) {
-      WLOG("%04hX: Malformed response received (too short)", req->tx_id);
+    if (buflen < DNS_HEADER_LENGTH) {
+      WLOG("%04hX: Malformed response received, too short: %u", req->tx_id, buflen);
     } else {
-      uint16_t response_id = ntohs(*((uint16_t*)buf));
+      const uint16_t response_id = ntohs(*((uint16_t*)buf));
       if (req->tx_id != response_id) {
         WLOG("DNS request and response IDs are not matching: %hX != %hX",
              req->tx_id, response_id);
@@ -100,7 +100,8 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
         if (req->is_tcp) {
           dns_server_tcp_respond((dns_server_tcp_t *)req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
         } else {
-          dns_server_respond((dns_server_t *)req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+          dns_server_respond((dns_server_t *)req->dns_server, (struct sockaddr*)&req->raddr,
+            req->dns_req, req->dns_req_len, buf, buflen);
         }
         if (req->stat) {
           stat_request_end(req->stat, buflen, ev_now(req->stat->loop) - req->start_tstamp, req->is_tcp);
@@ -108,6 +109,7 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
       }
     }
   }
+  free((void*)req->dns_req);
   free(req);
 }
 
@@ -137,6 +139,7 @@ static void dns_server_cb(void *dns_server, uint8_t is_tcp, void *data,
   req->dns_server = dns_server;
   req->is_tcp = is_tcp;
   req->dns_req = dns_req;  // To free buffer after https request is complete.
+  req->dns_req_len = dns_req_len;
   req->stat = app->stat;
 
   if (req->stat) {

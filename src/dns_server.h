@@ -8,6 +8,11 @@
 #include <stdint.h>
 #include <ev.h>
 
+enum {
+  DNS_HEADER_LENGTH = 12,  // RFC1035 4.1.1 header size
+  DNS_SIZE_LIMIT = 512
+};
+
 struct dns_server_s;
 
 typedef void (*dns_req_received_cb)(void *dns_server, uint8_t is_tcp, void *data,
@@ -27,8 +32,8 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
                      dns_req_received_cb cb, void *data);
 
 // Sends a DNS response 'buf' of length 'blen' to 'raddr'.
-void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
-                        size_t blen);
+void dns_server_respond(dns_server_t *d, struct sockaddr *raddr,
+    const char *dns_req, const size_t dns_req_len, char *dns_resp, size_t dns_resp_len);
 
 void dns_server_stop(dns_server_t *d);
 

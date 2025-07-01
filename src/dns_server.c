@@ -1,8 +1,9 @@
-#include <ares.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <errno.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ares.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ares_dns_record.h> // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <errno.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <stdint.h>
-#include <string.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <unistd.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_server.h"
 #include "logging.h"
@@ -51,7 +52,7 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
     return;
   }
 
-  if (len < (int)sizeof(uint16_t)) {
+  if (len < DNS_HEADER_LENGTH) {
     WLOG("Malformed request received, too short: %d", len);
     return;
   }
@@ -80,9 +81,127 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
   ev_io_start(d->loop, &d->watcher);
 }
 
-void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
-                        size_t blen) {
-  ssize_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
+static uint16_t get_edns_udp_size(const char *dns_req, const size_t dns_req_len) {
+  ares_dns_record_t *dnsrec = NULL;
+  ares_status_t parse_status = ares_dns_parse((const unsigned char *)dns_req, dns_req_len, 0, &dnsrec);
+  if (parse_status != ARES_SUCCESS) {
+    WLOG("Failed to parse DNS request: %s", ares_strerror(parse_status));
+    return DNS_SIZE_LIMIT;
+  }
+  const uint16_t tx_id = ares_dns_record_get_id(dnsrec);
+  uint16_t udp_size = 0;
+  const size_t record_count = ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ADDITIONAL);
+  for (size_t i = 0; i < record_count; ++i) {
+    const ares_dns_rr_t *rr = ares_dns_record_rr_get(dnsrec, ARES_SECTION_ADDITIONAL, i);
+    if (ares_dns_rr_get_type(rr) == ARES_REC_TYPE_OPT) {
+      udp_size = ares_dns_rr_get_u16(rr, ARES_RR_OPT_UDP_SIZE);
+      if (udp_size > 0) {
+        DLOG("%04hX: Found EDNS0 UDP buffer size: %u", tx_id, udp_size);
+      }
+      break;
+    }
+  }
+  ares_dns_record_destroy(dnsrec);
+  if (udp_size < DNS_SIZE_LIMIT) {
+    DLOG("%04hX: EDNS0 UDP buffer size %u overruled to %d", tx_id, udp_size, DNS_SIZE_LIMIT);
+    return DNS_SIZE_LIMIT;  // RFC6891 4.3 "Values lower than 512 MUST be treated as equal to 512."
+  }
+  return udp_size;
+}
+
+static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size_limit) {
+  const size_t old_size = *buflen;
+  buf[2] |= 0x02;  // anyway: set truncation flag
+
+  ares_dns_record_t *dnsrec = NULL;
+  ares_status_t status = ares_dns_parse((const unsigned char *)buf, *buflen, 0, &dnsrec);
+  if (status != ARES_SUCCESS) {
+    WLOG("Failed to parse DNS response: %s", ares_strerror(status));
+    return;
+  }
+  const uint16_t tx_id = ares_dns_record_get_id(dnsrec);
+
+  // NOTE: according to current c-ares implementation, removing first or last elements are the fastest!
+
+  // remove every additional and authority record
+  while (ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ADDITIONAL) > 0) {
+    status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_ADDITIONAL, 0);
+    if (status != ARES_SUCCESS) {
+      WLOG("%04hX: Could not remove additional record: %s", tx_id, ares_strerror(status));
+    }
+  }
+  while (ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_AUTHORITY) > 0) {
+    status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_AUTHORITY, 0);
+    if (status != ARES_SUCCESS) {
+      WLOG("%04hX: Could not remove authority record: %s", tx_id, ares_strerror(status));
+    }
+  }
+
+  // rough estimate to reach size limit
+  size_t answers = ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ANSWER);
+  size_t answers_to_keep = (size_limit - DNS_HEADER_LENGTH) / (old_size / answers);
+  answers_to_keep = answers_to_keep > 0 ? answers_to_keep : 1;  // try to keep 1 answer
+
+  // remove answer records until fit size limit or running out of answers
+  unsigned char *new_resp = NULL;
+  size_t new_resp_len = 0;
+  for (uint8_t g = 0; g < UINT8_MAX; ++g) {  // endless loop guard
+    status = ares_dns_write(dnsrec, &new_resp, &new_resp_len);
+    if (status != ARES_SUCCESS) {
+      WLOG("%04hX: Failed to create truncated DNS response: %s", tx_id, ares_strerror(status));
+      new_resp = NULL;  // just to be sure
+      break;
+    }
+    if (new_resp_len < size_limit || answers == 0) {
+      break;
+    }
+    if (new_resp_len >= old_size) {
+      WLOG("%04hX: Truncated DNS response size larger or equal to original: %u >= %u",
+           tx_id, new_resp_len, old_size);  // impossible?
+    }
+    ares_free_string(new_resp);
+    new_resp = NULL;
+
+    DLOG("%04hX: DNS response size truncated from %u to %u but to keep %u limit reducing answers from %u to %u",
+         tx_id, old_size, new_resp_len, size_limit, answers, answers_to_keep);
+
+    while (answers > answers_to_keep) {
+      status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_ANSWER, answers - 1);
+      if (status != ARES_SUCCESS) {
+        WLOG("%04hX: Could not remove answer record: %s", tx_id, ares_strerror(status));
+        break;
+      }
+      --answers;
+    }
+    answers = ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ANSWER);  // update to be sure!
+    answers_to_keep /= 2;
+  }
+  ares_dns_record_destroy(dnsrec);
+
+  if (new_resp != NULL && new_resp_len < old_size) {
+    memcpy(buf, new_resp, new_resp_len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+    *buflen = new_resp_len;
+    buf[2] |= 0x02;  // set truncation flag
+    ILOG("%04hX: DNS response size truncated from %u to %u to keep %u limit",
+         tx_id, old_size, new_resp_len, size_limit);
+    ares_free_string(new_resp);
+  }
+}
+
+void dns_server_respond(dns_server_t *d, struct sockaddr *raddr,
+    const char *dns_req, const size_t dns_req_len, char *dns_resp, size_t dns_resp_len) {
+  if (dns_resp_len > DNS_SIZE_LIMIT) {
+    const uint16_t udp_size = get_edns_udp_size(dns_req, dns_req_len);
+    if (dns_resp_len > udp_size) {
+      truncate_dns_response(dns_resp, &dns_resp_len, udp_size);
+    } else {
+      uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
+      DLOG("%04hX: DNS response size %u larger than %d but EDNS0 UDP buffer size %u allows it",
+           tx_id, dns_resp_len, DNS_SIZE_LIMIT, udp_size);
+    }
+  }
+
+  ssize_t len = sendto(d->sock, dns_resp, dns_resp_len, 0, raddr, d->addrlen);
   if(len == -1) {
     DLOG("sendto failed: %s", strerror(errno));
   }

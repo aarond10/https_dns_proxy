@@ -19,7 +19,6 @@
 
 enum {
   LISTEN_BACKLOG  =   5,
-  MIN_DNS_LENGTH  =  12,  // RFC1035 4.1.1 header size
   IDLE_TIMEOUT_S  = 120,  // "two minutes" according to RFC1035 4.2.2
   RESEND_DELAY_US = 500,  // 0.0005 sec
 };
@@ -159,7 +158,7 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
   uint16_t req_size = 0;
   uint8_t request_received = 0;
   while (get_dns_request(client, &dns_req, &req_size)) {
-    if (req_size < MIN_DNS_LENGTH) {
+    if (req_size < DNS_HEADER_LENGTH) {
       WLOG_CLIENT("Malformed request received, too short: %u", req_size);
       free(dns_req);
       remove_client(client);
@@ -305,7 +304,7 @@ dns_server_tcp_t * dns_server_tcp_create(
 void dns_server_tcp_respond(dns_server_tcp_t *d,
     struct sockaddr *raddr, char *resp, size_t resp_len)
 {
-  if (resp_len < MIN_DNS_LENGTH || resp_len > UINT16_MAX) {
+  if (resp_len < DNS_HEADER_LENGTH || resp_len > UINT16_MAX) {
     WLOG("Malformed request received, invalid length: %u", resp_len);
     return;
   }
