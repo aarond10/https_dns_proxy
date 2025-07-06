@@ -25,8 +25,7 @@ if (NOT CMAKE_INSTALL_BINDIR)
   set(CMAKE_INSTALL_BINDIR bin)
 endif()
 
-# TODO: add flags: -Wconversion -Wsign-conversion -Wfloat-conversion -Wcast-align -Wimplicit-fallthrough
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Wstrict-aliasing -Wformat=2 -Wunused -Wno-variadic-macros -Wnull-dereference -Wshadow")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Wstrict-aliasing -Wformat=2 -Wunused -Wno-variadic-macros -Wnull-dereference -Wshadow -Wconversion -Wsign-conversion -Wfloat-conversion -Wimplicit-fallthrough")
 set(CMAKE_C_FLAGS_DEBUG "-gdwarf-4 -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
@@ -97,7 +96,7 @@ if(USE_CLANG_TIDY)
     message(STATUS "clang-tidy not found.")
   else()
     message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-fix-errors" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo,-misc-include-cleaner")
+    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-fix-errors" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo,-misc-include-cleaner,-cast-align")
   endif()
 else()
   message(STATUS "Not using clang-tidy.")

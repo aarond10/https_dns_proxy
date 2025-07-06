@@ -30,7 +30,7 @@ typedef struct {
 
   ev_timer timer;
   ev_io *io_events;
-  int io_events_count;
+  unsigned io_events_count;
 } dns_poller_t;
 
 // Initializes c-ares and starts a timer for periodic DNS resolution on the

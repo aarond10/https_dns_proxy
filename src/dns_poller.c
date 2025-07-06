@@ -12,7 +12,7 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
 }
 
 static struct ev_io * get_io_event(dns_poller_t *d, int sock) {
-  for (int i = 0; i < d->io_events_count; i++) {
+  for (unsigned i = 0; i < d->io_events_count; i++) {
     if (d->io_events[i].fd == sock) {
       return &d->io_events[i];
     }
@@ -35,7 +35,7 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
   // reserve and start new event on unused slot
   io_event_ptr = get_io_event(d, 0);
   if (!io_event_ptr) {
-    FLOG("c-ares needed more IO event handler, than the number of provided nameservers: %d", d->io_events_count);
+    FLOG("c-ares needed more IO event handler, than the number of provided nameservers: %u", d->io_events_count);
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
@@ -52,7 +52,7 @@ static char *get_addr_listing(char** addr_list, const int af) {
   }
   for (int i = 0; addr_list[i]; i++) {
     const char *res = ares_inet_ntop(af, addr_list[i], pos,
-                                     list + POLLER_ADDR_LIST_SIZE - 1 - pos);
+                                     (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos));
     if (res != NULL) {
       pos += strlen(pos);
       *pos = ',';
@@ -97,8 +97,8 @@ static ev_tstamp get_timeout(dns_poller_t *d)
     struct timeval tv;
     struct timeval *tvp = ares_timeout(d->ares, &max_tv, &tv);
     // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
-    ev_tstamp after = tvp->tv_sec + tvp->tv_usec * 1e-6;
-    return after ? after : 0.1;
+    ev_tstamp after = (double)tvp->tv_sec + (double)tvp->tv_usec * 1e-6;
+    return after > 0.1 ? after : 0.1;
 }
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
@@ -170,8 +170,8 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);
 
-  int nameservers = 1;
-  for (int i = 0; bootstrap_dns[i]; i++) {
+  unsigned nameservers = 1;
+  for (unsigned i = 0; bootstrap_dns[i]; i++) {
     if (bootstrap_dns[i] == ',') {
       nameservers++;
     }
@@ -181,7 +181,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   if (!d->io_events) {
     FLOG("Out of mem");
   }
-  for (int i = 0; i < nameservers; i++) {
+  for (unsigned i = 0; i < nameservers; i++) {
     d->io_events[i].data = d;
   }
   d->io_events_count = nameservers;

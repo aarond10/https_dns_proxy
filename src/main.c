@@ -156,7 +156,7 @@ static int addr_list_reduced(const char* full_list, const char* list) {
   while (pos < end) {
     char current[50];
     const char *comma = strchr(pos, ',');
-    size_t ip_len = comma ? comma - pos : end - pos;
+    size_t ip_len = (size_t)(comma ? comma - pos : end - pos);
     strncpy(current, pos, ip_len); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     current[ip_len] = '\0';
 
@@ -180,7 +180,10 @@ static void dns_poll_cb(const char* hostname, void *data,
   memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  if (ip_start < 0) {
+    abort();  // must be impossible
+  }
+  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (app->resolv && app->resolv->data) {
     char * old_addr_list = strstr(app->resolv->data, ":443:");
     if (old_addr_list) {
@@ -272,7 +275,7 @@ int main(int argc, char *argv[]) {
     }
     case OPR_PARSING_ERROR:
       printf("Failed to parse options!\n");
-      // fallthrough
+      __attribute__((fallthrough));
     case OPR_OPTION_ERROR:
       printf("\n");
       options_show_usage(argc, argv);
@@ -281,7 +284,7 @@ int main(int argc, char *argv[]) {
       abort();  // must not happen
   }
 
-  logging_init(opt.logfd, opt.loglevel, opt.flight_recorder_size);
+  logging_init(opt.logfd, opt.loglevel, (uint32_t)opt.flight_recorder_size);
 
   ILOG("Version: %s", sw_version());
   ILOG("Built: " __DATE__ " " __TIME__);
@@ -323,7 +326,7 @@ int main(int argc, char *argv[]) {
   https_client_init(&https_client, &opt, (opt.stats_interval ? &stat : NULL), loop);
 
   struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
-  ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons(opt.listen_port);
+  ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons((uint16_t)opt.listen_port);
 
   app_state_t app;
   app.https_client = &https_client;
@@ -338,7 +341,7 @@ int main(int argc, char *argv[]) {
 
   dns_server_tcp_t * dns_server_tcp = NULL;
   if (opt.tcp_client_limit > 0) {
-    dns_server_tcp = dns_server_tcp_create(loop, listen_addrinfo, dns_server_cb, &app, opt.tcp_client_limit);
+    dns_server_tcp = dns_server_tcp_create(loop, listen_addrinfo, dns_server_cb, &app, (uint16_t)opt.tcp_client_limit);
   }
 
   freeaddrinfo(listen_addrinfo);

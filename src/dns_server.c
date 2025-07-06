@@ -57,13 +57,13 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
     return;
   }
 
-  char *dns_req = (char *)malloc(len);  // To free buffer after https request is complete.
+  char *dns_req = (char *)malloc((size_t)len);  // To free buffer after https request is complete.
   if (dns_req == NULL) {
     FLOG("Out of mem");
   }
-  memcpy(dns_req, tmp_buf, len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(dns_req, tmp_buf, (size_t)len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
 
-  d->cb(d, 0, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, len);
+  d->cb(d, 0, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, (size_t)len);
 }
 
 void dns_server_init(dns_server_t *d, struct ev_loop *loop,
@@ -85,7 +85,7 @@ static uint16_t get_edns_udp_size(const char *dns_req, const size_t dns_req_len)
   ares_dns_record_t *dnsrec = NULL;
   ares_status_t parse_status = ares_dns_parse((const unsigned char *)dns_req, dns_req_len, 0, &dnsrec);
   if (parse_status != ARES_SUCCESS) {
-    WLOG("Failed to parse DNS request: %s", ares_strerror(parse_status));
+    WLOG("Failed to parse DNS request: %s", ares_strerror((int)parse_status));
     return DNS_SIZE_LIMIT;
   }
   const uint16_t tx_id = ares_dns_record_get_id(dnsrec);
@@ -116,7 +116,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
   ares_dns_record_t *dnsrec = NULL;
   ares_status_t status = ares_dns_parse((const unsigned char *)buf, *buflen, 0, &dnsrec);
   if (status != ARES_SUCCESS) {
-    WLOG("Failed to parse DNS response: %s", ares_strerror(status));
+    WLOG("Failed to parse DNS response: %s", ares_strerror((int)status));
     return;
   }
   const uint16_t tx_id = ares_dns_record_get_id(dnsrec);
@@ -127,13 +127,13 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
   while (ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ADDITIONAL) > 0) {
     status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_ADDITIONAL, 0);
     if (status != ARES_SUCCESS) {
-      WLOG("%04hX: Could not remove additional record: %s", tx_id, ares_strerror(status));
+      WLOG("%04hX: Could not remove additional record: %s", tx_id, ares_strerror((int)status));
     }
   }
   while (ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_AUTHORITY) > 0) {
     status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_AUTHORITY, 0);
     if (status != ARES_SUCCESS) {
-      WLOG("%04hX: Could not remove authority record: %s", tx_id, ares_strerror(status));
+      WLOG("%04hX: Could not remove authority record: %s", tx_id, ares_strerror((int)status));
     }
   }
 
@@ -148,7 +148,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
   for (uint8_t g = 0; g < UINT8_MAX; ++g) {  // endless loop guard
     status = ares_dns_write(dnsrec, &new_resp, &new_resp_len);
     if (status != ARES_SUCCESS) {
-      WLOG("%04hX: Failed to create truncated DNS response: %s", tx_id, ares_strerror(status));
+      WLOG("%04hX: Failed to create truncated DNS response: %s", tx_id, ares_strerror((int)status));
       new_resp = NULL;  // just to be sure
       break;
     }
@@ -168,7 +168,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
     while (answers > answers_to_keep) {
       status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_ANSWER, answers - 1);
       if (status != ARES_SUCCESS) {
-        WLOG("%04hX: Could not remove answer record: %s", tx_id, ares_strerror(status));
+        WLOG("%04hX: Could not remove answer record: %s", tx_id, ares_strerror((int)status));
         break;
       }
       --answers;

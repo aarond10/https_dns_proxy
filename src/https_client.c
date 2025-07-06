@@ -138,7 +138,7 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   return 0;
 }
 
-static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
+static void https_log_data(int level, struct https_fetch_ctx *ctx,
                            const char * prefix, char *ptr, size_t size)
 {
   const size_t width = 0x10;
@@ -156,14 +156,14 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
     for (size_t c = 0; c < width; c++) {
       if (i+c < size) {
         // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
-                            "%02x ", (unsigned char)ptr[i+c]);
+        hex_off += (size_t)snprintf(hex + hex_off, sizeof(hex) - hex_off,
+                                    "%02x ", (unsigned char)ptr[i+c]);
         // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-        str_off += snprintf(str + str_off, sizeof(str) - str_off,
-                            "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
+        str_off += (size_t)snprintf(str + str_off, sizeof(str) - str_off,
+                                    "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
       } else {
         // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
+        hex_off += (size_t)snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
       }
     }
 
@@ -249,7 +249,7 @@ static void https_set_request_version(https_client_t *client,
   switch (client->opt->use_http_version) {
     case 1:
       http_version_int = CURL_HTTP_VERSION_1_1;
-      // fallthrough
+      __attribute__((fallthrough));
     case 2:
       break;
     case 3:
@@ -338,7 +338,7 @@ static void https_fetch_ctx_init(https_client_t *client,
 
 static int https_fetch_ctx_process_response(https_client_t *client,
                                             struct https_fetch_ctx *ctx,
-                                            int curl_result_code)
+                                            CURLcode curl_result_code)
 {
   CURLcode res = 0;
   long long_resp = 0;
@@ -419,15 +419,15 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     res = curl_easy_getinfo(ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
-    } else if (long_resp != CURLE_OK) {
-      WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
+    } else if (long_resp != 0) {
+      WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: certificate verification failure %d", long_resp);
     }
 
     res = curl_easy_getinfo(ctx->curl, CURLINFO_OS_ERRNO, &long_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
     } else if (long_resp != 0) {
-      WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
+      WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror((int)long_resp));
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
         // this can't be fixed here with option overwrite because of dns_poller
         WLOG("Try to run application with -4 argument!");
@@ -510,7 +510,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   if (curl_result_code < 0) {
     WLOG_REQ("Request was aborted");
     drop_reply = 1;
-  } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
+  } else if (https_fetch_ctx_process_response(client, ctx, (CURLcode)curl_result_code) != 0) {
     ILOG_REQ("Response was faulty, skipping DNS reply");
     drop_reply = 1;
   }
@@ -540,7 +540,7 @@ static void check_multi_info(https_client_t *c) {
       struct https_fetch_ctx *cur = c->fetches;
       while (cur) {
         if (cur->curl == msg->easy_handle) {
-          https_fetch_ctx_cleanup(c, prev, cur, msg->data.result);
+          https_fetch_ctx_cleanup(c, prev, cur, (int)msg->data.result);
           break;
         }
         prev = cur;
@@ -642,7 +642,7 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms >= 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-    ev_timer_init(&c->timer, timer_cb, timeout_ms / 1000.0, 0);
+    ev_timer_init(&c->timer, timer_cb, (double)timeout_ms / 1000.0, 0);
     ev_timer_start(c->loop, &c->timer);
   }
   return 0;
