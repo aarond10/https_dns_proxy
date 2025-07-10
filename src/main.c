@@ -269,7 +269,7 @@ static const char * sw_version(void) {
 #ifdef SW_VERSION
   return SW_VERSION;
 #else
-  return "2025.5.10-atLeast";  // update date sometimes, like 1-2 times a year
+  return "2025.8.26-atLeast";  // update date sometimes, like 1-2 times a year
 #endif
 }
 
