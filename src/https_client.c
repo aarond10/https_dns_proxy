@@ -131,6 +131,11 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   DLOG("curl closed socket: %d", sock);
   client->connections--;
 
+  if (client->connections <= 0 && ev_is_active(&client->reset_timer)) {
+    ILOG("Client reset timer cancelled, since all connection closed");
+    ev_timer_stop(client->loop, &client->reset_timer);
+  }
+
   if (client->stat) {
     stat_connection_closed(client->stat);
   }
@@ -353,6 +358,12 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     case CURLE_WRITE_ERROR:
       WLOG_REQ("curl request failed with write error (probably response content was too large)");
       break;
+    case CURLE_OPERATION_TIMEDOUT:
+      if (!ev_is_active(&client->reset_timer)) {
+        ILOG_REQ("Client reset timer started");
+        ev_timer_start(client->loop, &client->reset_timer);
+      }
+      __attribute__((fallthrough));
     default:
       WLOG_REQ("curl request failed with %d: %s", curl_result_code, curl_easy_strerror(curl_result_code));
       if (ctx->curl_errbuf[0] != 0) {
@@ -465,7 +476,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     res = curl_easy_getinfo(ctx->curl, CURLINFO_SCHEME, &str_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_SCHEME: %s", curl_easy_strerror(res));
-    } else if (strcasecmp(str_resp, "https") != 0) {
+    } else if (str_resp != NULL && strcasecmp(str_resp, "https") != 0) {
       DLOG_REQ("CURLINFO_SCHEME: %s", str_resp);
     }
 
@@ -648,22 +659,9 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
   return 0;
 }
 
-void https_client_init(https_client_t *c, options_t *opt,
-                       stat_t *stat, struct ev_loop *loop) {
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  memset(c, 0, sizeof(*c));
-  c->loop = loop;
+static void https_client_multi_init(https_client_t *c, struct curl_slist *header_list) {
   c->curlm = curl_multi_init(); // if fails, first setopt will fail
-  c->header_list = curl_slist_append(curl_slist_append(NULL,
-    "Accept: " DOH_CONTENT_TYPE),
-    "Content-Type: " DOH_CONTENT_TYPE);
-  c->fetches = NULL;
-  c->timer.data = c;
-  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
-    c->io_events[i].data = c;
-  }
-  c->opt = opt;
-  c->stat = stat;
+  c->header_list = header_list;
 
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, HTTPS_CONNECTION_LIMIT);
@@ -672,6 +670,35 @@ void https_client_init(https_client_t *c, options_t *opt,
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERFUNCTION, multi_timer_cb);
+}
+
+static void reset_timer_cb(struct ev_loop __attribute__((unused)) *loop,
+    ev_timer *w, int __attribute__((unused)) revents) {
+  GET_PTR(https_client_t, c, w->data);
+  ILOG("Client reset timer timeouted");
+  https_client_reset(c);
+}
+
+void https_client_init(https_client_t *c, options_t *opt,
+                       stat_t *stat, struct ev_loop *loop) {
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memset(c, 0, sizeof(*c));
+  c->loop = loop;
+  c->fetches = NULL;
+  c->timer.data = c;
+  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
+    c->io_events[i].data = c;
+  }
+  c->opt = opt;
+  c->stat = stat;
+
+  ev_timer_init(&c->reset_timer, reset_timer_cb, (double)opt->conn_loss_time, 0);
+  c->reset_timer.data = c;
+
+  struct curl_slist *header_list = curl_slist_append(curl_slist_append(NULL,
+    "Accept: " DOH_CONTENT_TYPE),
+    "Content-Type: " DOH_CONTENT_TYPE);
+  https_client_multi_init(c, header_list);
 }
 
 void https_client_fetch(https_client_t *c, const char *url,
@@ -687,11 +714,10 @@ void https_client_fetch(https_client_t *c, const char *url,
 }
 
 void https_client_reset(https_client_t *c) {
-  options_t *opt = c->opt;
-  stat_t *stat = c->stat;
-  struct ev_loop *loop = c->loop;
+  struct curl_slist *header_list = c->header_list;
+  c->header_list = NULL;
   https_client_cleanup(c);
-  https_client_init(c, opt, stat, loop);
+  https_client_multi_init(c, header_list);
 }
 
 void https_client_cleanup(https_client_t *c) {
@@ -700,4 +726,5 @@ void https_client_cleanup(https_client_t *c) {
   }
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
+  ev_timer_stop(c->loop, &c->reset_timer);
 }

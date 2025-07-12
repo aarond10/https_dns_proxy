@@ -50,6 +50,8 @@ struct Options {
 
   int max_idle_time;
 
+  int conn_loss_time;
+
   // Print statistic interval
   int stats_interval;
 

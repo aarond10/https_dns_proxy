@@ -43,6 +43,8 @@ typedef struct {
 
   options_t *opt;
   stat_t *stat;
+
+  ev_timer reset_timer;
 } https_client_t;
 
 void https_client_init(https_client_t *c, options_t *opt,
