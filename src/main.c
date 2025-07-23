@@ -9,6 +9,10 @@
 #include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
+#if HAS_LIBSYSTEMD == 1
+#include <systemd/sd-daemon.h> // NOLINT(llvmlibc-restrict-system-libc-headers)
+#endif
+
 #include "dns_poller.h"
 #include "dns_server.h"
 #include "dns_server_tcp.h"
@@ -150,6 +154,27 @@ static void dns_server_cb(void *dns_server, uint8_t is_tcp, void *data,
                      req->dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
 }
 
+static void systemd_notify_ready(void) {
+#if HAS_LIBSYSTEMD == 1
+  static uint8_t called_once = 0;
+  if (called_once != 0) {
+    DLOG("Systemd notify already called once!");
+    return;
+  }
+  called_once = 1;
+  const int result = sd_notify(0, "READY=1");
+  if (result > 0) {
+    DLOG("Systemd notify succeeded, service is ready!");
+  } else if (result == 0) {
+    WLOG("Systemd notify called, but NOTIFY_SOCKET not set. Running manually?");
+  } else {
+    ELOG("Systemd notify failed with: %s", strerror(result));
+  }
+#else
+  DLOG("Systemd notify skipped, not compiled with libsystemd!");
+#endif
+}
+
 static int addr_list_reduced(const char* full_list, const char* list) {
   const char *pos = list;
   const char *end = list + strlen(list);
@@ -184,6 +209,9 @@ static void dns_poll_cb(const char* hostname, void *data,
     abort();  // must be impossible
   }
   (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  if (app->resolv == NULL) {
+    systemd_notify_ready();
+  }
   if (app->resolv && app->resolv->data) {
     char * old_addr_list = strstr(app->resolv->data, ":443:");
     if (old_addr_list) {
@@ -394,6 +422,8 @@ int main(int argc, char *argv[]) {
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "
            "hostname. DNS polling disabled.", opt.resolver_url);
+
+      systemd_notify_ready();
     }
   }
 

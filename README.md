@@ -48,6 +48,7 @@ Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.66.0)`, `libev (>=4.25)`.
 On Debian-derived systems those are libc-ares-dev,
 libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
 On Redhat-derived systems those are c-ares-devel, libcurl-devel and libev-devel.
+On systems with systemd it is recommended to have libsystemd development package installed.
 
 On MacOS, you may run into issues with curl headers. Others have had success when first installing curl with brew.
 ```
@@ -57,7 +58,7 @@ brew link curl --force
 
 On Ubuntu
 ```
-apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential
+apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev libsystemd-dev build-essential
 ```
 
 If all pre-requisites are met, you should be able to build with:

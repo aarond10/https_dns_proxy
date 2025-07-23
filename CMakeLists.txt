@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.7)
 project(HttpsDnsProxy C)
 
+include(CheckIncludeFile)
+
 # FUNCTIONS
 
 # source: https://stackoverflow.com/a/27990434
@@ -34,6 +36,9 @@ if (((CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_GRE
     ( CMAKE_C_COMPILER_ID MATCHES Clang AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10))
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-folding-constant")
 endif()
+
+set(SERVICE_EXTRA_OPTIONS "")
+set(SERVICE_TYPE "simple")
 
 # VERSION
 # It is possible to define external default value like: cmake -DSW_VERSION=1.2-custom
@@ -81,6 +86,15 @@ endif()
 include_directories(
   ${LIBCARES_INCLUDE_DIR} ${LIBCURL_INCLUDE_DIR}
   ${LIBEV_INCLUDE_DIR} src)
+
+check_include_file("systemd/sd-daemon.h" HAVE_SD_DAEMON_H)
+
+if(HAVE_SD_DAEMON_H)
+  message(STATUS "Using libsystemd")
+  add_definitions(-DHAS_LIBSYSTEMD=1)
+  set(LIBS ${LIBS} systemd)
+  set(SERVICE_TYPE "notify")
+endif()
 
 # CLANG TIDY
 
@@ -133,7 +147,6 @@ endif()
 
 install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-set(SERVICE_EXTRA_OPTIONS "")
 if(IS_DIRECTORY "/etc/munin/plugins" AND
    IS_DIRECTORY "/etc/munin/plugin-conf.d")
   set(SERVICE_EXTRA_OPTIONS "-s 300")

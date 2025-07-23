@@ -22,7 +22,7 @@ jobs:
       run: sudo apt-get update
 
     - name: Setup Dependencies
-      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential clang-tidy dnsutils python3-pip python3-venv valgrind ${{ matrix.compiler }}
+      run: sudo apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev libsystemd-dev build-essential clang-tidy dnsutils python3-pip python3-venv valgrind ${{ matrix.compiler }}
 
     - name: Setup Python Virtual Environment
       run: python3 -m venv ${{github.workspace}}/venv
