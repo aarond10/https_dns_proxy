@@ -3,15 +3,12 @@ Documentation  Simple functional tests for https_dns_proxy
 Library        OperatingSystem
 Library        Process
 Library        Collections
+Test Teardown  Stop Proxy
 
 
 *** Variables ***
 ${BINARY_PATH}  ${CURDIR}/../../https_dns_proxy
 ${PORT}  55353
-
-
-*** Settings ***
-Test Teardown  Stop Proxy
 
 
 *** Keywords ***
@@ -23,8 +20,7 @@ Start Proxy
   [Arguments]  @{args}
   @{default_args} =  Create List  -v  -v  -v  -4  -p  ${PORT}
   @{proces_args} =  Combine Lists  ${default_args}  ${args}
-  ${proxy} =  Start Process  ${BINARY_PATH}  @{proces_args}
-  ...  stderr=STDOUT  alias=proxy
+  ${proxy} =  Start Process  ${BINARY_PATH}  @{proces_args}  alias=proxy  stderr=STDOUT
   Set Test Variable  ${proxy}
   Set Test Variable  ${dig_timeout}  2
   Set Test Variable  ${dig_retry}  0
@@ -38,8 +34,7 @@ Start Proxy With Valgrind
   ...  --show-leak-kinds=all  --track-origins=yes  --keep-stacktraces=alloc-and-free
   ...  ${BINARY_PATH}  -v  -v  -v  -F 100 -4  -p  ${PORT}  # using flight recorder with smallest possible buffer size to test memory leak
   @{proces_args} =  Combine Lists  ${default_args}  ${args}
-  ${proxy} =  Start Process  valgrind  @{proces_args}
-  ...  stderr=STDOUT  alias=proxy
+  ${proxy} =  Start Process  valgrind  @{proces_args}  alias=proxy  stderr=STDOUT
   Set Test Variable  ${proxy}
   Set Test Variable  ${dig_timeout}  10
   Set Test Variable  ${dig_retry}  2
@@ -64,8 +59,7 @@ Stop Proxy
 
 Start Dig
   [Arguments]  ${domain}=google.com
-  ${handle} =  Start Process  dig  +timeout\=${dig_timeout}  +retry\=${dig_retry}  @127.0.0.1  -p  ${PORT}  ${domain}
-  ...  stderr=STDOUT  alias=dig
+  ${handle} =  Start Process  dig  +timeout\=${dig_timeout}  +retry\=${dig_retry}  @127.0.0.1  -p  ${PORT}  ${domain}  alias=dig  stderr=STDOUT
   RETURN  ${handle}
 
 Stop Dig
@@ -77,7 +71,7 @@ Stop Dig
 
 Run Dig
   [Arguments]  ${domain}=google.com
-  ${handle} =  Start Dig  ${domain}
+  ${handle} =  Start Dig  ${domain} 
   Stop Dig  ${handle}
 
 Run Dig Parallel
@@ -107,4 +101,28 @@ Reuse HTTP/2 Connection
 Valgrind Resource Leak Check
   Start Proxy With Valgrind
   Run Dig Parallel
-  
+
+TCP Query Works
+  [Documentation]  Ensure DNS queries over TCP are handled and answered
+  Start Proxy
+  ${args} =  Create List  dig  +tcp  +timeout=${dig_timeout}  +retry=${dig_retry}  @127.0.0.1  -p  ${PORT}  google.com
+  ${handle} =  Start Process  @{args}  alias=dig_tcp  stderr=STDOUT
+  ${result} =  Wait For Process  ${handle}  timeout=15 secs
+  Log  ${result.stdout}
+  Should Be Equal As Integers  ${result.rc}  0
+  Should Contain  ${result.stdout}  ANSWER SECTION
+  Stop Proxy
+
+TCP Connection Reuse
+  [Documentation]  Ensure multiple DNS queries can be sent over the same TCP connection
+  Start Proxy
+  ${domains} =  Create List  facebook.com  google.com  amazon.com
+  FOR  ${domain}  IN  @{domains}
+    ${args} =  Create List  dig  +tcp  +timeout=${dig_timeout}  +retry=${dig_retry}  @127.0.0.1  -p  ${PORT}  ${domain}
+    ${handle} =  Start Process  @{args}  alias=dig_tcp  stderr=STDOUT
+    ${result} =  Wait For Process  ${handle}  timeout=15 secs
+    Log  ${result.stdout}
+    Should Be Equal As Integers  ${result.rc}  0
+    Should Contain  ${result.stdout}  ANSWER SECTION
+  END
+  Stop Proxy

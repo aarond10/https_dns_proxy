@@ -7,7 +7,7 @@
 #include <sys/socket.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
 
-#include "dns_server.h"
+#include "dns_server_udp.h"
 #include "logging.h"
 
 
@@ -60,7 +60,7 @@ static int get_listen_sock(const char *listen_addr, int listen_port,
 
 static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
                        ev_io *w, int __attribute__((unused)) revents) {
-  dns_server_t *d = (dns_server_t *)w->data;
+  dns_server_udp_t *d = (dns_server_udp_t *)w->data;
 
   char *buf = (char *)calloc(1, REQUEST_MAX + 1);
   if (buf == NULL) {
@@ -85,32 +85,30 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   d->cb(d, d->cb_data, (struct sockaddr*)&raddr, tx_id, buf, len);
 }
 
-void dns_server_init(dns_server_t *d, struct ev_loop *loop,
-                     const char *listen_addr, int listen_port,
-                     dns_req_received_cb cb, void *data) {
+void dns_server_udp_init(dns_server_udp_t *d, struct ev_loop *loop,
+                        const char *listen_addr, int listen_port,
+                        dns_udp_req_received_cb cb, void *data) {
   d->loop = loop;
   d->sock = get_listen_sock(listen_addr, listen_port, &d->addrlen);
   d->cb = cb;
   d->cb_data = data;
-
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(&d->watcher, watcher_cb, d->sock, EV_READ);
   d->watcher.data = d;
   ev_io_start(d->loop, &d->watcher);
 }
 
-void dns_server_respond(dns_server_t *d, struct sockaddr *raddr, char *buf,
-                        size_t blen) {
+void dns_server_udp_respond(dns_server_udp_t *d, struct sockaddr *raddr, char *buf,
+                            size_t blen) {
   ssize_t len = sendto(d->sock, buf, blen, 0, raddr, d->addrlen);
   if(len == -1) {
     DLOG("sendto failed: %s", strerror(errno));
   }
 }
 
-void dns_server_stop(dns_server_t *d) {
+void dns_server_udp_stop(dns_server_udp_t *d) {
   ev_io_stop(d->loop, &d->watcher);
 }
 
-void dns_server_cleanup(dns_server_t *d) {
+void dns_server_udp_cleanup(dns_server_udp_t *d) {
   close(d->sock);
 }

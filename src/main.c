@@ -10,7 +10,8 @@
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
 #include "dns_poller.h"
-#include "dns_server.h"
+#include "dns_server_udp.h"
+#include "dns_server_tcp.h"
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
@@ -28,13 +29,23 @@ typedef struct {
 
 // NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
-  dns_server_t *dns_server;
+  dns_server_udp_t *dns_server;
   char* dns_req;
   stat_t *stat;
   ev_tstamp start_tstamp;
   uint16_t tx_id;
   struct sockaddr_storage raddr;
 } request_t;
+
+// TCP DNS request context
+typedef struct {
+  dns_server_tcp_t *dns_server_tcp;
+  char* dns_req;
+  stat_t *stat;
+  ev_tstamp start_tstamp;
+  uint16_t tx_id;
+  int client_fd;
+} tcp_request_t;
 
 static int is_ipv4_address(char *str) {
     struct in6_addr addr;
@@ -94,7 +105,7 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
         WLOG("DNS request and response IDs are not matching: %hX != %hX",
              req->tx_id, response_id);
       } else {
-        dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        dns_server_udp_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
         if (req->stat) {
           stat_request_end(req->stat, buflen, ev_now(req->dns_server->loop) - req->start_tstamp);
         }
@@ -104,38 +115,80 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
   free(req);
 }
 
-static void dns_server_cb(dns_server_t *dns_server, void *data,
+static void https_resp_tcp_cb(void *data, char *buf, size_t buflen) {
+  tcp_request_t *req = (tcp_request_t *)data;
+  DLOG("[TCP] Received response for id: %hX, len: %zu", req->tx_id, buflen);
+  free((void*)req->dns_req);
+  if (buf != NULL) {
+    if (buflen < (int)sizeof(uint16_t)) {
+      WLOG("[TCP] %04hX: Malformed response received (too short)", req->tx_id);
+    } else {
+      uint16_t response_id = ntohs(*((uint16_t*)buf));
+      if (req->tx_id != response_id) {
+        WLOG("[TCP] DNS request and response IDs are not matching: %hX != %hX", req->tx_id, response_id);
+      } else {
+        dns_server_tcp_respond(req->client_fd, buf, buflen);
+        if (req->stat) {
+          stat_request_end(req->stat, buflen, ev_now(req->dns_server_tcp->loop) - req->start_tstamp);
+        }
+      }
+    }
+  }
+  free(req);
+}
+
+static void dns_server_cb(dns_server_udp_t *dns_server, void *data,
                           struct sockaddr* addr, uint16_t tx_id,
                           char *dns_req, size_t dns_req_len) {
   app_state_t *app = (app_state_t *)data;
-
   DLOG("Received request for id: %hX, len: %d", tx_id, dns_req_len);
-
-  // If we're not yet bootstrapped, don't answer. libcurl will fall back to
-  // gethostbyname() which can cause a DNS loop due to the nameserver listed
-  // in resolv.conf being or depending on https_dns_proxy itself.
   if(app->using_dns_poller && (app->resolv == NULL || app->resolv->data == NULL)) {
     WLOG("%04hX: Query received before bootstrapping is completed, discarding.", tx_id);
     free(dns_req);
     return;
   }
-
   request_t *req = (request_t *)calloc(1, sizeof(request_t));
   if (req == NULL) {
     FLOG("%04hX: Out of mem", tx_id);
   }
   req->tx_id = tx_id;
-  memcpy(&req->raddr, addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(&req->raddr, addr, dns_server->addrlen);
   req->dns_server = dns_server;
-  req->dns_req = dns_req; // To free buffer after https request is complete.
+  req->dns_req = dns_req;
   req->start_tstamp = ev_now(dns_server->loop);
   req->stat = app->stat;
-
   if (req->stat) {
     stat_request_begin(app->stat, dns_req_len);
   }
   https_client_fetch(app->https_client, app->resolver_url,
                      dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
+}
+
+static void dns_server_tcp_cb(dns_server_tcp_t *dns_server_tcp, void *data,
+                             int client_fd, uint16_t tx_id,
+                             char *dns_req, size_t dns_req_len) {
+  app_state_t *app = (app_state_t *)data;
+  DLOG("[TCP] Received request for id: %hX, len: %d", tx_id, dns_req_len);
+  if(app->using_dns_poller && (app->resolv == NULL || app->resolv->data == NULL)) {
+    WLOG("[TCP] %04hX: Query received before bootstrapping is completed, discarding.", tx_id);
+    free(dns_req);
+    return;
+  }
+  tcp_request_t *req = (tcp_request_t *)calloc(1, sizeof(tcp_request_t));
+  if (req == NULL) {
+    FLOG("[TCP] %04hX: Out of mem", tx_id);
+  }
+  req->tx_id = tx_id;
+  req->dns_server_tcp = dns_server_tcp;
+  req->dns_req = dns_req;
+  req->start_tstamp = ev_now(dns_server_tcp->loop);
+  req->stat = app->stat;
+  req->client_fd = client_fd;
+  if (req->stat) {
+    stat_request_begin(app->stat, dns_req_len);
+  }
+  https_client_fetch(app->https_client, app->resolver_url,
+                     dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_tcp_cb, req);
 }
 
 static int addr_list_reduced(const char* full_list, const char* list) {
@@ -300,9 +353,13 @@ int main(int argc, char *argv[]) {
   app.using_dns_poller = 0;
   app.stat = (opt.stats_interval ? &stat : NULL);
 
-  dns_server_t dns_server;
-  dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
-                  dns_server_cb, &app);
+  dns_server_udp_t dns_server;
+  dns_server_udp_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
+                      dns_server_cb, &app);
+
+  dns_server_tcp_t dns_server_tcp;
+  dns_server_tcp_init(&dns_server_tcp, loop, opt.listen_addr, opt.listen_port,
+                      dns_server_tcp_cb, &app);
 
   if (opt.gid != (uid_t)-1 && setgroups(1, &opt.gid)) {
     FLOG("Failed to set groups");
@@ -366,14 +423,16 @@ int main(int argc, char *argv[]) {
   ev_signal_stop(loop, &sigterm);
   ev_signal_stop(loop, &sigint);
   ev_signal_stop(loop, &sigpipe);
-  dns_server_stop(&dns_server);
+  dns_server_udp_stop(&dns_server);
+  dns_server_tcp_stop(&dns_server_tcp);
   stat_stop(&stat);
 
   DLOG("re-entering loop");
   ev_run(loop, 0);
   DLOG("loop finished all events");
 
-  dns_server_cleanup(&dns_server);
+  dns_server_udp_cleanup(&dns_server);
+  dns_server_tcp_cleanup(&dns_server_tcp);
   https_client_cleanup(&https_client);
   stat_cleanup(&stat);
 
