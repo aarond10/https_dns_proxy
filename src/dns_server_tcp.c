@@ -118,11 +118,11 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
 
   // Receive data
   char buf[UINT16_MAX];  // stack buffer for largest DNS request
-  ssize_t len = recv(w->fd, &buf, UINT16_MAX, 0);
+  ssize_t len = recv(w->fd, buf, UINT16_MAX, 0);
   if (len <= 0) {
     if (len == 0 || errno == ECONNRESET) {
       DLOG_CLIENT("Connection closed");
-    } else if (errno == EAGAIN && errno == EWOULDBLOCK) {
+    } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
       return;
     } else {
       WLOG_CLIENT("Read error: %s", strerror(errno));
@@ -239,16 +239,17 @@ static int get_tcp_listen_sock(struct addrinfo *listen_addrinfo) {
     ELOG("Reuse address failed: %s (%d)", strerror(errno), errno);
   }
 
+  uint16_t port;
   char ipstr[INET6_ADDRSTRLEN];
   if (listen_addrinfo->ai_family == AF_INET) {
-      inet_ntop(AF_INET, &((struct sockaddr_in *)listen_addrinfo->ai_addr)->sin_addr, ipstr, sizeof(ipstr));
+    port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
+    inet_ntop(AF_INET, &((struct sockaddr_in *)listen_addrinfo->ai_addr)->sin_addr, ipstr, sizeof(ipstr));
   } else if (listen_addrinfo->ai_family == AF_INET6) {
-      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)listen_addrinfo->ai_addr)->sin6_addr, ipstr, sizeof(ipstr));
+    port = ntohs(((struct sockaddr_in6*) listen_addrinfo->ai_addr)->sin6_port);
+    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)listen_addrinfo->ai_addr)->sin6_addr, ipstr, sizeof(ipstr));
   } else {
     FLOG("Unknown address family: %d", listen_addrinfo->ai_family);
   }
-
-  uint16_t port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
 
   int res = bind(sock, listen_addrinfo->ai_addr, listen_addrinfo->ai_addrlen);
   if (res < 0) {
