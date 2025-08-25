@@ -16,16 +16,17 @@ static int get_listen_sock(struct addrinfo *listen_addrinfo) {
     FLOG("Error creating socket: %s (%d)", strerror(errno), errno);
   }
 
+  uint16_t port;
   char ipstr[INET6_ADDRSTRLEN];
   if (listen_addrinfo->ai_family == AF_INET) {
-      inet_ntop(AF_INET, &((struct sockaddr_in *)listen_addrinfo->ai_addr)->sin_addr, ipstr, sizeof(ipstr));
+    port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
+    inet_ntop(AF_INET, &((struct sockaddr_in *)listen_addrinfo->ai_addr)->sin_addr, ipstr, sizeof(ipstr));
   } else if (listen_addrinfo->ai_family == AF_INET6) {
-      inet_ntop(AF_INET6, &((struct sockaddr_in6 *)listen_addrinfo->ai_addr)->sin6_addr, ipstr, sizeof(ipstr));
+    port = ntohs(((struct sockaddr_in6*) listen_addrinfo->ai_addr)->sin6_port);
+    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)listen_addrinfo->ai_addr)->sin6_addr, ipstr, sizeof(ipstr));
   } else {
     FLOG("Unknown address family: %d", listen_addrinfo->ai_family);
   }
-
-  uint16_t port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
 
   int res = bind(sock, listen_addrinfo->ai_addr, listen_addrinfo->ai_addrlen);
   if (res < 0) {

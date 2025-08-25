@@ -354,7 +354,12 @@ int main(int argc, char *argv[]) {
   https_client_init(&https_client, &opt, (opt.stats_interval ? &stat : NULL), loop);
 
   struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
-  ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons((uint16_t)opt.listen_port);
+
+  if (listen_addrinfo->ai_family == AF_INET) {
+    ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons((uint16_t)opt.listen_port);
+  } else if (listen_addrinfo->ai_family == AF_INET6) {
+    ((struct sockaddr_in6*) listen_addrinfo->ai_addr)->sin6_port = htons((uint16_t)opt.listen_port);
+  }
 
   app_state_t app;
   app.https_client = &https_client;
