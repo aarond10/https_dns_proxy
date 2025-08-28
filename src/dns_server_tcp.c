@@ -117,8 +117,8 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
   dns_server_tcp_t *d = client->d;
 
   // Receive data
-  char buf[UINT16_MAX];  // stack buffer for largest DNS request
-  ssize_t len = recv(w->fd, buf, UINT16_MAX, 0);
+  char buf[DNS_REQUEST_BUFFER_SIZE];  // if there would be more data, callback will be called again
+  ssize_t len = recv(w->fd, buf, DNS_REQUEST_BUFFER_SIZE, 0);
   if (len <= 0) {
     if (len == 0 || errno == ECONNRESET) {
       DLOG_CLIENT("Connection closed");
@@ -239,7 +239,7 @@ static int get_tcp_listen_sock(struct addrinfo *listen_addrinfo) {
     ELOG("Reuse address failed: %s (%d)", strerror(errno), errno);
   }
 
-  uint16_t port;
+  uint16_t port = 0;
   char ipstr[INET6_ADDRSTRLEN];
   if (listen_addrinfo->ai_family == AF_INET) {
     port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
@@ -306,7 +306,7 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
     struct sockaddr *raddr, char *resp, size_t resp_len)
 {
   if (resp_len < DNS_HEADER_LENGTH || resp_len > UINT16_MAX) {
-    WLOG("Malformed request received, invalid length: %u", resp_len);
+    WLOG("Malformed response received, invalid length: %u", resp_len);
     return;
   }
 
