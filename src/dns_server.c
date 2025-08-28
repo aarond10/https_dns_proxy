@@ -16,7 +16,7 @@ static int get_listen_sock(struct addrinfo *listen_addrinfo) {
     FLOG("Error creating socket: %s (%d)", strerror(errno), errno);
   }
 
-  uint16_t port;
+  uint16_t port = 0;
   char ipstr[INET6_ADDRSTRLEN];
   if (listen_addrinfo->ai_family == AF_INET) {
     port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
@@ -43,13 +43,18 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
                        ev_io *w, int __attribute__((unused)) revents) {
   dns_server_t *d = (dns_server_t *)w->data;
 
-  char tmp_buf[UINT16_MAX];  // stack buffer for largest UDP packet to support EDNS
+  char tmp_buf[DNS_REQUEST_BUFFER_SIZE];
   struct sockaddr_storage tmp_raddr;
   socklen_t tmp_addrlen = d->addrlen;  // recvfrom can write to addrlen
-  ssize_t len = recvfrom(w->fd, tmp_buf, UINT16_MAX, 0, (struct sockaddr*)&tmp_raddr,
-                         &tmp_addrlen);
+  ssize_t len = recvfrom(w->fd, tmp_buf, DNS_REQUEST_BUFFER_SIZE, MSG_TRUNC,
+                         (struct sockaddr*)&tmp_raddr, &tmp_addrlen);
   if (len < 0) {
     ELOG("recvfrom failed: %s", strerror(errno));
+    return;
+  }
+  if (len > DNS_REQUEST_BUFFER_SIZE) {
+    WLOG("Unsupported request received, too large: %d. Limit is: %d",
+         len, DNS_REQUEST_BUFFER_SIZE);
     return;
   }
 

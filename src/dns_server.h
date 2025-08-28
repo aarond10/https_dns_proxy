@@ -10,7 +10,8 @@
 
 enum {
   DNS_HEADER_LENGTH = 12,  // RFC1035 4.1.1 header size
-  DNS_SIZE_LIMIT = 512
+  DNS_SIZE_LIMIT = 512,
+  DNS_REQUEST_BUFFER_SIZE = 4096  // EDNS default before DNS Flag Day 2020
 };
 
 struct dns_server_s;
