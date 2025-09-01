@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.7)
 project(HttpsDnsProxy C)
 
+include(CheckIncludeFile)
+
 # FUNCTIONS
 
 # source: https://stackoverflow.com/a/27990434
@@ -25,14 +27,18 @@ if (NOT CMAKE_INSTALL_BINDIR)
   set(CMAKE_INSTALL_BINDIR bin)
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra --pedantic -Wno-strict-aliasing -Wno-variadic-macros")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic -Wstrict-aliasing -Wformat=2 -Wunused -Wno-variadic-macros -Wnull-dereference -Wshadow -Wconversion -Wsign-conversion -Wfloat-conversion -Wimplicit-fallthrough")
 set(CMAKE_C_FLAGS_DEBUG "-gdwarf-4 -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
-if ((CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 9) OR
-    (CMAKE_C_COMPILER_ID MATCHES Clang AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10))
+if (((CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL  9) AND
+     (CMAKE_C_COMPILER_ID MATCHES GNU   AND CMAKE_C_COMPILER_VERSION VERSION_LESS          14)) OR
+    ( CMAKE_C_COMPILER_ID MATCHES Clang AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 10))
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-zero-variadic-macro-arguments -Wno-gnu-folding-constant")
 endif()
+
+set(SERVICE_EXTRA_OPTIONS "")
+set(SERVICE_TYPE "simple")
 
 # VERSION
 # It is possible to define external default value like: cmake -DSW_VERSION=1.2-custom
@@ -81,6 +87,15 @@ include_directories(
   ${LIBCARES_INCLUDE_DIR} ${LIBCURL_INCLUDE_DIR}
   ${LIBEV_INCLUDE_DIR} src)
 
+check_include_file("systemd/sd-daemon.h" HAVE_SD_DAEMON_H)
+
+if(HAVE_SD_DAEMON_H)
+  message(STATUS "Using libsystemd")
+  add_definitions(-DHAS_LIBSYSTEMD=1)
+  set(LIBS ${LIBS} systemd)
+  set(SERVICE_TYPE "notify")
+endif()
+
 # CLANG TIDY
 
 option(USE_CLANG_TIDY "Use clang-tidy during compilation" ON)
@@ -95,7 +110,7 @@ if(USE_CLANG_TIDY)
     message(STATUS "clang-tidy not found.")
   else()
     message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-fix-errors" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo,-misc-include-cleaner")
+    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-fix-errors" "-checks=*,-cert-err34-c,-readability-identifier-length,-altera-unroll-loops,-bugprone-easily-swappable-parameters,-concurrency-mt-unsafe,-*magic-numbers,-hicpp-signed-bitwise,-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,-google-readability-todo,-misc-include-cleaner,-cast-align")
   endif()
 else()
   message(STATUS "Not using clang-tidy.")
@@ -132,7 +147,6 @@ endif()
 
 install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-set(SERVICE_EXTRA_OPTIONS "")
 if(IS_DIRECTORY "/etc/munin/plugins" AND
    IS_DIRECTORY "/etc/munin/plugin-conf.d")
   set(SERVICE_EXTRA_OPTIONS "-s 300")

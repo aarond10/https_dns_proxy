@@ -9,8 +9,13 @@
 #include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
 #include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
 
+#if HAS_LIBSYSTEMD == 1
+#include <systemd/sd-daemon.h> // NOLINT(llvmlibc-restrict-system-libc-headers)
+#endif
+
 #include "dns_poller.h"
 #include "dns_server.h"
+#include "dns_server_tcp.h"
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
@@ -24,12 +29,15 @@ typedef struct {
   const char *resolver_url;
   stat_t *stat;
   uint8_t using_dns_poller;
+  socklen_t addrlen;
 } app_state_t;
 
 // NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
-  dns_server_t *dns_server;
+  void *dns_server;
+  uint8_t is_tcp;
   char* dns_req;
+  size_t dns_req_len;
   stat_t *stat;
   ev_tstamp start_tstamp;
   uint16_t tx_id;
@@ -84,31 +92,37 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
   if (req == NULL) {
     FLOG("%04hX: data NULL", req->tx_id);
   }
-  free((void*)req->dns_req);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
-    if (buflen < (int)sizeof(uint16_t)) {
-      WLOG("%04hX: Malformed response received (too short)", req->tx_id);
+    if (buflen < DNS_HEADER_LENGTH) {
+      WLOG("%04hX: Malformed response received, too short: %u", req->tx_id, buflen);
     } else {
-      uint16_t response_id = ntohs(*((uint16_t*)buf));
+      const uint16_t response_id = ntohs(*((uint16_t*)buf));
       if (req->tx_id != response_id) {
         WLOG("DNS request and response IDs are not matching: %hX != %hX",
              req->tx_id, response_id);
       } else {
-        dns_server_respond(req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        if (req->is_tcp) {
+          dns_server_tcp_respond((dns_server_tcp_t *)req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
+        } else {
+          dns_server_respond((dns_server_t *)req->dns_server, (struct sockaddr*)&req->raddr,
+            req->dns_req, req->dns_req_len, buf, buflen);
+        }
         if (req->stat) {
-          stat_request_end(req->stat, buflen, ev_now(req->dns_server->loop) - req->start_tstamp);
+          stat_request_end(req->stat, buflen, ev_now(req->stat->loop) - req->start_tstamp, req->is_tcp);
         }
       }
     }
   }
+  free((void*)req->dns_req);
   free(req);
 }
 
-static void dns_server_cb(dns_server_t *dns_server, void *data,
-                          struct sockaddr* addr, uint16_t tx_id,
+static void dns_server_cb(void *dns_server, uint8_t is_tcp, void *data,
+                          struct sockaddr* tmp_remote_addr,
                           char *dns_req, size_t dns_req_len) {
   app_state_t *app = (app_state_t *)data;
 
+  uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
   DLOG("Received request for id: %hX, len: %d", tx_id, dns_req_len);
 
   // If we're not yet bootstrapped, don't answer. libcurl will fall back to
@@ -125,17 +139,40 @@ static void dns_server_cb(dns_server_t *dns_server, void *data,
     FLOG("%04hX: Out of mem", tx_id);
   }
   req->tx_id = tx_id;
-  memcpy(&req->raddr, addr, dns_server->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(&req->raddr, tmp_remote_addr, app->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   req->dns_server = dns_server;
-  req->dns_req = dns_req; // To free buffer after https request is complete.
-  req->start_tstamp = ev_now(dns_server->loop);
+  req->is_tcp = is_tcp;
+  req->dns_req = dns_req;  // To free buffer after https request is complete.
+  req->dns_req_len = dns_req_len;
   req->stat = app->stat;
 
   if (req->stat) {
-    stat_request_begin(app->stat, dns_req_len);
+    req->start_tstamp = ev_now(app->stat->loop);
+    stat_request_begin(app->stat, dns_req_len, is_tcp);
   }
   https_client_fetch(app->https_client, app->resolver_url,
-                     dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
+                     req->dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
+}
+
+static void systemd_notify_ready(void) {
+#if HAS_LIBSYSTEMD == 1
+  static uint8_t called_once = 0;
+  if (called_once != 0) {
+    DLOG("Systemd notify already called once!");
+    return;
+  }
+  called_once = 1;
+  const int result = sd_notify(0, "READY=1");
+  if (result > 0) {
+    DLOG("Systemd notify succeeded, service is ready!");
+  } else if (result == 0) {
+    WLOG("Systemd notify called, but NOTIFY_SOCKET not set. Running manually?");
+  } else {
+    ELOG("Systemd notify failed with: %s", strerror(result));
+  }
+#else
+  DLOG("Systemd notify skipped, not compiled with libsystemd!");
+#endif
 }
 
 static int addr_list_reduced(const char* full_list, const char* list) {
@@ -144,7 +181,7 @@ static int addr_list_reduced(const char* full_list, const char* list) {
   while (pos < end) {
     char current[50];
     const char *comma = strchr(pos, ',');
-    size_t ip_len = comma ? comma - pos : end - pos;
+    size_t ip_len = (size_t)(comma ? comma - pos : end - pos);
     strncpy(current, pos, ip_len); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     current[ip_len] = '\0';
 
@@ -168,7 +205,13 @@ static void dns_poll_cb(const char* hostname, void *data,
   memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  if (ip_start < 0) {
+    abort();  // must be impossible
+  }
+  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  if (app->resolv == NULL) {
+    systemd_notify_ready();
+  }
   if (app->resolv && app->resolv->data) {
     char * old_addr_list = strstr(app->resolv->data, ":443:");
     if (old_addr_list) {
@@ -205,11 +248,28 @@ static int proxy_supports_name_resolution(const char *proxy)
   return 0;
 }
 
+static struct addrinfo * get_listen_address(const char *listen_addr) {
+  struct addrinfo *ai = NULL;
+  struct addrinfo hints;
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memset(&hints, 0, sizeof(struct addrinfo));
+  /* prevent DNS lookups if leakage is our worry */
+  hints.ai_flags = AI_NUMERICHOST;
+
+  int res = getaddrinfo(listen_addr, NULL, &hints, &ai);
+  if (res != 0) {
+    FLOG("Error parsing listen address %s, getaddrinfo error: %s",
+         listen_addr, gai_strerror(res));
+  }
+
+  return ai;
+}
+
 static const char * sw_version(void) {
 #ifdef SW_VERSION
   return SW_VERSION;
 #else
-  return "2025.5.10-atLeast";  // update date sometimes, like 1-2 times a year
+  return "2025.8.26-atLeast";  // update date sometimes, like 1-2 times a year
 #endif
 }
 
@@ -243,7 +303,7 @@ int main(int argc, char *argv[]) {
     }
     case OPR_PARSING_ERROR:
       printf("Failed to parse options!\n");
-      // fallthrough
+      __attribute__((fallthrough));
     case OPR_OPTION_ERROR:
       printf("\n");
       options_show_usage(argc, argv);
@@ -252,7 +312,7 @@ int main(int argc, char *argv[]) {
       abort();  // must not happen
   }
 
-  logging_init(opt.logfd, opt.loglevel, opt.flight_recorder_size);
+  logging_init(opt.logfd, opt.loglevel, (uint32_t)opt.flight_recorder_size);
 
   ILOG("Version: %s", sw_version());
   ILOG("Built: " __DATE__ " " __TIME__);
@@ -293,16 +353,32 @@ int main(int argc, char *argv[]) {
   https_client_t https_client;
   https_client_init(&https_client, &opt, (opt.stats_interval ? &stat : NULL), loop);
 
+  struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
+
+  if (listen_addrinfo->ai_family == AF_INET) {
+    ((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port = htons((uint16_t)opt.listen_port);
+  } else if (listen_addrinfo->ai_family == AF_INET6) {
+    ((struct sockaddr_in6*) listen_addrinfo->ai_addr)->sin6_port = htons((uint16_t)opt.listen_port);
+  }
+
   app_state_t app;
   app.https_client = &https_client;
   app.resolv = NULL;
   app.resolver_url = opt.resolver_url;
   app.using_dns_poller = 0;
   app.stat = (opt.stats_interval ? &stat : NULL);
+  app.addrlen = listen_addrinfo->ai_addrlen;
 
   dns_server_t dns_server;
-  dns_server_init(&dns_server, loop, opt.listen_addr, opt.listen_port,
-                  dns_server_cb, &app);
+  dns_server_init(&dns_server, loop, listen_addrinfo, dns_server_cb, &app);
+
+  dns_server_tcp_t * dns_server_tcp = NULL;
+  if (opt.tcp_client_limit > 0) {
+    dns_server_tcp = dns_server_tcp_create(loop, listen_addrinfo, dns_server_cb, &app, (uint16_t)opt.tcp_client_limit);
+  }
+
+  freeaddrinfo(listen_addrinfo);
+  listen_addrinfo = NULL;
 
   if (opt.gid != (uid_t)-1 && setgroups(1, &opt.gid)) {
     FLOG("Failed to set groups");
@@ -351,6 +427,8 @@ int main(int argc, char *argv[]) {
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "
            "hostname. DNS polling disabled.", opt.resolver_url);
+
+      systemd_notify_ready();
     }
   }
 
@@ -367,6 +445,9 @@ int main(int argc, char *argv[]) {
   ev_signal_stop(loop, &sigint);
   ev_signal_stop(loop, &sigpipe);
   dns_server_stop(&dns_server);
+  if (dns_server_tcp != NULL) {
+    dns_server_tcp_stop(dns_server_tcp);
+  }
   stat_stop(&stat);
 
   DLOG("re-entering loop");
@@ -374,6 +455,11 @@ int main(int argc, char *argv[]) {
   DLOG("loop finished all events");
 
   dns_server_cleanup(&dns_server);
+  if (dns_server_tcp != NULL) {
+    dns_server_tcp_cleanup(dns_server_tcp);
+    free(dns_server_tcp);
+    dns_server_tcp = NULL;
+  }
   https_client_cleanup(&https_client);
   stat_cleanup(&stat);
 

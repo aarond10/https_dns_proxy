@@ -6,7 +6,9 @@
 
 struct Options {
   const char *listen_addr;
-  uint16_t listen_port;
+  int listen_port;
+
+  int tcp_client_limit;
 
   // Logfile.
   const char *logfile;
@@ -48,6 +50,8 @@ struct Options {
 
   int max_idle_time;
 
+  int conn_loss_time;
+
   // Print statistic interval
   int stats_interval;
 
@@ -55,7 +59,7 @@ struct Options {
   const char *ca_info;
 
   // Number of logs to be kept by flight recorder
-  uint32_t flight_recorder_size;
+  int flight_recorder_size;
 } __attribute__((aligned(128)));
 typedef struct Options options_t;
 

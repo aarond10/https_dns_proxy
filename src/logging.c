@@ -121,18 +121,18 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (chars < 0 || chars >= LOG_LINE_SIZE/2) {
     abort();  // must be impossible
   }
-  buff_pos += chars;
+  buff_pos += (uint32_t)chars;
 
   va_list args;
   va_start(args, fmt);
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  // NOLINTNEXTLINE(clang-diagnostic-format-nonliteral,clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   chars = vsnprintf(buff + buff_pos, LOG_LINE_SIZE - buff_pos, fmt, args);
   va_end(args);
 
   if (chars < 0) {
     abort();  // must be impossible
   }
-  buff_pos += chars;
+  buff_pos += (uint32_t)chars;
   if (buff_pos >= LOG_LINE_SIZE) {
     buff_pos = LOG_LINE_SIZE - 1;
     buff[buff_pos - 1] = '$'; // indicate truncation

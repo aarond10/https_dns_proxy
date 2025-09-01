@@ -16,12 +16,14 @@
 #endif
 
 enum {
-DEFAULT_HTTP_VERSION = 2
+DEFAULT_HTTP_VERSION = 2,
+MAX_TCP_CLIENTS = 200
 };
 
 void options_init(struct Options *opt) {
   opt->listen_addr = "127.0.0.1";
   opt->listen_port = 5053;
+  opt->tcp_client_limit = 20;
   opt->logfile = "-";
   opt->logfd = STDOUT_FILENO;
   opt->loglevel = LOG_ERROR;
@@ -39,6 +41,7 @@ void options_init(struct Options *opt) {
   opt->curl_proxy = NULL;
   opt->use_http_version = DEFAULT_HTTP_VERSION;
   opt->max_idle_time = 118;
+  opt->conn_loss_time = 15;
   opt->stats_interval = 0;
   opt->ca_info = NULL;
   opt->flight_recorder_size = 0;
@@ -46,7 +49,7 @@ void options_init(struct Options *opt) {
 
 enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:du:g:b:i:4r:e:t:l:vxqm:s:C:F:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:e:t:l:vxqm:L:s:C:F:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -56,6 +59,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       break;
     case 'p': // listen_port
       opt->listen_port = atoi(optarg);
+      break;
+    case 'T': // tcp_client_limit
+      opt->tcp_client_limit = atoi(optarg);
       break;
     case 'd': // daemonize
       opt->daemonize = 1;
@@ -101,6 +107,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       break;
     case 'm':
       opt->max_idle_time = atoi(optarg);
+      break;
+    case 'L':
+      opt->conn_loss_time = atoi(optarg);
       break;
     case 's': // stats interval
       opt->stats_interval = atoi(optarg);
@@ -174,6 +183,11 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
     printf("Maximum idle time must be between 0 and 3600.\n");
     return OPR_OPTION_ERROR;
   }
+  if (opt->conn_loss_time < 5 ||
+      opt->conn_loss_time > 60) {
+    printf("Connection loss time must be between 5 and 60.\n");
+    return OPR_OPTION_ERROR;
+  }
   if (opt->stats_interval < 0 || opt->stats_interval > 3600) {
     printf("Statistic interval must be between 0 and 3600.\n");
     return OPR_OPTION_ERROR;
@@ -183,13 +197,21 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
     printf("Flight recorder limit must be between 100 and 100000.\n");
     return OPR_OPTION_ERROR;
   }
+  if (opt->listen_port < 0 || opt->listen_port > UINT16_MAX) {
+    printf("Listen port must be between 0 and %u.\n", UINT16_MAX);
+    return OPR_OPTION_ERROR;
+  }
+  if (opt->tcp_client_limit < 0 || opt->tcp_client_limit > MAX_TCP_CLIENTS) {
+    printf("TCP client limit must be between 0 and %u.\n", MAX_TCP_CLIENTS);
+    return OPR_OPTION_ERROR;
+  }
   return OPR_SUCCESS;
 }
 
 void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   struct Options defaults;
   options_init(&defaults);
-  printf("Usage: %s [-a <listen_addr>] [-p <listen_port>]\n", argv[0]);
+  printf("Usage: %s [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]\n", argv[0]);
   printf("        [-b <dns_servers>] [-i <polling_interval>] [-4]\n");
   printf("        [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
   printf("        [-d] [-u <user>] [-g <group>] \n");
@@ -199,6 +221,8 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
          defaults.listen_addr);
   printf("  -p listen_port         Local port to bind to. (Default: %d)\n",
          defaults.listen_port);
+  printf("  -T tcp_client_limit    Number of TCP clients to serve. (Default: %d, Disabled: 0, Min: 1, Max: %d)\n",
+         defaults.tcp_client_limit, MAX_TCP_CLIENTS);
   printf("\n DNS client\n");
   printf("  -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)\n");
   printf("                         of DNS servers to resolve resolver host (e.g. dns.google).\n"\
@@ -223,6 +247,10 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.\n"\
          "                         (Default: %d, Min: 0, Max: 3600)\n",
          defaults.max_idle_time);
+  printf("  -L conn_loss_time      Time in seconds to tolerate connection timeouts of reused connections.\n"\
+         "                         This option mitigates half-open TCP connection issue (e.g. WAN IP change).\n"\
+         "                         (Default: %d, Min: 5, Max: 60)\n",
+         defaults.conn_loss_time);
   printf("  -C ca_path             Optional file containing CA certificates.\n");
   printf("  -c dscp_codepoint      Optional DSCP codepoint to set on upstream HTTPS server\n");
   printf("                         connections. (Min: 0, Max: 63)\n");

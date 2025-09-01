@@ -131,6 +131,11 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   DLOG("curl closed socket: %d", sock);
   client->connections--;
 
+  if (client->connections <= 0 && ev_is_active(&client->reset_timer)) {
+    ILOG("Client reset timer cancelled, since all connection closed");
+    ev_timer_stop(client->loop, &client->reset_timer);
+  }
+
   if (client->stat) {
     stat_connection_closed(client->stat);
   }
@@ -138,7 +143,7 @@ static int closesocket_callback(void __attribute__((unused)) *clientp, curl_sock
   return 0;
 }
 
-static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
+static void https_log_data(int level, struct https_fetch_ctx *ctx,
                            const char * prefix, char *ptr, size_t size)
 {
   const size_t width = 0x10;
@@ -156,14 +161,14 @@ static void https_log_data(enum LogSeverity level, struct https_fetch_ctx *ctx,
     for (size_t c = 0; c < width; c++) {
       if (i+c < size) {
         // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off,
-                            "%02x ", (unsigned char)ptr[i+c]);
+        hex_off += (size_t)snprintf(hex + hex_off, sizeof(hex) - hex_off,
+                                    "%02x ", (unsigned char)ptr[i+c]);
         // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-        str_off += snprintf(str + str_off, sizeof(str) - str_off,
-                            "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
+        str_off += (size_t)snprintf(str + str_off, sizeof(str) - str_off,
+                                    "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
       } else {
         // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-        hex_off += snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
+        hex_off += (size_t)snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
       }
     }
 
@@ -249,7 +254,7 @@ static void https_set_request_version(https_client_t *client,
   switch (client->opt->use_http_version) {
     case 1:
       http_version_int = CURL_HTTP_VERSION_1_1;
-      // fallthrough
+      __attribute__((fallthrough));
     case 2:
       break;
     case 3:
@@ -310,7 +315,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_WRITEDATA, ctx);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_MAXAGE_CONN, client->opt->max_idle_time);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_PIPEWAIT, client->opt->use_http_version > 1);
-  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_USERAGENT, "https_dns_proxy/0.3");
+  ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_USERAGENT, "https_dns_proxy/0.4");
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_FOLLOWLOCATION, 0);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_NOSIGNAL, 0);
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_TIMEOUT, client->connections > 0 ? 5 : 10 /* seconds */);
@@ -338,7 +343,7 @@ static void https_fetch_ctx_init(https_client_t *client,
 
 static int https_fetch_ctx_process_response(https_client_t *client,
                                             struct https_fetch_ctx *ctx,
-                                            int curl_result_code)
+                                            CURLcode curl_result_code)
 {
   CURLcode res = 0;
   long long_resp = 0;
@@ -353,6 +358,12 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     case CURLE_WRITE_ERROR:
       WLOG_REQ("curl request failed with write error (probably response content was too large)");
       break;
+    case CURLE_OPERATION_TIMEDOUT:
+      if (!ev_is_active(&client->reset_timer)) {
+        ILOG_REQ("Client reset timer started");
+        ev_timer_start(client->loop, &client->reset_timer);
+      }
+      __attribute__((fallthrough));
     default:
       WLOG_REQ("curl request failed with %d: %s", curl_result_code, curl_easy_strerror(curl_result_code));
       if (ctx->curl_errbuf[0] != 0) {
@@ -419,15 +430,15 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     res = curl_easy_getinfo(ctx->curl, CURLINFO_SSL_VERIFYRESULT, &long_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(res));
-    } else if (long_resp != CURLE_OK) {
-      WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: %s", curl_easy_strerror(long_resp));
+    } else if (long_resp != 0) {
+      WLOG_REQ("CURLINFO_SSL_VERIFYRESULT: certificate verification failure %d", long_resp);
     }
 
     res = curl_easy_getinfo(ctx->curl, CURLINFO_OS_ERRNO, &long_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_OS_ERRNO: %s", curl_easy_strerror(res));
     } else if (long_resp != 0) {
-      WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror(long_resp));
+      WLOG_REQ("CURLINFO_OS_ERRNO: %d %s", long_resp, strerror((int)long_resp));
       if (long_resp == ENETUNREACH && !client->opt->ipv4) {
         // this can't be fixed here with option overwrite because of dns_poller
         WLOG("Try to run application with -4 argument!");
@@ -465,7 +476,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     res = curl_easy_getinfo(ctx->curl, CURLINFO_SCHEME, &str_resp);
     if (res != CURLE_OK) {
       ELOG_REQ("CURLINFO_SCHEME: %s", curl_easy_strerror(res));
-    } else if (strcasecmp(str_resp, "https") != 0) {
+    } else if (str_resp != NULL && strcasecmp(str_resp, "https") != 0) {
       DLOG_REQ("CURLINFO_SCHEME: %s", str_resp);
     }
 
@@ -510,7 +521,7 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   if (curl_result_code < 0) {
     WLOG_REQ("Request was aborted");
     drop_reply = 1;
-  } else if (https_fetch_ctx_process_response(client, ctx, curl_result_code) != 0) {
+  } else if (https_fetch_ctx_process_response(client, ctx, (CURLcode)curl_result_code) != 0) {
     ILOG_REQ("Response was faulty, skipping DNS reply");
     drop_reply = 1;
   }
@@ -540,7 +551,7 @@ static void check_multi_info(https_client_t *c) {
       struct https_fetch_ctx *cur = c->fetches;
       while (cur) {
         if (cur->curl == msg->easy_handle) {
-          https_fetch_ctx_cleanup(c, prev, cur, msg->data.result);
+          https_fetch_ctx_cleanup(c, prev, cur, (int)msg->data.result);
           break;
         }
         prev = cur;
@@ -642,28 +653,15 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms >= 0) {
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-    ev_timer_init(&c->timer, timer_cb, timeout_ms / 1000.0, 0);
+    ev_timer_init(&c->timer, timer_cb, (double)timeout_ms / 1000.0, 0);
     ev_timer_start(c->loop, &c->timer);
   }
   return 0;
 }
 
-void https_client_init(https_client_t *c, options_t *opt,
-                       stat_t *stat, struct ev_loop *loop) {
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  memset(c, 0, sizeof(*c));
-  c->loop = loop;
+static void https_client_multi_init(https_client_t *c, struct curl_slist *header_list) {
   c->curlm = curl_multi_init(); // if fails, first setopt will fail
-  c->header_list = curl_slist_append(curl_slist_append(NULL,
-    "Accept: " DOH_CONTENT_TYPE),
-    "Content-Type: " DOH_CONTENT_TYPE);
-  c->fetches = NULL;
-  c->timer.data = c;
-  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
-    c->io_events[i].data = c;
-  }
-  c->opt = opt;
-  c->stat = stat;
+  c->header_list = header_list;
 
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_HTTP1 | CURLPIPE_MULTIPLEX);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, HTTPS_CONNECTION_LIMIT);
@@ -672,6 +670,35 @@ void https_client_init(https_client_t *c, options_t *opt,
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERFUNCTION, multi_timer_cb);
+}
+
+static void reset_timer_cb(struct ev_loop __attribute__((unused)) *loop,
+    ev_timer *w, int __attribute__((unused)) revents) {
+  GET_PTR(https_client_t, c, w->data);
+  ILOG("Client reset timer timeouted");
+  https_client_reset(c);
+}
+
+void https_client_init(https_client_t *c, options_t *opt,
+                       stat_t *stat, struct ev_loop *loop) {
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memset(c, 0, sizeof(*c));
+  c->loop = loop;
+  c->fetches = NULL;
+  c->timer.data = c;
+  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
+    c->io_events[i].data = c;
+  }
+  c->opt = opt;
+  c->stat = stat;
+
+  ev_timer_init(&c->reset_timer, reset_timer_cb, (double)opt->conn_loss_time, 0);
+  c->reset_timer.data = c;
+
+  struct curl_slist *header_list = curl_slist_append(curl_slist_append(NULL,
+    "Accept: " DOH_CONTENT_TYPE),
+    "Content-Type: " DOH_CONTENT_TYPE);
+  https_client_multi_init(c, header_list);
 }
 
 void https_client_fetch(https_client_t *c, const char *url,
@@ -687,11 +714,10 @@ void https_client_fetch(https_client_t *c, const char *url,
 }
 
 void https_client_reset(https_client_t *c) {
-  options_t *opt = c->opt;
-  stat_t *stat = c->stat;
-  struct ev_loop *loop = c->loop;
+  struct curl_slist *header_list = c->header_list;
+  c->header_list = NULL;
   https_client_cleanup(c);
-  https_client_init(c, opt, stat, loop);
+  https_client_multi_init(c, header_list);
 }
 
 void https_client_cleanup(https_client_t *c) {
@@ -700,4 +726,5 @@ void https_client_cleanup(https_client_t *c) {
   }
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
+  ev_timer_stop(c->loop, &c->reset_timer);
 }

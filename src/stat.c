@@ -7,17 +7,26 @@ static void reset_counters(stat_t *s) {
   s->requests = 0;
   s->responses = 0;
   s->query_times_sum = 0;
+
   s->connections_opened = 0;
   s->connections_closed = 0;
   s->connections_reused = 0;
+
+  s->tcp_requests_size = 0;
+  s->tcp_responses_size = 0;
+  s->tcp_requests = 0;
+  s->tcp_responses = 0;
+  s->tcp_query_times_sum = 0;
 }
 
 static void stat_print(stat_t *s) {
-  SLOG("%llu %llu %llu %zu %zu %llu %llu %llu",
+  SLOG("%llu %llu %llu %zu %zu %llu %llu %llu %llu %llu %llu %zu %zu",
        s->requests, s->responses, s->query_times_sum,
        s->requests_size, s->responses_size,
        s->connections_opened, s->connections_closed,
-       s->connections_reused);
+       s->connections_reused,
+       s->tcp_requests, s->tcp_responses, s->tcp_query_times_sum,
+       s->tcp_requests_size, s->tcp_responses_size);
   reset_counters(s);
 }
 
@@ -40,23 +49,36 @@ void stat_init(stat_t *s, struct ev_loop *loop, int stats_interval) {
     ev_timer_start(loop, &s->stats_timer);
     SLOG("RequestsCount ResponsesCount LatencyMilisecondsSummary "
          "RequestsSize ResponsesSize ConnectionsOpened ConnectionsClosed "
-         "ConnectionsReused");
+         "ConnectionsReused TcpRequestsCount TcpResponsesCount "
+         "TcpLatencyMilisecondsSummary TcpRequestsSize TcpResponsesSize");
   }
 }
 
-void stat_request_begin(stat_t *s, size_t req_len)
+void stat_request_begin(stat_t *s, size_t req_len, uint8_t is_tcp)
 {
+  if (is_tcp) {
+    s->tcp_requests_size += req_len;
+    s->tcp_requests++;
+  } else {
     s->requests_size += req_len;
     s->requests++;
+  }
 }
 
-void stat_request_end(stat_t *s, size_t resp_len, ev_tstamp latency)
+void stat_request_end(stat_t *s, size_t resp_len, ev_tstamp latency, uint8_t is_tcp)
 {
   if (resp_len) {
-    s->responses_size += resp_len;
-    s->responses++;
-    // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
-    s->query_times_sum += (latency * 1000);
+    if (is_tcp) {
+      s->tcp_responses_size += resp_len;
+      s->tcp_responses++;
+      // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
+      s->tcp_query_times_sum += (uint64_t)(latency * 1000);
+    } else {
+      s->responses_size += resp_len;
+      s->responses++;
+      // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
+      s->query_times_sum += (uint64_t)(latency * 1000);
+    }
   }
 }
 

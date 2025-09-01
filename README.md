@@ -2,7 +2,7 @@
 
 `https_dns_proxy` is a light-weight DNS&lt;--&gt;HTTPS, non-caching translation
 proxy for the [RFC 8484][rfc-8484] DNS-over-HTTPS standard. It receives
-regular (UDP) DNS requests and issues them via DoH.
+regular (UDP or TCP) DNS requests and issues them via DoH.
 
 [Google's DNS-over-HTTPS][google-doh] service is default, but
 [Cloudflare's service][cloudflare-doh] also works with trivial commandline flag
@@ -48,6 +48,7 @@ Depends on `c-ares (>=1.11.0)`, `libcurl (>=7.66.0)`, `libev (>=4.25)`.
 On Debian-derived systems those are libc-ares-dev,
 libcurl4-{openssl,nss,gnutls}-dev and libev-dev respectively.
 On Redhat-derived systems those are c-ares-devel, libcurl-devel and libev-devel.
+On systems with systemd it is recommended to have libsystemd development package installed.
 
 On MacOS, you may run into issues with curl headers. Others have had success when first installing curl with brew.
 ```
@@ -57,7 +58,7 @@ brew link curl --force
 
 On Ubuntu
 ```
-apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev build-essential
+apt-get install cmake libc-ares-dev libcurl4-openssl-dev libev-dev libsystemd-dev build-essential
 ```
 
 If all pre-requisites are met, you should be able to build with:
@@ -158,7 +159,7 @@ docker run --name "https-dns-proxy" -p 5053:5053/udp  \
 Just run it as a daemon and point traffic at it. Commandline flags are:
 
 ```
-Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
+Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]
         [-b <dns_servers>] [-i <polling_interval>] [-4]
         [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]
         [-d] [-u <user>] [-g <group>]
@@ -167,6 +168,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
  DNS server
   -a listen_addr         Local IPv4/v6 address to bind to. (Default: 127.0.0.1)
   -p listen_port         Local port to bind to. (Default: 5053)
+  -T tcp_client_limit    Number of TCP clients to serve.
+                         (Default: 20, Disabled: 0, Min: 1, Max: 200)
 
  DNS client
   -b dns_servers         Comma-separated IPv4/v6 addresses and ports (addr:port)
@@ -189,6 +192,9 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>]
   -q                     Use HTTP/3 (QUIC) only.
   -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.
                          (Default: 118, Min: 0, Max: 3600)
+  -L conn_loss_time      Time in seconds to tolerate connection timeouts of reused connections.
+                         This option mitigates half-open TCP connection issue (e.g. WAN IP change).
+                         (Default: 15, Min: 5, Max: 60)
   -C ca_path             Optional file containing CA certificates.
   -c dscp_codepoint      Optional DSCP codepoint to set on upstream HTTPS server
                          connections. (Min: 0, Max: 63)
