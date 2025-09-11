@@ -145,7 +145,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
 
   // rough estimate to reach size limit
   size_t answers = ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ANSWER);
-  size_t answers_to_keep = (size_limit - DNS_HEADER_LENGTH) / (old_size / answers);
+  size_t answers_to_keep = ((size_limit - DNS_HEADER_LENGTH) * answers) / old_size;
   answers_to_keep = answers_to_keep > 0 ? answers_to_keep : 1;  // try to keep 1 answer
 
   // remove answer records until fit size limit or running out of answers
@@ -196,6 +196,10 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
 
 void dns_server_respond(dns_server_t *d, struct sockaddr *raddr,
     const char *dns_req, const size_t dns_req_len, char *dns_resp, size_t dns_resp_len) {
+  if (dns_resp_len < DNS_HEADER_LENGTH) {
+    WLOG("Malformed response received, invalid length: %u", dns_resp_len);
+    return;
+  }
   if (dns_resp_len > DNS_SIZE_LIMIT) {
     const uint16_t udp_size = get_edns_udp_size(dns_req, dns_req_len);
     if (dns_resp_len > udp_size) {
