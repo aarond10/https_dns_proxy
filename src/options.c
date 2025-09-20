@@ -1,11 +1,11 @@
-#include <fcntl.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/stat.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <fcntl.h>
+#include <grp.h>
+#include <pwd.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "logging.h"
 #include "options.h"

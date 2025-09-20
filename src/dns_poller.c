@@ -1,5 +1,5 @@
-#include <netdb.h>       // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <netdb.h>
+#include <string.h>
 
 #include "dns_poller.h"
 #include "logging.h"
@@ -38,7 +38,6 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
     FLOG("c-ares needed more IO event handler, than the number of provided nameservers: %u", d->io_events_count);
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(io_event_ptr, sock_cb, fd,
              (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
   ev_io_start(d->loop, io_event_ptr);
@@ -119,7 +118,6 @@ static ev_tstamp get_timeout(dns_poller_t *d)
     static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
     struct timeval tv;
     struct timeval *tvp = ares_timeout(d->ares, &max_tv, &tv);
-    // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
     ev_tstamp after = (double)tvp->tv_sec + (double)tvp->tv_usec * 1e-6;
     return after > 0.1 ? after : 0.1;
 }
@@ -147,7 +145,7 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
     d->request_ongoing = 1;
 
     struct ares_addrinfo_hints hints;
-    memset(&hints, 0, sizeof(hints));  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+    memset(&hints, 0, sizeof(hints));
     hints.ai_flags  = ARES_AI_CANONNAME;
     hints.ai_family = d->family;
     hints.ai_socktype = SOCK_STREAM;
@@ -199,8 +197,6 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->polling_interval = bootstrap_dns_polling_interval;
   d->request_ongoing = 0;
   d->cb_data = cb_data;
-
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_timer_init(&d->timer, timer_cb, 0, 0);
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);

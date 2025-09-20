@@ -40,8 +40,6 @@ void stat_init(stat_t *s, struct ev_loop *loop, int stats_interval) {
   s->loop = loop;
   s->stats_interval = stats_interval;
   reset_counters(s);
-
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_timer_init(&s->stats_timer, stat_timer_cb,
                 s->stats_interval, s->stats_interval);
   s->stats_timer.data = s;
@@ -71,12 +69,10 @@ void stat_request_end(stat_t *s, size_t resp_len, ev_tstamp latency, uint8_t is_
     if (is_tcp) {
       s->tcp_responses_size += resp_len;
       s->tcp_responses++;
-      // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
       s->tcp_query_times_sum += (uint64_t)(latency * 1000);
     } else {
       s->responses_size += resp_len;
       s->responses++;
-      // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions)
       s->query_times_sum += (uint64_t)(latency * 1000);
     }
   }

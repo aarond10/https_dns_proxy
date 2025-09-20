@@ -1,13 +1,13 @@
-#include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <ev.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <math.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <netinet/in.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ctype.h>
+#include <errno.h>
+#include <ev.h>
+#include <math.h>
+#include <netinet/in.h>
 #include <stdint.h>
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/socket.h>    // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "https_client.h"
 #include "logging.h"
@@ -69,7 +69,6 @@ static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
     return 0;
   }
   ctx->buf = new_buf;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memcpy(&(ctx->buf[ctx->buflen]), buf, write_size);
   ctx->buflen = new_size;
   // We always expect to receive valid non-null ASCII but just to be safe...
@@ -153,21 +152,16 @@ static void https_log_data(int level, struct https_fetch_ctx *ctx,
     char str[width + 1];
     size_t hex_off = 0;
     size_t str_off = 0;
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(hex, 0, sizeof(hex));
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(str, 0, sizeof(str));
 
     for (size_t c = 0; c < width; c++) {
       if (i+c < size) {
-        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         hex_off += (size_t)snprintf(hex + hex_off, sizeof(hex) - hex_off,
                                     "%02x ", (unsigned char)ptr[i+c]);
-        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         str_off += (size_t)snprintf(str + str_off, sizeof(str) - str_off,
                                     "%c", isprint(ptr[i+c]) ? ptr[i+c] : '.');
       } else {
-        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         hex_off += (size_t)snprintf(hex + hex_off, sizeof(hex) - hex_off, "   ");
       }
     }
@@ -639,7 +633,6 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
     return -1;
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(io_event_ptr, sock_cb, sock,
              ((what & CURL_POLL_IN) ? EV_READ : 0) |
              ((what & CURL_POLL_OUT) ? EV_WRITE : 0));
@@ -652,7 +645,6 @@ static int multi_timer_cb(CURLM __attribute__((unused)) *multi,
   GET_PTR(https_client_t, c, userp);
   ev_timer_stop(c->loop, &c->timer);
   if (timeout_ms >= 0) {
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     ev_timer_init(&c->timer, timer_cb, (double)timeout_ms / 1000.0, 0);
     ev_timer_start(c->loop, &c->timer);
   }
@@ -681,7 +673,6 @@ static void reset_timer_cb(struct ev_loop __attribute__((unused)) *loop,
 
 void https_client_init(https_client_t *c, options_t *opt,
                        stat_t *stat, struct ev_loop *loop) {
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(c, 0, sizeof(*c));
   c->loop = loop;
   c->fetches = NULL;

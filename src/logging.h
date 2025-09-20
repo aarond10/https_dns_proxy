@@ -1,9 +1,9 @@
 #ifndef _LOGGING_H_
 #define _LOGGING_H_
 
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <ev.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>
+#include <stdlib.h>
+#include <ev.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,16 +1,16 @@
 // Simple UDP-to-HTTPS DNS Proxy
 // (C) 2016 Aaron Drew
 
-#include <ctype.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <errno.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ctype.h>
+#include <errno.h>
+#include <grp.h>
+#include <pwd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #if HAS_LIBSYSTEMD == 1
-#include <systemd/sd-daemon.h> // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <systemd/sd-daemon.h>
 #endif
 
 #include "dns_poller.h"
@@ -62,7 +62,7 @@ static int hostname_from_url(const char* url_in,
       if (rc == CURLUE_OK && host_len < hostname_len &&
           host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
           !is_ipv4_address(host)) {
-        strncpy(hostname, host, hostname_len-1); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+        strncpy(hostname, host, hostname_len-1);
         hostname[hostname_len-1] = '\0';
         res = 1; // success
       }
@@ -139,7 +139,7 @@ static void dns_server_cb(void *dns_server, uint8_t is_tcp, void *data,
     FLOG("%04hX: Out of mem", tx_id);
   }
   req->tx_id = tx_id;
-  memcpy(&req->raddr, tmp_remote_addr, app->addrlen);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(&req->raddr, tmp_remote_addr, app->addrlen);
   req->dns_server = dns_server;
   req->is_tcp = is_tcp;
   req->dns_req = dns_req;  // To free buffer after https request is complete.
@@ -182,7 +182,7 @@ static int addr_list_reduced(const char* full_list, const char* list) {
     char current[50];
     const char *comma = strchr(pos, ',');
     size_t ip_len = (size_t)(comma ? comma - pos : end - pos);
-    strncpy(current, pos, ip_len); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+    strncpy(current, pos, ip_len);
     current[ip_len] = '\0';
 
     const char *match_begin = strstr(full_list, current);
@@ -202,13 +202,13 @@ static void dns_poll_cb(const char* hostname, void *data,
                         const char* addr_list) {
   app_state_t *app = (app_state_t *)data;
   char buf[255 + (sizeof(":443:") - 1) + POLLER_ADDR_LIST_SIZE];
-  memset(buf, 0, sizeof(buf)); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memset(buf, 0, sizeof(buf));
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
-  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
   if (ip_start < 0) {
     abort();  // must be impossible
   }
-  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list); // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list);
   if (app->resolv == NULL) {
     systemd_notify_ready();
   }
@@ -251,7 +251,6 @@ static int proxy_supports_name_resolution(const char *proxy)
 static struct addrinfo * get_listen_address(const char *listen_addr) {
   struct addrinfo *ai = NULL;
   struct addrinfo hints;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   memset(&hints, 0, sizeof(struct addrinfo));
   /* prevent DNS lookups if leakage is our worry */
   hints.ai_flags = AI_NUMERICHOST;
@@ -398,17 +397,14 @@ int main(int argc, char *argv[]) {
   }
 
   ev_signal sigpipe;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_signal_init(&sigpipe, sigpipe_cb, SIGPIPE);
   ev_signal_start(loop, &sigpipe);
 
   ev_signal sigint;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_signal_init(&sigint, signal_shutdown_cb, SIGINT);
   ev_signal_start(loop, &sigint);
 
   ev_signal sigterm;
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_signal_init(&sigterm, signal_shutdown_cb, SIGTERM);
   ev_signal_start(loop, &sigterm);
 
