@@ -1,9 +1,9 @@
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/time.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include "logging.h"
 #include "ring_buffer.h"
@@ -56,7 +56,6 @@ void logging_events_init(struct ev_loop *loop) {
   /* don't start timer if we will never write messages that are not flushed */
   if (loglevel < LOG_FLUSH_LEVEL) {
     DLOG("starting periodic log flush timer");
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     ev_timer_init(&logging_timer, logging_timer_cb, 0, 10);
     ev_timer_start(loop, &logging_timer);
   }
@@ -114,8 +113,6 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   char buff[LOG_LINE_SIZE];
   uint32_t buff_pos = 0;
-
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   int chars = snprintf(buff, LOG_LINE_SIZE, "%s %8"PRIu64".%06"PRIu64" %s:%d ",
                        SeverityStr[severity], (uint64_t)tv.tv_sec, (uint64_t)tv.tv_usec, file, line);
   if (chars < 0 || chars >= LOG_LINE_SIZE/2) {
@@ -125,8 +122,7 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
 
   va_list args;
   va_start(args, fmt);
-  // NOLINTNEXTLINE(clang-diagnostic-format-nonliteral,clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
-  chars = vsnprintf(buff + buff_pos, LOG_LINE_SIZE - buff_pos, fmt, args);
+  chars = vsnprintf(buff + buff_pos, LOG_LINE_SIZE - buff_pos, fmt, args);  // NOLINT(clang-diagnostic-format-nonliteral)
   va_end(args);
 
   if (chars < 0) {
@@ -145,8 +141,6 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (severity < loglevel) {
     return;
   }
-
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   (void)fprintf(logfile, "%s\n", buff);
 
   if (severity >= LOG_FLUSH_LEVEL) {

@@ -1,9 +1,9 @@
-#include <ares.h>            // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <ares_dns_record.h> // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <errno.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <ares.h>
+#include <ares_dns_record.h>
+#include <errno.h>
 #include <stdint.h>
-#include <string.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>          // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <string.h>
+#include <unistd.h>
 
 #include "dns_server.h"
 #include "logging.h"
@@ -67,7 +67,7 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   if (dns_req == NULL) {
     FLOG("Out of mem");
   }
-  memcpy(dns_req, tmp_buf, (size_t)len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(dns_req, tmp_buf, (size_t)len);
 
   d->cb(d, 0, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, (size_t)len);
 }
@@ -80,8 +80,6 @@ void dns_server_init(dns_server_t *d, struct ev_loop *loop,
   d->addrlen = listen_addrinfo->ai_addrlen;
   d->cb = cb;
   d->cb_data = data;
-
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(&d->watcher, watcher_cb, d->sock, EV_READ);
   d->watcher.data = d;
   ev_io_start(d->loop, &d->watcher);
@@ -145,7 +143,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
 
   // rough estimate to reach size limit
   size_t answers = ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ANSWER);
-  size_t answers_to_keep = (size_limit - DNS_HEADER_LENGTH) / (old_size / answers);
+  size_t answers_to_keep = ((size_limit - DNS_HEADER_LENGTH) * answers) / old_size;
   answers_to_keep = answers_to_keep > 0 ? answers_to_keep : 1;  // try to keep 1 answer
 
   // remove answer records until fit size limit or running out of answers
@@ -185,7 +183,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
   ares_dns_record_destroy(dnsrec);
 
   if (new_resp != NULL && new_resp_len < old_size) {
-    memcpy(buf, new_resp, new_resp_len);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+    memcpy(buf, new_resp, new_resp_len);
     *buflen = new_resp_len;
     buf[2] |= 0x02;  // set truncation flag
     ILOG("%04hX: DNS response size truncated from %u to %u to keep %u limit",
@@ -196,6 +194,10 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
 
 void dns_server_respond(dns_server_t *d, struct sockaddr *raddr,
     const char *dns_req, const size_t dns_req_len, char *dns_resp, size_t dns_resp_len) {
+  if (dns_resp_len < DNS_HEADER_LENGTH) {
+    WLOG("Malformed response received, invalid length: %u", dns_resp_len);
+    return;
+  }
   if (dns_resp_len > DNS_SIZE_LIMIT) {
     const uint16_t udp_size = get_edns_udp_size(dns_req, dns_req_len);
     if (dns_resp_len > udp_size) {

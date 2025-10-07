@@ -1,9 +1,9 @@
 //NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #define _GNU_SOURCE  // needed for having accept4()
 
-#include <errno.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <fcntl.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "dns_server_tcp.h"
 #include "logging.h"
@@ -104,10 +104,10 @@ static int get_dns_request(struct tcp_client_s *client,
   if (*dns_req == NULL) {
     FLOG_CLIENT("Out of mem");
   }
-  memcpy(*dns_req, client->input_buffer + sizeof(uint16_t), *req_size);  // NOLINT(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(*dns_req, client->input_buffer + sizeof(uint16_t), *req_size);
   // move down data of next request(s) if any
   client->input_buffer_used -= data_size;
-  memmove(client->input_buffer, client->input_buffer + data_size, client->input_buffer_used);  // NOLINT(clang-diagnostic-format-nonliteral,clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memmove(client->input_buffer, client->input_buffer + data_size, client->input_buffer_used);
   return 1;
 }
 
@@ -150,7 +150,7 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
       FLOG_CLIENT("Out of mem");
     }
   }
-  memcpy(client->input_buffer + client->input_buffer_used, buf, (size_t)len);  // NOLINT(clang-diagnostic-format-nonliteral,clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(client->input_buffer + client->input_buffer_used, buf, (size_t)len);
   client->input_buffer_used = needed_space;
 
   // Split requests
@@ -208,13 +208,12 @@ static void accept_cb(struct ev_loop __attribute__((unused)) *loop,
   client->d = d;
   client->id = d->client_id;
   client->sock = client_sock;
-  memcpy(&client->raddr, &client_addr, client_addr_len);  // NOLINT(clang-diagnostic-format-nonliteral,clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
+  memcpy(&client->raddr, &client_addr, client_addr_len);
   client->addr_len = client_addr_len;
   client->input_buffer = NULL;
   client->next = d->clients;
   d->clients = client;
 
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(&client->read_watcher, read_cb, client->sock, EV_READ);
   client->read_watcher.data = client;
   ev_io_start(d->loop, &client->read_watcher);
@@ -294,7 +293,6 @@ dns_server_tcp_t * dns_server_tcp_create(
   d->client_limit = tcp_client_limit;
   d->clients = NULL;
 
-  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
   ev_io_init(&d->accept_watcher, accept_cb, d->sock, EV_READ);
   d->accept_watcher.data = d;
   ev_io_start(d->loop, &d->accept_watcher);

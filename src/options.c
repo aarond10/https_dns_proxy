@@ -1,11 +1,11 @@
-#include <fcntl.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <grp.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <pwd.h>           // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdio.h>         // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/stat.h>      // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <sys/types.h>     // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <unistd.h>        // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <fcntl.h>
+#include <grp.h>
+#include <pwd.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "logging.h"
 #include "options.h"
@@ -47,6 +47,15 @@ void options_init(struct Options *opt) {
   opt->flight_recorder_size = 0;
 }
 
+int parse_int(char * str) {
+  char * endptr = NULL;
+  unsigned long int value = strtoul(str, &endptr, 10);
+  if (*endptr != '\0' || value > INT32_MAX) {
+    return -1;
+  }
+  return (int)value;
+}
+
 enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
   while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:e:t:l:vxqm:L:s:C:F:hV")) != -1) {
@@ -55,13 +64,13 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       opt->listen_addr = optarg;
       break;
     case 'c': // DSCP codepoint
-      opt->dscp = atoi(optarg);
+      opt->dscp = parse_int(optarg);
       break;
     case 'p': // listen_port
-      opt->listen_port = atoi(optarg);
+      opt->listen_port = parse_int(optarg);
       break;
     case 'T': // tcp_client_limit
-      opt->tcp_client_limit = atoi(optarg);
+      opt->tcp_client_limit = parse_int(optarg);
       break;
     case 'd': // daemonize
       opt->daemonize = 1;
@@ -76,7 +85,7 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       opt->bootstrap_dns = optarg;
       break;
     case 'i': // bootstrap dns servers polling interval
-      opt->bootstrap_dns_polling_interval = atoi(optarg);
+      opt->bootstrap_dns_polling_interval = parse_int(optarg);
       break;
     case '4': // ipv4 mode - don't use v6 addresses.
       opt->ipv4 = 1;
@@ -106,19 +115,19 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       }
       break;
     case 'm':
-      opt->max_idle_time = atoi(optarg);
+      opt->max_idle_time = parse_int(optarg);
       break;
     case 'L':
-      opt->conn_loss_time = atoi(optarg);
+      opt->conn_loss_time = parse_int(optarg);
       break;
     case 's': // stats interval
-      opt->stats_interval = atoi(optarg);
+      opt->stats_interval = parse_int(optarg);
       break;
     case 'C': // CA info
       opt->ca_info = optarg;
       break;
     case 'F': // Flight recorder size
-      opt->flight_recorder_size = atoi(optarg);
+      opt->flight_recorder_size = parse_int(optarg);
       break;
     case 'h':
       return OPR_HELP;
@@ -147,7 +156,7 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
     opt->gid = g->gr_gid;
   }
   if (opt->dscp < 0 || opt->dscp >63) {
-      printf("DSCP code (%d) invalid:[0-63]\n", opt->dscp);
+      printf("DSCP code must be between 0 and 63.\n");
       return OPR_OPTION_ERROR;
   }
   opt->dscp <<= 2;

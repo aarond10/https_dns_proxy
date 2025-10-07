@@ -1,7 +1,7 @@
 #include <stddef.h>
-#include <stdio.h>   // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <stdlib.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
-#include <string.h>  // NOLINT(llvmlibc-restrict-system-libc-headers)
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "ring_buffer.h"
 
@@ -60,7 +60,6 @@ void ring_buffer_dump(struct ring_buffer *rb, FILE * file)
     uint32_t current = rb->full ? rb->next : 0;
     do
     {
-        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         (void)fprintf(file, "%s\n", rb->storage[current]);
 
         if (++current == rb->size) {
@@ -81,7 +80,6 @@ void ring_buffer_push_back(struct ring_buffer *rb, char* data, uint32_t size)
         free(rb->storage[rb->next]);
     }
     rb->storage[rb->next] = (char*)malloc(size + 1);
-    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memcpy(rb->storage[rb->next], data, size);
     rb->storage[rb->next][size] = '\0';
 
