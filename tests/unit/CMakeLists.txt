@@ -9,11 +9,10 @@ add_executable(test_logging
 
 target_include_directories(test_logging PRIVATE
     ${CMAKE_SOURCE_DIR}/src
-    ${LIBEV_INCLUDE_DIR}
 )
 
 target_link_libraries(test_logging
-    ${LIBEV_LIBRARY}
+    ev
 )
 
 # Add test to CTest
