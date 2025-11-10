@@ -105,14 +105,13 @@ void logging_context_flight_recorder_dump(logging_context_t *ctx) {
   }
 }
 
-// NOLINTNEXTLINE(misc-no-recursion) because of severity check
-void logging_context_log(logging_context_t *ctx, const char *file, int line,
-                         int severity, const char *fmt, ...) {
+// Core logging implementation (used by both context-aware and legacy APIs)
+static void logging_vlog_impl(logging_context_t *ctx, const char *file, int line,
+                              int severity, const char *fmt, va_list args) {
   if (severity < ctx->loglevel && !ctx->flight_recorder) {
     return;
   }
   if (severity < 0 || severity >= LOG_MAX) {
-    // Can't use FLOG here due to recursion, just log error
     fprintf(stderr, "Unknown log severity: %d\n", severity);
     return;
   }
@@ -132,10 +131,7 @@ void logging_context_log(logging_context_t *ctx, const char *file, int line,
   }
   buff_pos += (uint32_t)chars;
 
-  va_list args;
-  va_start(args, fmt);
   chars = vsnprintf(buff + buff_pos, LOG_LINE_SIZE - buff_pos, fmt, args);  // NOLINT(clang-diagnostic-format-nonliteral)
-  va_end(args);
 
   if (chars < 0) {
     abort();  // must be impossible
@@ -168,6 +164,15 @@ void logging_context_log(logging_context_t *ctx, const char *file, int line,
     exit(1);
 #endif
   }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion) because of severity check
+void logging_context_log(logging_context_t *ctx, const char *file, int line,
+                         int severity, const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  logging_vlog_impl(ctx, file, line, severity, fmt, args);
+  va_end(args);
 }
 
 // === Legacy API (uses default global context) ===
@@ -207,76 +212,15 @@ void logging_flight_recorder_dump(void) {
   logging_context_flight_recorder_dump(&g_default_context);
 }
 
-// Keep original _log for backwards compatibility with existing macros
+// Legacy _log function for backwards compatibility with existing macros
 void _log(const char *file, int line, int severity, const char *fmt, ...) {
   if (!g_default_initialized) {
     // Auto-initialize to stderr if not already initialized
     logging_init(STDERR_FILENO, LOG_ERROR, 0);
   }
 
-  if (severity < g_default_context.loglevel && !g_default_context.flight_recorder) {
-    return;
-  }
-
-  // Forward to context-aware implementation
   va_list args;
   va_start(args, fmt);
-
-  // Manually inline the logging logic since we can't forward va_list easily
-  if (severity < 0 || severity >= LOG_MAX) {
-    fprintf(stderr, "Unknown log severity: %d\n", severity);
-    va_end(args);
-    return;
-  }
-
-  if (!g_default_context.logfile) {
-    g_default_context.logfile = fdopen(STDOUT_FILENO, "w");
-  }
-
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-
-  char buff[LOG_LINE_SIZE];
-  uint32_t buff_pos = 0;
-  int chars = snprintf(buff, LOG_LINE_SIZE, "%s %8"PRIu64".%06"PRIu64" %s:%d ",
-                       SeverityStr[severity], (uint64_t)tv.tv_sec, (uint64_t)tv.tv_usec, file, line);
-  if (chars < 0 || chars >= LOG_LINE_SIZE/2) {
-    abort();
-  }
-  buff_pos += (uint32_t)chars;
-
-  chars = vsnprintf(buff + buff_pos, LOG_LINE_SIZE - buff_pos, fmt, args);  // NOLINT(clang-diagnostic-format-nonliteral)
+  logging_vlog_impl(&g_default_context, file, line, severity, fmt, args);
   va_end(args);
-
-  if (chars < 0) {
-    abort();
-  }
-  buff_pos += (uint32_t)chars;
-  if (buff_pos >= LOG_LINE_SIZE) {
-    buff_pos = LOG_LINE_SIZE - 1;
-    buff[buff_pos - 1] = '$';
-  }
-
-  if (g_default_context.flight_recorder) {
-    ring_buffer_push_back(g_default_context.flight_recorder, buff, buff_pos);
-  }
-
-  if (severity < g_default_context.loglevel) {
-    return;
-  }
-  (void)fprintf(g_default_context.logfile, "%s\n", buff);
-
-  if (severity >= LOG_FLUSH_LEVEL) {
-    (void)fflush(g_default_context.logfile);
-  }
-  if (severity == LOG_FATAL) {
-    if (g_default_context.flight_recorder) {
-      ring_buffer_dump(g_default_context.flight_recorder, g_default_context.logfile);
-    }
-#ifdef DEBUG
-    abort();
-#else
-    exit(1);
-#endif
-  }
 }
