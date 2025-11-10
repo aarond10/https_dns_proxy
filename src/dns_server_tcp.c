@@ -10,6 +10,14 @@
 
 // Portability wrapper for accept4
 #ifndef __linux__
+// Define constants if not available on non-Linux systems
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0x800
+#endif
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0x80000
+#endif
+
 // On non-Linux systems, implement accept4 using accept + fcntl
 static int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
   int fd = accept(sockfd, addr, addrlen);
