@@ -58,13 +58,15 @@ static int hostname_from_url(const char* url_in,
     if (rc == CURLUE_OK) {
       char *host = NULL;
       rc = curl_url_get(url, CURLUPART_HOST, &host, 0);
-      const size_t host_len = strlen(host);
-      if (rc == CURLUE_OK && host_len < hostname_len &&
-          host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
-          !is_ipv4_address(host)) {
-        strncpy(hostname, host, hostname_len-1);
-        hostname[hostname_len-1] = '\0';
-        res = 1; // success
+      if (rc == CURLUE_OK && host != NULL) {
+        const size_t host_len = strlen(host);
+        if (host_len < hostname_len &&
+            host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
+            !is_ipv4_address(host)) {
+          strncpy(hostname, host, hostname_len-1);
+          hostname[hostname_len-1] = '\0';
+          res = 1; // success
+        }
       }
       curl_free(host);
     }
@@ -88,10 +90,10 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
 
 static void https_resp_cb(void *data, char *buf, size_t buflen) {
   request_t *req = (request_t *)data;
-  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (req == NULL) {
-    FLOG("%04hX: data NULL", req->tx_id);
+    FLOG("https_resp_cb: data NULL");
   }
+  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
     if (buflen < DNS_HEADER_LENGTH) {
       WLOG("%04hX: Malformed response received, too short: %u", req->tx_id, buflen);
@@ -182,6 +184,10 @@ static int addr_list_reduced(const char* full_list, const char* list) {
     char current[50];
     const char *comma = strchr(pos, ',');
     size_t ip_len = (size_t)(comma ? comma - pos : end - pos);
+    if (ip_len >= sizeof(current)) {
+      WLOG("IP address too long: %zu bytes", ip_len);
+      return 1;
+    }
     strncpy(current, pos, ip_len);
     current[ip_len] = '\0';
 
@@ -205,10 +211,10 @@ static void dns_poll_cb(const char* hostname, void *data,
   memset(buf, 0, sizeof(buf));
   if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
   int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
-  if (ip_start < 0) {
-    abort();  // must be impossible
+  if (ip_start < 0 || ip_start >= (int)(sizeof(buf) - 1)) {
+    FLOG("snprintf failed or buffer too small: %d", ip_start);
   }
-  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list);
+  (void)snprintf(buf + ip_start, sizeof(buf) - (size_t)ip_start, "%s", addr_list);
   if (app->resolv == NULL) {
     systemd_notify_ready();
   }

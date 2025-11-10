@@ -35,7 +35,12 @@ void ring_buffer_init(struct ring_buffer **rbp, uint32_t size)
 void ring_buffer_free(struct ring_buffer **rbp)
 {
     struct ring_buffer *rb = *rbp;
+    if (!rb) {
+        return;
+    }
     if (!rb->storage) {
+        free((void*) rb);
+        *rbp = NULL;
         return;
     }
     for (uint32_t i = 0; i < rb->size; i++) {

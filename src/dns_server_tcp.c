@@ -8,6 +8,36 @@
 #include "dns_server_tcp.h"
 #include "logging.h"
 
+// Portability wrapper for accept4
+#ifndef __linux__
+// On non-Linux systems, implement accept4 using accept + fcntl
+static int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
+  int fd = accept(sockfd, addr, addrlen);
+  if (fd == -1) {
+    return -1;
+  }
+  if (flags & SOCK_NONBLOCK) {
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl == -1 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) == -1) {
+      int saved_errno = errno;
+      close(fd);
+      errno = saved_errno;
+      return -1;
+    }
+  }
+  if (flags & SOCK_CLOEXEC) {
+    int fl = fcntl(fd, F_GETFD, 0);
+    if (fl == -1 || fcntl(fd, F_SETFD, fl | FD_CLOEXEC) == -1) {
+      int saved_errno = errno;
+      close(fd);
+      errno = saved_errno;
+      return -1;
+    }
+  }
+  return fd;
+}
+#endif
+
 // the following macros require to have client pointer to tcp_client_s structure
 // else: compilation failure will occur
 #define LOG_CLIENT(level, format, args...) LOG(level, "C-%u: " format, client->id, ## args)
@@ -95,6 +125,11 @@ static int get_dns_request(struct tcp_client_s *client,
     char ** dns_req, uint16_t * req_size) {
   // check if whole request is available
   *req_size = ntohs(*((uint16_t*)client->input_buffer));
+  // validate size before using it
+  if (*req_size > DNS_REQUEST_BUFFER_SIZE || *req_size < DNS_HEADER_LENGTH) {
+    WLOG_CLIENT("Invalid DNS request size from network: %u", *req_size);
+    return -1;  // Invalid size
+  }
   uint16_t data_size = sizeof(uint16_t) + *req_size;
   if (data_size > client->input_buffer_used) {
     return 0;  // Partial request
@@ -157,7 +192,8 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
   char *dns_req = NULL;
   uint16_t req_size = 0;
   uint8_t request_received = 0;
-  while (get_dns_request(client, &dns_req, &req_size)) {
+  int result;
+  while ((result = get_dns_request(client, &dns_req, &req_size)) > 0) {
     if (req_size < DNS_HEADER_LENGTH) {
       WLOG_CLIENT("Malformed request received, too short: %u", req_size);
       free(dns_req);
@@ -167,6 +203,13 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
 
     d->cb(d, 1, d->cb_data, (struct sockaddr*)&client->raddr, dns_req, req_size);
     request_received = 1;
+  }
+
+  // Handle error case (invalid size from network)
+  if (result < 0) {
+    WLOG_CLIENT("Invalid DNS request, disconnecting client");
+    remove_client(client);
+    return;
   }
 
   if (request_received) {
@@ -257,7 +300,7 @@ static int get_tcp_listen_sock(struct addrinfo *listen_addrinfo) {
   }
 
   if (listen(sock, LISTEN_BACKLOG) == -1) {
-    FLOG("Error listaning on %s:%d TCP: %s (%d)", ipstr, port,
+    FLOG("Error listening on %s:%d TCP: %s (%d)", ipstr, port,
          strerror(errno), errno);
   }
 
@@ -344,8 +387,10 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
         remove_client(client);
         return;
       }
+      // For EAGAIN/EWOULDBLOCK, don't add to sent, just retry
+    } else {
+      sent += len;
     }
-    sent += len;
 
     if (sent == (ssize_t)resp_len) {
       break;

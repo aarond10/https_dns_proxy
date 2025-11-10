@@ -50,7 +50,7 @@ void options_init(struct Options *opt) {
 int parse_int(char * str) {
   char * endptr = NULL;
   unsigned long int value = strtoul(str, &endptr, 10);
-  if (*endptr != '\0' || value > INT32_MAX) {
+  if (*endptr != '\0' || value > INT_MAX) {
     return -1;
   }
   return (int)value;

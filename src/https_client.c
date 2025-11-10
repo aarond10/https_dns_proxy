@@ -248,7 +248,7 @@ static void https_set_request_version(https_client_t *client,
   switch (client->opt->use_http_version) {
     case 1:
       http_version_int = CURL_HTTP_VERSION_1_1;
-      __attribute__((fallthrough));
+      break;
     case 2:
       break;
     case 3:
@@ -285,8 +285,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ctx->cb_data = cb_data;
   ctx->buf = NULL;
   ctx->buflen = 0;
-  ctx->next = client->fetches;
-  client->fetches = ctx;
+  ctx->next = NULL;
 
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_RESOLVE, resolv);
 
@@ -326,12 +325,18 @@ static void https_fetch_ctx_init(https_client_t *client,
   CURLMcode multi_code = curl_multi_add_handle(client->curlm, ctx->curl);
   if (multi_code != CURLM_OK) {
     ELOG_REQ("curl_multi_add_handle error %d: %s", multi_code, curl_multi_strerror(multi_code));
+    // Clean up ctx without trying to remove from multi handle
+    ctx->cb(ctx->cb_data, NULL, 0);
+    curl_easy_cleanup(ctx->curl);
+    free(ctx);
     if (multi_code == CURLM_ABORTED_BY_CALLBACK) {
       WLOG_REQ("Resetting HTTPS client to recover from faulty state!");
       https_client_reset(client);
-    } else {
-      https_fetch_ctx_cleanup(client, NULL, client->fetches, -1);  // dropping current failed request
     }
+  } else {
+    // Only add to linked list if successfully added to multi handle
+    ctx->next = client->fetches;
+    client->fetches = ctx;
   }
 }
 
@@ -590,6 +595,8 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
   check_multi_info(c);
 }
 
+// Get IO event for a given socket, or find an unused slot (fd == 0)
+// Returns NULL if no matching socket found or no free slot available
 static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock) {
   for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
     if (io_events[i].fd == sock) {
