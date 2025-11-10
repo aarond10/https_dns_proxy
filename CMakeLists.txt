@@ -165,6 +165,13 @@ install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}.service
 
 # TESTING
 
+# Enable CTest
+enable_testing()
+
+# Unit tests (always available)
+add_subdirectory(tests/unit)
+
+# Robot framework integration tests (requires python3)
 find_program(
   PYTHON3_EXE
   NAMES "python3"
@@ -175,7 +182,6 @@ if(NOT PYTHON3_EXE)
 else()
   message(STATUS "python3 found: ${PYTHON3_EXE}")
 
-  enable_testing()
   add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot
            WORKING_DIRECTORY tests/robot)
 endif()
