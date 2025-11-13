@@ -175,9 +175,12 @@ void logging_context_log(logging_context_t *ctx, const char *file, int line,
   va_end(args);
 }
 
-// === Legacy API (uses default global context) ===
+// === Default context wrappers ===
 
 logging_context_t* logging_get_default_context(void) {
+  if (!g_default_initialized) {
+    logging_init(STDERR_FILENO, LOG_ERROR, 0);
+  }
   return &g_default_context;
 }
 
@@ -188,7 +191,6 @@ void logging_init(int fd, int level, unsigned flight_recorder_size) {
 
 void logging_events_init(struct ev_loop *loop) {
   if (!g_default_initialized) {
-    // Initialize with default stderr if not already initialized
     logging_init(STDERR_FILENO, LOG_ERROR, 0);
   }
   logging_context_events_init(&g_default_context, loop);
@@ -210,17 +212,4 @@ int logging_debug_enabled(void) {
 
 void logging_flight_recorder_dump(void) {
   logging_context_flight_recorder_dump(&g_default_context);
-}
-
-// Legacy _log function for backwards compatibility with existing macros
-void _log(const char *file, int line, int severity, const char *fmt, ...) {
-  if (!g_default_initialized) {
-    // Auto-initialize to stderr if not already initialized
-    logging_init(STDERR_FILENO, LOG_ERROR, 0);
-  }
-
-  va_list args;
-  va_start(args, fmt);
-  logging_vlog_impl(&g_default_context, file, line, severity, fmt, args);
-  va_end(args);
 }

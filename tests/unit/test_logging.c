@@ -44,9 +44,9 @@ void test_multiple_contexts(void) {
     logging_context_init(&ctx2, dup(fd2), LOG_DEBUG, 0);
 
     // Log to different contexts
-    ILOG_CTX(&ctx1, "Message to context 1");
-    ILOG_CTX(&ctx2, "Message to context 2");
-    DLOG_CTX(&ctx2, "Debug message to context 2");
+    logging_context_log(&ctx1, __FILE__, __LINE__, LOG_INFO, "Message to context 1");
+    logging_context_log(&ctx2, __FILE__, __LINE__, LOG_INFO, "Message to context 2");
+    logging_context_log(&ctx2, __FILE__, __LINE__, LOG_DEBUG, "Debug message to context 2");
 
     // Cleanup
     logging_context_cleanup(&ctx1);
@@ -147,8 +147,8 @@ void test_flight_recorder(void) {
     logging_context_init(&ctx, dup(fd), LOG_ERROR, 100);
 
     // Log some debug messages (won't be written due to level, but will be recorded)
-    DLOG_CTX(&ctx, "Debug message 1");
-    DLOG_CTX(&ctx, "Debug message 2");
+    logging_context_log(&ctx, __FILE__, __LINE__, LOG_DEBUG, "Debug message 1");
+    logging_context_log(&ctx, __FILE__, __LINE__, LOG_DEBUG, "Debug message 2");
 
     // Now dump the flight recorder
     logging_context_flight_recorder_dump(&ctx);
