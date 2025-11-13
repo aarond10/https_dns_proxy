@@ -1,50 +1,9 @@
-//NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-#define _GNU_SOURCE  // needed for having accept4()
-
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 
 #include "dns_server_tcp.h"
 #include "logging.h"
-
-// Portability wrapper for accept4
-#ifndef __linux__
-// Define constants if not available on non-Linux systems
-#ifndef SOCK_NONBLOCK
-#define SOCK_NONBLOCK 0x800
-#endif
-#ifndef SOCK_CLOEXEC
-#define SOCK_CLOEXEC 0x80000
-#endif
-
-// On non-Linux systems, implement accept4 using accept + fcntl
-static int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
-  int fd = accept(sockfd, addr, addrlen);
-  if (fd == -1) {
-    return -1;
-  }
-  if (flags & SOCK_NONBLOCK) {
-    int fl = fcntl(fd, F_GETFL, 0);
-    if (fl == -1 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) == -1) {
-      int saved_errno = errno;
-      close(fd);
-      errno = saved_errno;
-      return -1;
-    }
-  }
-  if (flags & SOCK_CLOEXEC) {
-    int fl = fcntl(fd, F_GETFD, 0);
-    if (fl == -1 || fcntl(fd, F_SETFD, fl | FD_CLOEXEC) == -1) {
-      int saved_errno = errno;
-      close(fd);
-      errno = saved_errno;
-      return -1;
-    }
-  }
-  return fd;
-}
-#endif
 
 // the following macros require to have client pointer to tcp_client_s structure
 // else: compilation failure will occur
@@ -239,10 +198,16 @@ static void accept_cb(struct ev_loop __attribute__((unused)) *loop,
   struct sockaddr_storage client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
 
-  int client_sock = accept4(w->fd, (struct sockaddr *)&client_addr,
-                            &client_addr_len, SOCK_NONBLOCK);
+  int client_sock = accept(w->fd, (struct sockaddr *)&client_addr, &client_addr_len);
   if (client_sock == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
     ELOG("Failed to accept TCP client: %s", strerror(errno));
+    return;
+  }
+
+  int flags = fcntl(client_sock, F_GETFL, 0);
+  if (flags == -1 || fcntl(client_sock, F_SETFL, flags | O_NONBLOCK) == -1) {
+    ELOG("Failed to set non-blocking on TCP client: %s", strerror(errno));
+    close(client_sock);
     return;
   }
 
