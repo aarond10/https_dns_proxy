@@ -39,6 +39,7 @@ void options_init(struct Options *opt) {
   opt->ipv4 = 0;
   opt->resolver_url = "https://dns.google/dns-query";
   opt->curl_proxy = NULL;
+  opt->source_addr = NULL;
   opt->use_http_version = DEFAULT_HTTP_VERSION;
   opt->max_idle_time = 118;
   opt->conn_loss_time = 15;
@@ -58,7 +59,7 @@ int parse_int(char * str) {
 
 enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:e:t:l:vxqm:L:s:C:F:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:e:t:l:vxqm:L:s:S:C:F:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -122,6 +123,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       break;
     case 's': // stats interval
       opt->stats_interval = parse_int(optarg);
+      break;
+    case 'S': // source address
+      opt->source_addr = optarg;
       break;
     case 'C': // CA info
       opt->ca_info = optarg;
@@ -222,7 +226,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]\n", argv[0]);
   printf("        [-b <dns_servers>] [-i <polling_interval>] [-4]\n");
-  printf("        [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
+  printf("        [-r <resolver_url>] [-t <proxy_server>] [-S <source_addr>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
   printf("        [-d] [-u <user>] [-g <group>] \n");
   printf("        [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]\n");
   printf("\n DNS server\n");
@@ -250,6 +254,8 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("                         supports it (http, https, socks4a, socks5h), otherwise\n");
   printf("                         initial DNS resolution will still be done via the\n");
   printf("                         bootstrap DNS servers.\n");
+  printf("  -S source_addr         Source IPv4/v6 address for outbound HTTPS connections.\n");
+  printf("                         (Default: system default)\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl.\n");
   printf("  -q                     Use HTTP/3 (QUIC) only.\n");
