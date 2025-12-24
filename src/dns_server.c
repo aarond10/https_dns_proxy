@@ -1,5 +1,4 @@
 #include <ares.h>
-#include <ares_dns_record.h>
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
