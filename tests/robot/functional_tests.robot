@@ -201,3 +201,10 @@ Truncate UDP Impossible
   Wait Until Keyword Succeeds  5x  200ms
   # the only TXT answer record has to be dropped to met limit
   ...  Verify Truncation  txtfill4096.test.dnscheck.tools  4096  12  100  ANSWER: 0
+
+Source Address Binding
+  [Documentation]  Test source address binding with -S flag
+  ${eth0_ip} =  Run  ip -4 addr show eth0 | grep inet | awk '{print $2}' | cut -d/ -f1 | tr -d '\\n'
+  Start Proxy  -S  ${eth0_ip}
+  Set To Dictionary  ${expected_logs}  Using source address=1
+  Run Dig
