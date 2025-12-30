@@ -161,7 +161,7 @@ Just run it as a daemon and point traffic at it. Commandline flags are:
 ```
 Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]
         [-b <dns_servers>] [-i <polling_interval>] [-4]
-        [-r <resolver_url>] [-t <proxy_server>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]
+        [-r <resolver_url>] [-t <proxy_server>] [-S <source_addr>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]
         [-d] [-u <user>] [-g <group>]
         [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]
 
@@ -187,6 +187,8 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_l
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
+  -S source_addr         Source IPv4/v6 address for outbound HTTPS connections.
+                         (Default: system default)
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl.
   -q                     Use HTTP/3 (QUIC) only.
