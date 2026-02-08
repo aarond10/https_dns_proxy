@@ -133,6 +133,12 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
   }
 
   // Append data into input buffer
+  // Check for integer overflow and maximum message size
+  if (len > UINT16_MAX || client->input_buffer_used > UINT16_MAX - (uint32_t)len) {
+    WLOG_CLIENT("Request too large, dropping client");
+    remove_client(client);
+    return;
+  }
   const uint32_t free_space = client->input_buffer_size - client->input_buffer_used;
   const uint32_t needed_space = client->input_buffer_used + (uint32_t)len;
   DLOG_CLIENT("Received %d byte, free: %u", len, free_space);
