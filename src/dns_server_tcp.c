@@ -21,6 +21,7 @@ enum {
   LISTEN_BACKLOG  =   5,
   IDLE_TIMEOUT_S  = 120,  // "two minutes" according to RFC1035 4.2.2
   RESEND_DELAY_US = 500,  // 0.0005 sec
+  TCP_DNS_MAX_PAYLOAD = UINT16_MAX - sizeof(uint16_t),  // Max after 2-byte length prefix
 };
 
 struct tcp_client_s {
@@ -303,7 +304,9 @@ dns_server_tcp_t * dns_server_tcp_create(
 void dns_server_tcp_respond(dns_server_tcp_t *d,
     struct sockaddr *raddr, char *resp, size_t resp_len)
 {
-  if (resp_len < DNS_HEADER_LENGTH || resp_len > UINT16_MAX) {
+  // Limit response size to prevent overflow when accounting for the 2-byte
+  // length prefix. The total on-wire size would be resp_len + sizeof(uint16_t).
+  if (resp_len < DNS_HEADER_LENGTH || resp_len > TCP_DNS_MAX_PAYLOAD) {
     WLOG("Malformed response received, invalid length: %u", resp_len);
     return;
   }
