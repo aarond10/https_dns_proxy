@@ -325,6 +325,11 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
     return;
   }
 
+  // NOTE: Single-threaded libev event loop ensures no TOCTOU race here.
+  // No other callbacks can execute while this function runs, and usleep()
+  // below is a blocking syscall (not an event loop yield). If remove_client()
+  // is called due to send errors, the function returns immediately.
+
   DLOG_CLIENT("Sending %u bytes", resp_len);
 
   // send length of response
