@@ -92,6 +92,7 @@ static void https_resp_cb(void *data, char *buf, size_t buflen) {
   request_t *req = (request_t *)data;
   if (req == NULL) {
     FLOG("Request data is NULL (buflen: %zu)", buflen);
+    return;
   }
   DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.

@@ -55,13 +55,20 @@ static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
   for (struct ares_addrinfo_node *node = nodes; node != NULL; node = node->ai_next) {
     const char *res = NULL;
 
+    // Check that we have space for at least one character plus null terminator
+    if (pos >= list + POLLER_ADDR_LIST_SIZE - 1) {
+      DLOG("Not enough space for more addresses");
+      break;
+    }
+    size_t remaining = (size_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos);
+
     if (node->ai_family == AF_INET) {
       res = ares_inet_ntop(AF_INET, (const void *)&((struct sockaddr_in *)node->ai_addr)->sin_addr,
-                           pos, (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos));
+                           pos, (ares_socklen_t)remaining);
       ipv4++;
     } else if (node->ai_family == AF_INET6) {
       res = ares_inet_ntop(AF_INET6, (const void *)&((struct sockaddr_in6 *)node->ai_addr)->sin6_addr,
-                           pos, (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos));
+                           pos, (ares_socklen_t)remaining);
       ipv6++;
     } else {
       WLOG("Unhandled address family: %d", node->ai_family);
@@ -70,6 +77,9 @@ static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
 
     if (res != NULL) {
       pos += strlen(pos);
+      // We already checked above that pos < list + POLLER_ADDR_LIST_SIZE - 1,
+      // and ares_inet_ntop ensures null termination, so strlen(pos) >= 1.
+      // Therefore pos++ is safe and there's room for the comma.
       *pos = ',';
       pos++;
     } else {
