@@ -8,6 +8,15 @@
 #include "dns_server_tcp.h"
 #include "logging.h"
 
+// Platform compatibility
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0
+#endif
+
+#ifndef MSG_MORE
+#define MSG_MORE 0
+#endif
+
 // the following macros require to have client pointer to tcp_client_s structure
 // else: compilation failure will occur
 #define LOG_CLIENT(level, format, args...) LOG(level, "C-%u: " format, client->id, ## args)
@@ -199,8 +208,14 @@ static void accept_cb(struct ev_loop __attribute__((unused)) *loop,
   struct sockaddr_storage client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
 
-  int client_sock = accept4(w->fd, (struct sockaddr *)&client_addr,
-                            &client_addr_len, SOCK_NONBLOCK);
+  int client_sock = accept(w->fd, (struct sockaddr *)&client_addr, &client_addr_len);
+  if (client_sock != -1) {
+    // Set non-blocking mode for macOS compatibility (Linux accept4 does this atomically)
+    int flags = fcntl(client_sock, F_GETFL, 0);
+    if (flags != -1) {
+      fcntl(client_sock, F_SETFL, flags | O_NONBLOCK);
+    }
+  }
   if (client_sock == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
     ELOG("Failed to accept TCP client: %s", strerror(errno));
     return;

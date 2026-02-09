@@ -71,6 +71,12 @@ endif()
 
 # LIBRARY DEPENDENCIES
 
+# Add Homebrew paths for macOS
+if(APPLE)
+  list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew")
+  link_directories("/opt/homebrew/lib")
+endif()
+
 find_path(LIBCARES_INCLUDE_DIR ares.h)
 find_path(LIBEV_INCLUDE_DIR ev.h)
 

@@ -86,6 +86,9 @@ void ring_buffer_push_back(struct ring_buffer *rb, char* data, uint32_t size)
         free(rb->storage[rb->next]);
     }
     rb->storage[rb->next] = (char*)malloc(size + 1);
+    if (rb->storage[rb->next] == NULL) {
+        return;
+    }
     memcpy(rb->storage[rb->next], data, size);
     rb->storage[rb->next][size] = '\0';
 
