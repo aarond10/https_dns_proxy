@@ -187,7 +187,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_l
                          supports it (http, https, socks4a, socks5h), otherwise
                          initial DNS resolution will still be done via the
                          bootstrap DNS servers.
-  -S source_addr         Source IPv4/v6 address for outbound HTTPS connections.
+  -S source_addr         Source IPv4/v6 address for outbound HTTPS and bootstrap DNS.
                          (Default: system default)
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl.
@@ -231,6 +231,17 @@ pip3 install robotframework
 python3 -m robot.run tests/robot/functional_tests.robot
 ```
 
+## Docker bootstrap DNS test
+
+There is a repeatable Docker-based test suite for validating proxy behavior
+including `-S` source address binding:
+
+```
+tests/docker/run_all_tests.sh
+```
+
+If your Docker CLI is not on `PATH`, you can set `DOCKER_BIN` to its full path.
+
 ## TODO
 
 * Add some tests.
@@ -241,4 +252,3 @@ python3 -m robot.run tests/robot/functional_tests.robot
 * Aaron Drew (aarond10@gmail.com): Original https_dns_proxy.
 * Soumya ([github.com/soumya92](https://github.com/soumya92)): RFC 8484 implementation.
 * baranyaib90 ([github.com/baranyaib90](https://github.com/baranyaib90)): fixes and improvements.
-

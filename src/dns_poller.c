@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <string.h>
 
@@ -127,6 +128,36 @@ static void ares_cb(void *arg, int status, int __attribute__((unused)) timeouts,
   }
 }
 
+static void set_bootstrap_source_addr(ares_channel channel,
+                                      const char *source_addr,
+                                      int family) {
+  if (!source_addr) {
+    return;
+  }
+
+  struct in_addr addr_v4;
+  struct in6_addr addr_v6;
+
+  if (inet_pton(AF_INET, source_addr, &addr_v4) == 1) {
+    if (family == AF_INET6) {
+      WLOG("Bootstrap source address '%s' is IPv4, but IPv6-only mode is set",
+           source_addr);
+      return;
+    }
+    ares_set_local_ip4(channel, ntohl(addr_v4.s_addr));
+  } else if (inet_pton(AF_INET6, source_addr, &addr_v6) == 1) {
+    if (family == AF_INET) {
+      WLOG("Bootstrap source address '%s' is IPv6, but IPv4-only mode is set",
+           source_addr);
+      return;
+    }
+    ares_set_local_ip6(channel, (const unsigned char *)&addr_v6);
+  } else {
+    WLOG("Bootstrap source address '%s' is not a valid IP literal", source_addr);
+    return;
+  }
+}
+
 static ev_tstamp get_timeout(dns_poller_t *d)
 {
     static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
@@ -179,6 +210,7 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns,
                      int bootstrap_dns_polling_interval,
+                     const char *source_addr,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
   int r = ares_library_init(ARES_LIB_INIT_ALL);
@@ -207,6 +239,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   d->loop = loop;
   d->hostname = hostname;
   d->family = family;
+  set_bootstrap_source_addr(d->ares, source_addr, family);
   d->cb = cb;
   d->polling_interval = bootstrap_dns_polling_interval;
   d->request_ongoing = 0;
