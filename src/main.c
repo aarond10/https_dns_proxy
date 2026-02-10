@@ -91,7 +91,7 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
 static void https_resp_cb(void *data, char *buf, size_t buflen) {
   request_t *req = (request_t *)data;
   if (req == NULL) {
-    FLOG("data NULL, buflen: %zu", buflen);
+    FLOG("Request data is NULL (buflen: %zu)", buflen);
   }
   DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.

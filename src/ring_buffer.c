@@ -5,6 +5,8 @@
 
 #include "ring_buffer.h"
 
+#define MAX_LOG_ENTRY_SIZE 8192
+
 struct ring_buffer
 {
     char ** storage;
@@ -74,6 +76,10 @@ void ring_buffer_push_back(struct ring_buffer *rb, char* data, uint32_t size)
 {
     if (!rb->storage) {
         return;
+    }
+
+    if (size > MAX_LOG_ENTRY_SIZE) {
+        size = MAX_LOG_ENTRY_SIZE;  // Truncate large entries
     }
 
     if (rb->storage[rb->next]) {
