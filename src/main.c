@@ -58,13 +58,15 @@ static int hostname_from_url(const char* url_in,
     if (rc == CURLUE_OK) {
       char *host = NULL;
       rc = curl_url_get(url, CURLUPART_HOST, &host, 0);
-      const size_t host_len = strlen(host);
-      if (rc == CURLUE_OK && host_len < hostname_len &&
-          host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
-          !is_ipv4_address(host)) {
-        strncpy(hostname, host, hostname_len-1);
-        hostname[hostname_len-1] = '\0';
-        res = 1; // success
+      if (rc == CURLUE_OK && host != NULL) {
+        const size_t host_len = strlen(host);
+        if (host_len < hostname_len &&
+            host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
+            !is_ipv4_address(host)) {
+          strncpy(hostname, host, hostname_len-1);
+          hostname[hostname_len-1] = '\0';
+          res = 1; // success
+        }
       }
       curl_free(host);
     }
@@ -88,10 +90,10 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
 
 static void https_resp_cb(void *data, char *buf, size_t buflen) {
   request_t *req = (request_t *)data;
-  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (req == NULL) {
-    FLOG("%04hX: data NULL", req->tx_id);
+    FLOG("data NULL, buflen: %zu", buflen);
   }
+  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
   if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
     if (buflen < DNS_HEADER_LENGTH) {
       WLOG("%04hX: Malformed response received, too short: %u", req->tx_id, buflen);

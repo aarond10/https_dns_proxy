@@ -257,17 +257,17 @@ static int get_tcp_listen_sock(struct addrinfo *listen_addrinfo) {
   }
 
   if (listen(sock, LISTEN_BACKLOG) == -1) {
-    FLOG("Error listaning on %s:%d TCP: %s (%d)", ipstr, port,
+    FLOG("Error listening on %s:%d TCP: %s (%d)", ipstr, port,
          strerror(errno), errno);
   }
 
   int flags = fcntl(sock, F_GETFL, 0);
   if (flags == -1) {
-    FLOG("Error getting TCP socket flags: %s (%d)", ipstr, port,
+    FLOG("Error getting TCP socket flags on %s:%d: %s (%d)", ipstr, port,
          strerror(errno), errno);
   }
   if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1) {
-    FLOG("Error setting TCP socket to non-blocking: %s (%d)", ipstr, port,
+    FLOG("Error setting TCP socket to non-blocking on %s:%d: %s (%d)", ipstr, port,
          strerror(errno), errno);
   }
 
@@ -344,6 +344,7 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
         remove_client(client);
         return;
       }
+      continue;
     }
     sent += len;
 
