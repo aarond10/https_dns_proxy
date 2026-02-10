@@ -18,6 +18,8 @@ static FILE *logfile = NULL;                         // NOLINT(cppcoreguidelines
 static int loglevel = LOG_ERROR;                     // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_timer logging_timer;                       // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_signal sigusr2;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static ev_async flight_recorder_async;               // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static struct ev_loop *logging_loop = NULL;          // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static struct ring_buffer * flight_recorder = NULL;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 static const char * const SeverityStr[] = {
@@ -46,13 +48,23 @@ void logging_flight_recorder_dump(void) {
   }
 }
 
-static void logging_flight_recorder_dump_cb(struct ev_loop __attribute__((unused)) *loop,
-    ev_signal __attribute__((__unused__)) *w,
+static void logging_flight_recorder_dump_async_cb(struct ev_loop __attribute__((unused)) *loop,
+    ev_async __attribute__((__unused__)) *w,
     int __attribute__((__unused__)) revents) {
   logging_flight_recorder_dump();
 }
 
+static void logging_flight_recorder_dump_cb(struct ev_loop __attribute__((unused)) *loop,
+    ev_signal __attribute__((__unused__)) *w,
+    int __attribute__((__unused__)) revents) {
+  // Signal handler: just trigger async watcher to defer to main loop
+  // This ensures fprintf() is called outside of signal context
+  ev_async_send(logging_loop, &flight_recorder_async);
+}
+
 void logging_events_init(struct ev_loop *loop) {
+  logging_loop = loop;
+
   /* don't start timer if we will never write messages that are not flushed */
   if (loglevel < LOG_FLUSH_LEVEL) {
     DLOG("starting periodic log flush timer");
@@ -61,6 +73,8 @@ void logging_events_init(struct ev_loop *loop) {
   }
 
   DLOG("starting SIGUSR2 handler");
+  ev_async_init(&flight_recorder_async, logging_flight_recorder_dump_async_cb);
+  ev_async_start(loop, &flight_recorder_async);
   ev_signal_init(&sigusr2, logging_flight_recorder_dump_cb, SIGUSR2);
   ev_signal_start(loop, &sigusr2);
 }
@@ -68,6 +82,7 @@ void logging_events_init(struct ev_loop *loop) {
 void logging_events_cleanup(struct ev_loop *loop) {
   ev_timer_stop(loop, &logging_timer);
   ev_signal_stop(loop, &sigusr2);
+  ev_async_stop(loop, &flight_recorder_async);
 }
 
 void logging_init(int fd, int level, uint32_t flight_recorder_size) {
