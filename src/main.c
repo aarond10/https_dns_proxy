@@ -185,6 +185,10 @@ static int addr_list_reduced(const char* full_list, const char* list) {
     char current[50];
     const char *comma = strchr(pos, ',');
     size_t ip_len = (size_t)(comma ? comma - pos : end - pos);
+    if (ip_len >= sizeof(current)) {
+      DLOG("IP address too long: %zu bytes", ip_len);
+      return 1;
+    }
     strncpy(current, pos, ip_len);
     current[ip_len] = '\0';
 
@@ -286,9 +290,8 @@ int main(int argc, char *argv[]) {
       exit(0);  // asking for help is not a problem
     case OPR_VERSION: {
       printf("%s\n", sw_version());
-      CURLcode init_res = curl_global_init(CURL_GLOBAL_DEFAULT);
       curl_version_info_data *curl_ver = curl_version_info(CURLVERSION_NOW);
-      if (init_res == CURLE_OK && curl_ver != NULL) {
+      if (curl_ver != NULL) {
         printf("Using: ev/%d.%d c-ares/%s %s\n",
                ev_version_major(), ev_version_minor(),
                ares_version(NULL), curl_version());

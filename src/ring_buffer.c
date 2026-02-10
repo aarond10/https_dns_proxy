@@ -52,6 +52,9 @@ void ring_buffer_free(struct ring_buffer **rbp)
 
 void ring_buffer_dump(struct ring_buffer *rb, FILE * file)
 {
+    if (rb == NULL) {
+        return;
+    }
     if (!rb->storage) {
         return;
     }

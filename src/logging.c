@@ -88,8 +88,13 @@ void logging_events_cleanup(struct ev_loop *loop) {
 void logging_init(int fd, int level, uint32_t flight_recorder_size) {
   if (logfile) {
     (void)fclose(logfile);
+    logfile = NULL;
   }
   logfile = fdopen(fd, "a");
+  if (logfile == NULL) {
+    // fdopen failed, can't log but we can still continue
+    return;
+  }
   loglevel = level;
 
   ring_buffer_init(&flight_recorder, flight_recorder_size);
