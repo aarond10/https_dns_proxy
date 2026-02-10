@@ -154,12 +154,18 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
   }
   const uint32_t free_space = client->input_buffer_size - client->input_buffer_used;
   const uint32_t needed_space = client->input_buffer_used + (uint32_t)len;
+  // Limit buffer size to prevent memory exhaustion attacks
+  if (needed_space > TCP_DNS_MAX_PAYLOAD) {
+    WLOG_CLIENT("Request too large, dropping client");
+    remove_client(client);
+    return;
+  }
   DLOG_CLIENT("Received %d byte, free: %u", len, free_space);
   if (free_space < len) {
     for (client->input_buffer_size = 64;  // lower value does not make much sense
          client->input_buffer_size < needed_space;
          client->input_buffer_size *= 2) {
-      if (client->input_buffer_size > 2*UINT16_MAX) {
+      if (client->input_buffer_size > TCP_DNS_MAX_PAYLOAD) {
         FLOG_CLIENT("Unrealistic input buffer size: %u", client->input_buffer_size);
       }
     }

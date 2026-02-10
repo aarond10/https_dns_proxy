@@ -29,6 +29,7 @@ static int get_listen_sock(struct addrinfo *listen_addrinfo) {
 
   int res = bind(sock, listen_addrinfo->ai_addr, listen_addrinfo->ai_addrlen);
   if (res < 0) {
+    close(sock);
     FLOG("Error binding on %s:%d UDP: %s (%d)", ipstr, port,
          strerror(errno), errno);
   }

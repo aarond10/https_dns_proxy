@@ -265,11 +265,9 @@ static void https_set_request_version(https_client_t *client,
              http_version_str(http_version_int), easy_code, curl_easy_strerror(easy_code));
 
     if (client->opt->use_http_version == 3) {
-      ELOG("Try to run application without -q argument!");  // fallback unknown for current request
-      client->opt->use_http_version = 2;
+      ELOG("Try to run application without -q argument!");
     } else if (client->opt->use_http_version == 2) {
       ELOG("Try to run application with -x argument! Falling back to HTTP/1.1 version.");
-      client->opt->use_http_version = 1;
     }
   }
 }

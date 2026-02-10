@@ -77,9 +77,11 @@ static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
 
     if (res != NULL) {
       pos += strlen(pos);
-      // We already checked above that pos < list + POLLER_ADDR_LIST_SIZE - 1,
-      // and ares_inet_ntop ensures null termination, so strlen(pos) >= 1.
-      // Therefore pos++ is safe and there's room for the comma.
+      // Check we have room for the comma and null terminator
+      if (pos >= list + POLLER_ADDR_LIST_SIZE - 1) {
+        DLOG("Not enough space for comma separator");
+        break;
+      }
       *pos = ',';
       pos++;
     } else {
