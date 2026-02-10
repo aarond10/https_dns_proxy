@@ -60,15 +60,17 @@ static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
       DLOG("Not enough space for more addresses");
       break;
     }
-    size_t remaining = (size_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos);
+    // Use ares_socklen_t to match ares_inet_ntop() signature
+    // POLLER_ADDR_LIST_SIZE is 1024 (well within ares_socklen_t range)
+    const ares_socklen_t remaining = (ares_socklen_t)(list + POLLER_ADDR_LIST_SIZE - 1 - pos);
 
     if (node->ai_family == AF_INET) {
       res = ares_inet_ntop(AF_INET, (const void *)&((struct sockaddr_in *)node->ai_addr)->sin_addr,
-                           pos, (ares_socklen_t)remaining);
+                           pos, remaining);
       ipv4++;
     } else if (node->ai_family == AF_INET6) {
       res = ares_inet_ntop(AF_INET6, (const void *)&((struct sockaddr_in6 *)node->ai_addr)->sin6_addr,
-                           pos, (ares_socklen_t)remaining);
+                           pos, remaining);
       ipv6++;
     } else {
       WLOG("Unhandled address family: %d", node->ai_family);

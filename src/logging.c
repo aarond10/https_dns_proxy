@@ -126,6 +126,10 @@ void _log(const char *file, int line, int severity, const char *fmt, ...) {
   }
   if (!logfile) {
     logfile = fdopen(STDOUT_FILENO, "w");
+    if (!logfile) {
+      // Can't even log to stdout, abort
+      abort();
+    }
   }
 
   struct timeval tv;

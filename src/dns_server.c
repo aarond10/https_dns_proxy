@@ -191,6 +191,7 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
            tx_id, old_size, new_resp_len, size_limit);
     }
     ares_free_string(new_resp);
+    new_resp = NULL;
   }
 }
 

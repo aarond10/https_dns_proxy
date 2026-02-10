@@ -60,7 +60,8 @@ static int hostname_from_url(const char* url_in,
       rc = curl_url_get(url, CURLUPART_HOST, &host, 0);
       if (rc == CURLUE_OK && host != NULL) {
         const size_t host_len = strlen(host);
-        if (host_len < hostname_len &&
+        if (hostname_len > 0 &&
+            host_len < hostname_len &&
             host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
             !is_ipv4_address(host)) {
           strncpy(hostname, host, hostname_len-1);
