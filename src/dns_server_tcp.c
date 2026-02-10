@@ -353,7 +353,8 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
 
   // send the response
   ssize_t sent = 0;
-  for (uint8_t i = 0; i < UINT8_MAX; ++i)  // endless loop guard
+  int attempts = 0;
+  for (; attempts < 50; ++attempts)  // 25ms max wait
   {
     len = send(client->sock, resp + sent, resp_len - (size_t)sent, MSG_NOSIGNAL);
     if (len < 0) {
@@ -362,15 +363,19 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
         remove_client(client);
         return;
       }
+      // EAGAIN/EWOULDBLOCK - socket buffer full, retry after delay
       continue;
     }
     sent += len;
-
     if (sent == (ssize_t)resp_len) {
       break;
     }
-
     usleep(RESEND_DELAY_US);
+  }
+  if (sent != (ssize_t)resp_len) {
+    WLOG_CLIENT("Send timeout after %d attempts, sent %zd/%zu bytes", attempts, sent, resp_len);
+    remove_client(client);
+    return;
   }
 
   ev_timer_again(d->loop, &client->timer_watcher);
