@@ -423,7 +423,8 @@ int main(int argc, char *argv[]) {
     if (hostname_from_url(opt.resolver_url, hostname, sizeof(hostname))) {
       app.using_dns_poller = 1;
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
-                      opt.bootstrap_dns_polling_interval, hostname,
+                      opt.bootstrap_dns_polling_interval, opt.source_addr,
+                      hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
                       dns_poll_cb, &app);
       ILOG("DNS polling initialized for '%s'", hostname);

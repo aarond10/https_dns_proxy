@@ -254,7 +254,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("                         supports it (http, https, socks4a, socks5h), otherwise\n");
   printf("                         initial DNS resolution will still be done via the\n");
   printf("                         bootstrap DNS servers.\n");
-  printf("  -S source_addr         Source IPv4/v6 address for outbound HTTPS connections.\n");
+  printf("  -S source_addr         Source IPv4/v6 address for outbound HTTPS and bootstrap DNS.\n");
   printf("                         (Default: system default)\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl.\n");

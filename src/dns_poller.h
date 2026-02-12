@@ -37,6 +37,7 @@ typedef struct {
 // provided ev_loop. `bootstrap_dns` is a comma-separated list of DNS servers to
 // use for the lookup `hostname` every `interval_seconds`. For each successful
 // lookup, `cb` will be called with the resolved address.
+// `source_addr` optionally binds bootstrap DNS lookups to a specific IP.
 // `family` should be AF_INET for IPv4 or AF_UNSPEC for both IPv4 and IPv6.
 //
 // Note: hostname *not* copied. It should remain valid until
@@ -44,6 +45,7 @@ typedef struct {
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns,
                      int bootstrap_dns_polling_interval,
+                     const char *source_addr,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data);
 

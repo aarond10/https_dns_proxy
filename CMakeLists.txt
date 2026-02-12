@@ -182,6 +182,14 @@ else()
   message(STATUS "python3 found: ${PYTHON3_EXE}")
 
   enable_testing()
+
+  # Robot framework tests
   add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot
-           WORKING_DIRECTORY tests/robot)
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests/robot)
 endif()
+
+# Clean target (removes entire build directory)
+add_custom_target(distclean
+  COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}
+  COMMENT "Removing build directory"
+)

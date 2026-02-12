@@ -203,8 +203,47 @@ Truncate UDP Impossible
   ...  Verify Truncation  txtfill4096.test.dnscheck.tools  4096  12  100  ANSWER: 0
 
 Source Address Binding
-  [Documentation]  Test source address binding with -S flag
+  [Documentation]  Test -S flag binds both HTTPS and bootstrap DNS to source address
+  [Tags]  bootstrap
+
   ${eth0_ip} =  Run  ip -4 addr show eth0 | grep inet | awk '{print $2}' | cut -d/ -f1 | tr -d '\\n'
-  Start Proxy  -S  ${eth0_ip}
+
+  # Use explicit resolver hostname to force bootstrap DNS resolution
+  Start Proxy  -S  ${eth0_ip}  -b  1.1.1.1,8.8.8.8  -r  https://dns.google/dns-query
+
+  # Wait for bootstrap DNS to complete
+  Sleep  2s
+
+  # Verify source address binding was applied
   Set To Dictionary  ${expected_logs}  Using source address=1
+
+  # Verify bootstrap DNS completed successfully
+  Set To Dictionary  ${expected_logs}  Received new DNS server IP=1
+
+  # Verify no bootstrap DNS failures
+  Append To List  ${error_logs}  DNS lookup of 'dns.google' failed
+
+  # Verify proxy works (HTTPS connection uses source binding)
   Run Dig
+
+Source Address Binding IPv6 With IPv4 Only Mode
+  [Documentation]  Test that IPv6 source address with -4 flag logs warning
+  [Tags]  bootstrap  validation
+
+  # Start proxy with IPv6 address in IPv4-only mode (-4 flag)
+  Start Proxy  -4  -S  ::1  -b  1.1.1.1,8.8.8.8  -r  https://dns.google/dns-query
+  Sleep  1s
+
+  # Verify warning is logged about address family mismatch
+  Set To Dictionary  ${expected_logs}  Bootstrap source address '::1' is IPv6, but IPv4-only mode is set=1
+
+Source Address Binding Invalid Address
+  [Documentation]  Test that invalid source address logs warning
+  [Tags]  bootstrap  validation
+
+  # Start proxy with invalid IP address
+  Start Proxy  -S  not-an-ip-address  -b  1.1.1.1,8.8.8.8  -r  https://dns.google/dns-query
+  Sleep  1s
+
+  # Verify warning is logged about invalid address
+  Set To Dictionary  ${expected_logs}  Bootstrap source address 'not-an-ip-address' is not a valid IP literal=1
