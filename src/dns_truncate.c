@@ -110,17 +110,19 @@ static void truncate_to_size_limit(char *buf, size_t *buflen, const uint16_t siz
   }
   ares_dns_record_destroy(dnsrec);
 
-  if (new_resp != NULL) {
-    if (new_resp_len < old_size) {
-      memcpy(buf, new_resp, new_resp_len);
-      *buflen = new_resp_len;
-      buf[2] |= 0x02;  // set truncation flag
-      ILOG("%04hX: DNS response size truncated from %u to %u to keep %u limit",
-           tx_id, old_size, new_resp_len, size_limit);
-    }
-    ares_free_string(new_resp);
-    new_resp = NULL;
+  if (new_resp == NULL) {
+    return;
   }
+
+  if (new_resp_len < old_size) {
+    memcpy(buf, new_resp, new_resp_len);
+    *buflen = new_resp_len;
+    buf[2] |= 0x02;  // set truncation flag
+    ILOG("%04hX: DNS response size truncated from %u to %u to keep %u limit",
+         tx_id, old_size, new_resp_len, size_limit);
+  }
+
+  ares_free_string(new_resp);
 }
 
 void dns_truncate_for_udp(const char *dns_req, size_t dns_req_len,

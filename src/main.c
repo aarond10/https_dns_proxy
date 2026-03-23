@@ -141,8 +141,9 @@ int main(int argc, char *argv[]) {
       exit(0);  // asking for help is not a problem
     case OPR_VERSION: {
       printf("%s\n", sw_version());
+      CURLcode init_res = curl_global_init(CURL_GLOBAL_DEFAULT);  // needed to ensure, that curl_version*() calls will work properly!
       curl_version_info_data *curl_ver = curl_version_info(CURLVERSION_NOW);
-      if (curl_ver != NULL) {
+      if (init_res == CURLE_OK && curl_ver != NULL) {
         printf("Using: ev/%d.%d c-ares/%s %s\n",
                ev_version_major(), ev_version_minor(),
                ares_version(NULL), curl_version());
@@ -151,6 +152,7 @@ int main(int argc, char *argv[]) {
                curl_ver->features & CURL_VERSION_HTTP3 ? "HTTP3 " : "",
                curl_ver->features & CURL_VERSION_HTTPS_PROXY ? "HTTPS-proxy " : "",
                curl_ver->features & CURL_VERSION_IPV6 ? "IPv6" : "");
+        curl_global_cleanup();
         exit(0);
       } else {
         printf("\nFailed to get curl version info!\n");

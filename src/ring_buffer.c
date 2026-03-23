@@ -5,7 +5,9 @@
 
 #include "ring_buffer.h"
 
-#define MAX_LOG_ENTRY_SIZE 8192
+enum {
+MAX_LOG_ENTRY_SIZE = 8192
+};
 
 struct ring_buffer
 {
@@ -23,13 +25,11 @@ void ring_buffer_init(struct ring_buffer **rbp, uint32_t size)
     }
     struct ring_buffer *rb = (struct ring_buffer *)calloc(1, sizeof(struct ring_buffer));
     if (!rb) {
-        *rbp = NULL;
         return;
     }
     rb->storage = (char**)calloc(size, sizeof(char*));
     if (!rb->storage) {
         free((void*) rb);
-        *rbp = NULL;
         return;
     }
     rb->size = size;
