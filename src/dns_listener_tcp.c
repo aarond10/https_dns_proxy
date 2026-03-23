@@ -95,17 +95,13 @@ static void remove_client(struct tcp_client_s * client) {
 
   close(client->sock);
 
-  // Save next pointer before freeing. Safe because this is single-threaded
-  // event loop - no callbacks can run during this function.
-  struct tcp_client_s *next = client->next;
-
   if (d->clients == client) {
-    d->clients = next;
+    d->clients = client->next;
   }
   else {
     for (struct tcp_client_s * cur = d->clients; cur != NULL; cur = cur->next) {
       if (cur->next == client) {
-        cur->next = next;
+        cur->next = client->next;
         break;
       }
     }
