@@ -268,15 +268,14 @@ int main(int argc, char *argv[]) {
 
   logging_events_init(loop);
 
-  dns_poller_t dns_poller;
-  uint8_t using_dns_poller = 0;
-  char hostname[255] = {0};  // Domain names shouldn't exceed 253 chars.
+  dns_poller_t * dns_poller = NULL;
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
+    char hostname[255] = {0};  // Domain names shouldn't exceed 253 chars.
     if (hostname_from_url(opt.resolver_url, hostname, sizeof(hostname))) {
-      using_dns_poller = 1;
+      dns_poller = (dns_poller_t *)calloc(1, sizeof(dns_poller_t));
       doh_proxy_await_bootstrap(proxy);
       doh_proxy_set_on_ready(proxy, systemd_notify_ready, NULL);
-      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
+      dns_poller_init(dns_poller, loop, opt.bootstrap_dns,
                       opt.bootstrap_dns_polling_interval, opt.source_addr,
                       hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
@@ -294,8 +293,10 @@ int main(int argc, char *argv[]) {
   ev_run(loop, 0);
   DLOG("loop breaked");
 
-  if (using_dns_poller) {
-    dns_poller_cleanup(&dns_poller);
+  if (dns_poller != NULL) {
+    dns_poller_cleanup(dns_poller);
+    free(dns_poller);
+    dns_poller = NULL;
   }
 
   logging_events_cleanup(loop);
