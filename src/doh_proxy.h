@@ -4,9 +4,13 @@
 #include <ev.h>
 
 #include "dns_listener.h"
-#include "dns_poller.h"
 #include "https_client.h"
 #include "stat.h"
+
+enum {
+  HOSTNAME_BUFFER_SIZE = 256,  // To store max hostname length per RFC1035 2.3.4
+  PORT_STR_LENGTH = 5,         // Port shouldn't exceed 5 chars: "65535"
+};
 
 // The DoH proxy core. Owns the per-request lifecycle (allocate state on
 // inbound, hand to the HTTPS client, route the response back to the
@@ -15,9 +19,8 @@
 typedef struct doh_proxy doh_proxy_t;
 
 // Optional callback invoked the first time the proxy is ready to serve
-// requests (after bootstrap completes, if bootstrap was required). Called
-// at most once.
-typedef void (*doh_proxy_ready_fn)(void *ctx);
+// requests (after bootstrap completes,). Called at most once.
+typedef void (*doh_proxy_bootstrap_done_cb)(void);
 
 doh_proxy_t * doh_proxy_create(struct ev_loop *loop,
                                https_client_t *client,
@@ -27,11 +30,14 @@ doh_proxy_t * doh_proxy_create(struct ev_loop *loop,
 // Mark the proxy as awaiting bootstrap. Until the first successful resolver
 // update, inbound DNS requests will be dropped (libcurl would otherwise fall
 // back to gethostbyname() and may deadlock if our resolver depends on us).
-void doh_proxy_await_bootstrap(doh_proxy_t *p);
+// Optionally set a one-shot "ready" notifier (e.g. systemd_notify_ready).
+// Fires when the first resolver update completes.
+void doh_proxy_await_bootstrap(doh_proxy_t *p, doh_proxy_bootstrap_done_cb cb);
 
-// Set a one-shot "ready" notifier (e.g. systemd_notify_ready). Fires when
-// bootstrap completes, or never if await_bootstrap was never called.
-void doh_proxy_set_on_ready(doh_proxy_t *p, doh_proxy_ready_fn cb, void *cb_ctx);
+void doh_proxy_set_port(doh_proxy_t *p, uint16_t port);
+
+// Set static resolv list (for when no polling is used).
+void doh_proxy_set_resolv(doh_proxy_t *p, const char *buf);
 
 // dns_request_fn — pass to dns_*_listener_create as the request callback.
 // `ctx` must be a doh_proxy_t *.

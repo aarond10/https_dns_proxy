@@ -21,7 +21,7 @@ typedef struct dns_listener_udp_s {
 
   dns_request_fn cb;
   void *cb_data;
-} dns_listener_udp_t;
+} __attribute__((aligned(128))) dns_listener_udp_t;
 
 // Creates and binds a listening UDP socket for incoming requests.
 static int get_listen_sock(struct addrinfo *listen_addrinfo) {
