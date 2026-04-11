@@ -20,3 +20,5 @@ report.html
 custom_curl/
 valgrind-*.log
 tests/robot/__pycache__
+compile_commands.json
+.cache/clangd
