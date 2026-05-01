@@ -1,4 +1,5 @@
 *** Settings ***
+
 Documentation  Simple functional tests for https_dns_proxy
 Library        OperatingSystem
 Library        Process
@@ -7,15 +8,18 @@ Library        DnsTcpClient.py
 
 
 *** Variables ***
+
 ${BINARY_PATH}  ${CURDIR}/../../https_dns_proxy
 ${PORT}  55353
 
 
 *** Settings ***
+
 Test Teardown  Stop Proxy
 
 
 *** Keywords ***
+
 Common Test Setup
   Set Test Variable  &{expected_logs}  loop destroyed=1  # last log line
   Set Test Variable  @{error_logs}  [F]  # any fatal error
@@ -68,7 +72,6 @@ Stop Proxy
   END
   Should Be Equal As Integers  ${result.rc}  0
 
-
 Start Dig
   [Arguments]  ${domain}=google.com
   ${handle} =  Start Process  dig  +timeout\=${dig_timeout}  +retry\=${dig_retry}  @{dig_options}  @127.0.0.1  -p  ${PORT}  ${domain}
@@ -100,7 +103,6 @@ Run Dig Parallel
     Stop Dig  ${handle}
   END
 
-
 Large Response Test
   [Documentation]  https://dnscheck.tools/#more
   # use large buffer not to fragment UDP response, and ask for TXT response
@@ -109,18 +111,17 @@ Large Response Test
   Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: 4\\d{3}$  # expecting more than 4k large response
 
 Verify Truncation
-  [Arguments]  ${domain}  ${udp_buffer_size}  ${result_bytes_min}  ${result_bytes_max}  ${expect}=${None}
-  # ask for TXT response
-  Set Test Variable  @{dig_options}  +notcp  +ignore  +bufsize=${udp_buffer_size}  -t  txt
+  [Arguments]  ${domain}  ${result_bytes_min}  ${result_bytes_max}  ${expect}=${None}
   ${dig_output} =  Run Dig  ${domain}  ${expect}
   Should Contain  ${dig_output}  flags: qr tc
   # expecting response to be ${result_bytes_min} byte (could be flaky)
-  @{res} =  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: (\\d+)$  # expecting more than 4k large response
+  @{res} =  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: (\\d+)$
   Should Be True  ${res}[1] >= ${result_bytes_min}
   Should Be True  ${res}[1] <= ${result_bytes_max}
 
 
 *** Test Cases ***
+
 Handle Unbound Server Does Not Support HTTP/1.1
   Start Proxy  -x  -r  https://doh.mullvad.net/dns-query  # resolver uses Unbound
   Run Keyword And Expect Error  9 != 0  # timeout exit code
@@ -184,23 +185,32 @@ Send TCP Requests Fragmented
 
   Close Tcp Client Connection
 
-Truncate UDP Small
+No Truncate UDP Small
   Start Proxy
-  Wait Until Keyword Succeeds  5x  200ms
-  # too small buffer will be overridden to 512, so expecting more than 300 bytes
-  ...  Verify Truncation  microsoft.com  256  300  512
+  # too small buffer will be overridden to 512, so no truncation
+  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=256  -t  TXT  +dnssec
+  ${dig_output} =  Run Dig  facebook.com
+  Should Contain  ${dig_output}  flags: qr rd ra;  # no tr flag!
+  @{res} =  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: (\\d+)$
+  Should Be True  ${res}[1] >= 256
+  Should Be True  ${res}[1] <= 512
 
 Truncate UDP Large
   Start Proxy
-  Wait Until Keyword Succeeds  5x  200ms
-  # expecting more than 1500 byte large response
-  ...  Verify Truncation  microsoft.com  2000  1500  2000
+  # response would be ~4500 byte, has to be dropped because of RRSet Atomicity (RFC 2181, Sec 5.2)
+  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=4096  -t  txt
+  Verify Truncation  microsoft.com  20  100  ANSWER: 0
 
 Truncate UDP Impossible
   Start Proxy
-  Wait Until Keyword Succeeds  5x  200ms
   # the only TXT answer record has to be dropped to met limit
-  ...  Verify Truncation  txtfill4096.test.dnscheck.tools  4096  12  100  ANSWER: 0
+  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=4096  -t  txt
+  Verify Truncation  txtfill4096.test.dnscheck.tools  12  100  ANSWER: 0
+
+Valgrind Resource Leak Check Truncation
+  Start Proxy With Valgrind
+  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=4096  -t  txt
+  Verify Truncation  txtfill4096.test.dnscheck.tools  12  100  ANSWER: 0
 
 Source Address Binding
   [Documentation]  Test -S flag binds both HTTPS and bootstrap DNS to source address
