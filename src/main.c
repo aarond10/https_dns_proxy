@@ -1,6 +1,7 @@
 // Simple UDP-to-HTTPS DNS Proxy
 // (C) 2016 Aaron Drew
 
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
 #include <grp.h>
@@ -13,36 +14,15 @@
 #include <systemd/sd-daemon.h>
 #endif
 
+#include "dns_listener.h"
+#include "dns_listener_tcp.h"
+#include "dns_listener_udp.h"
 #include "dns_poller.h"
-#include "dns_server.h"
-#include "dns_server_tcp.h"
+#include "doh_proxy.h"
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
 #include "stat.h"
-
-// Holds app state required for dns_server_cb.
-// NOLINTNEXTLINE(altera-struct-pack-align)
-typedef struct {
-  https_client_t *https_client;
-  struct curl_slist *resolv;
-  const char *resolver_url;
-  stat_t *stat;
-  uint8_t using_dns_poller;
-  socklen_t addrlen;
-} app_state_t;
-
-// NOLINTNEXTLINE(altera-struct-pack-align)
-typedef struct {
-  void *dns_server;
-  uint8_t is_tcp;
-  char* dns_req;
-  size_t dns_req_len;
-  stat_t *stat;
-  ev_tstamp start_tstamp;
-  uint16_t tx_id;
-  struct sockaddr_storage raddr;
-} request_t;
 
 static int is_ipv4_address(char *str) {
     struct in6_addr addr;
@@ -89,76 +69,7 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
-static void https_resp_cb(void *data, char *buf, size_t buflen) {
-  request_t *req = (request_t *)data;
-  if (req == NULL) {
-    FLOG("Request data is NULL (buflen: %zu)", buflen);
-    return;
-  }
-  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
-  if (buf != NULL) { // May be NULL for timeout, DNS failure, or something similar.
-    if (buflen < DNS_HEADER_LENGTH) {
-      WLOG("%04hX: Malformed response received, too short: %u", req->tx_id, buflen);
-    } else {
-      const uint16_t response_id = ntohs(*((uint16_t*)buf));
-      if (req->tx_id != response_id) {
-        WLOG("DNS request and response IDs are not matching: %hX != %hX",
-             req->tx_id, response_id);
-      } else {
-        if (req->is_tcp) {
-          dns_server_tcp_respond((dns_server_tcp_t *)req->dns_server, (struct sockaddr*)&req->raddr, buf, buflen);
-        } else {
-          dns_server_respond((dns_server_t *)req->dns_server, (struct sockaddr*)&req->raddr,
-            req->dns_req, req->dns_req_len, buf, buflen);
-        }
-        if (req->stat) {
-          stat_request_end(req->stat, buflen, ev_now(req->stat->loop) - req->start_tstamp, req->is_tcp);
-        }
-      }
-    }
-  }
-  free((void*)req->dns_req);
-  free(req);
-}
-
-static void dns_server_cb(void *dns_server, uint8_t is_tcp, void *data,
-                          struct sockaddr* tmp_remote_addr,
-                          char *dns_req, size_t dns_req_len) {
-  app_state_t *app = (app_state_t *)data;
-
-  uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
-  DLOG("Received request for id: %hX, len: %d", tx_id, dns_req_len);
-
-  // If we're not yet bootstrapped, don't answer. libcurl will fall back to
-  // gethostbyname() which can cause a DNS loop due to the nameserver listed
-  // in resolv.conf being or depending on https_dns_proxy itself.
-  if(app->using_dns_poller && (app->resolv == NULL || app->resolv->data == NULL)) {
-    WLOG("%04hX: Query received before bootstrapping is completed, discarding.", tx_id);
-    free(dns_req);
-    return;
-  }
-
-  request_t *req = (request_t *)calloc(1, sizeof(request_t));
-  if (req == NULL) {
-    FLOG("%04hX: Out of mem", tx_id);
-  }
-  req->tx_id = tx_id;
-  memcpy(&req->raddr, tmp_remote_addr, app->addrlen);
-  req->dns_server = dns_server;
-  req->is_tcp = is_tcp;
-  req->dns_req = dns_req;  // To free buffer after https request is complete.
-  req->dns_req_len = dns_req_len;
-  req->stat = app->stat;
-
-  if (req->stat) {
-    req->start_tstamp = ev_now(app->stat->loop);
-    stat_request_begin(app->stat, dns_req_len, is_tcp);
-  }
-  https_client_fetch(app->https_client, app->resolver_url,
-                     req->dns_req, dns_req_len, app->resolv, req->tx_id, https_resp_cb, req);
-}
-
-static void systemd_notify_ready(void) {
+static void systemd_notify_ready(void __attribute__((__unused__)) *unused) {
 #if HAS_LIBSYSTEMD == 1
   static uint8_t called_once = 0;
   if (called_once != 0) {
@@ -177,67 +88,6 @@ static void systemd_notify_ready(void) {
 #else
   DLOG("Systemd notify skipped, not compiled with libsystemd!");
 #endif
-}
-
-static int addr_list_reduced(const char* full_list, const char* list) {
-  const char *pos = list;
-  const char *end = list + strlen(list);
-  while (pos < end) {
-    char current[50];
-    const char *comma = strchr(pos, ',');
-    size_t ip_len = (size_t)(comma ? comma - pos : end - pos);
-    if (ip_len >= sizeof(current)) {
-      DLOG("IP address too long: %zu bytes", ip_len);
-      return 1;
-    }
-    strncpy(current, pos, ip_len);
-    current[ip_len] = '\0';
-
-    const char *match_begin = strstr(full_list, current);
-    if (!match_begin ||
-        !(match_begin == full_list || *(match_begin - 1) == ',') ||
-        !(*(match_begin + ip_len) == ',' || *(match_begin + ip_len) == '\0')) {
-      DLOG("IP address missing: %s", current);
-      return 1;
-    }
-
-    pos += ip_len + 1;
-  }
-  return 0;
-}
-
-static void dns_poll_cb(const char* hostname, void *data,
-                        const char* addr_list) {
-  app_state_t *app = (app_state_t *)data;
-  char buf[255 + (sizeof(":443:") - 1) + POLLER_ADDR_LIST_SIZE];
-  memset(buf, 0, sizeof(buf));
-  if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
-  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
-  if (ip_start < 0) {
-    abort();  // must be impossible
-  }
-  (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list);
-  if (app->resolv == NULL) {
-    systemd_notify_ready();
-  }
-  if (app->resolv && app->resolv->data) {
-    char * old_addr_list = strstr(app->resolv->data, ":443:");
-    if (old_addr_list) {
-      old_addr_list += sizeof(":443:") - 1;
-      if (!addr_list_reduced(addr_list, old_addr_list)) {
-        DLOG("DNS server IP address unchanged (%s).", buf + ip_start);
-        free((void*)addr_list);
-        return;
-      }
-    }
-  }
-  free((void*)addr_list);
-  DLOG("Received new DNS server IP '%s'", buf + ip_start);
-  curl_slist_free_all(app->resolv);
-  app->resolv = curl_slist_append(NULL, buf);
-  // Resets curl or it gets in a mess due to IP of streaming connection not
-  // matching that of configured DNS.
-  https_client_reset(app->https_client);
 }
 
 static int proxy_supports_name_resolution(const char *proxy)
@@ -355,9 +205,13 @@ int main(int argc, char *argv[]) {
 
   stat_t stat;
   stat_init(&stat, loop, opt.stats_interval);
+  stat_t *stat_ptr = (opt.stats_interval ? &stat : NULL);
 
   https_client_t https_client;
-  https_client_init(&https_client, &opt, (opt.stats_interval ? &stat : NULL), loop);
+  https_client_init(&https_client, &opt, stat_ptr, loop);
+
+  doh_proxy_t *proxy = doh_proxy_create(loop, &https_client,
+                                        opt.resolver_url, stat_ptr);
 
   struct addrinfo *listen_addrinfo = get_listen_address(opt.listen_addr);
 
@@ -367,20 +221,15 @@ int main(int argc, char *argv[]) {
     ((struct sockaddr_in6*) listen_addrinfo->ai_addr)->sin6_port = htons((uint16_t)opt.listen_port);
   }
 
-  app_state_t app;
-  app.https_client = &https_client;
-  app.resolv = NULL;
-  app.resolver_url = opt.resolver_url;
-  app.using_dns_poller = 0;
-  app.stat = (opt.stats_interval ? &stat : NULL);
-  app.addrlen = listen_addrinfo->ai_addrlen;
+  dns_listener_t *udp_listener =
+      dns_udp_listener_create(loop, listen_addrinfo,
+                              doh_proxy_handle_request, proxy);
 
-  dns_server_t dns_server;
-  dns_server_init(&dns_server, loop, listen_addrinfo, dns_server_cb, &app);
-
-  dns_server_tcp_t * dns_server_tcp = NULL;
+  dns_listener_t *tcp_listener = NULL;
   if (opt.tcp_client_limit > 0) {
-    dns_server_tcp = dns_server_tcp_create(loop, listen_addrinfo, dns_server_cb, &app, (uint16_t)opt.tcp_client_limit);
+    tcp_listener = dns_tcp_listener_create(loop, listen_addrinfo,
+                                           (uint16_t)opt.tcp_client_limit,
+                                           doh_proxy_handle_request, proxy);
   }
 
   freeaddrinfo(listen_addrinfo);
@@ -418,39 +267,42 @@ int main(int argc, char *argv[]) {
   logging_events_init(loop);
 
   dns_poller_t dns_poller;
+  uint8_t using_dns_poller = 0;
   char hostname[255] = {0};  // Domain names shouldn't exceed 253 chars.
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
     if (hostname_from_url(opt.resolver_url, hostname, sizeof(hostname))) {
-      app.using_dns_poller = 1;
+      using_dns_poller = 1;
+      doh_proxy_await_bootstrap(proxy);
+      doh_proxy_set_on_ready(proxy, systemd_notify_ready, NULL);
       dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
                       opt.bootstrap_dns_polling_interval, opt.source_addr,
                       hostname,
                       opt.ipv4 ? AF_INET : AF_UNSPEC,
-                      dns_poll_cb, &app);
+                      doh_proxy_handle_resolver_update, proxy);
       ILOG("DNS polling initialized for '%s'", hostname);
     } else {
       ILOG("Resolver prefix '%s' doesn't appear to contain a "
            "hostname. DNS polling disabled.", opt.resolver_url);
-
-      systemd_notify_ready();
+      systemd_notify_ready(NULL);
     }
+  } else {
+    systemd_notify_ready(NULL);
   }
 
   ev_run(loop, 0);
   DLOG("loop breaked");
 
-  if (app.using_dns_poller) {
+  if (using_dns_poller) {
     dns_poller_cleanup(&dns_poller);
   }
-  curl_slist_free_all(app.resolv);
 
   logging_events_cleanup(loop);
   ev_signal_stop(loop, &sigterm);
   ev_signal_stop(loop, &sigint);
   ev_signal_stop(loop, &sigpipe);
-  dns_server_stop(&dns_server);
-  if (dns_server_tcp != NULL) {
-    dns_server_tcp_stop(dns_server_tcp);
+  udp_listener->stop(udp_listener);
+  if (tcp_listener != NULL) {
+    tcp_listener->stop(tcp_listener);
   }
   stat_stop(&stat);
 
@@ -458,13 +310,14 @@ int main(int argc, char *argv[]) {
   ev_run(loop, 0);
   DLOG("loop finished all events");
 
-  dns_server_cleanup(&dns_server);
-  if (dns_server_tcp != NULL) {
-    dns_server_tcp_cleanup(dns_server_tcp);
-    free(dns_server_tcp);
-    dns_server_tcp = NULL;
+  udp_listener->destroy(udp_listener);
+  if (tcp_listener != NULL) {
+    tcp_listener->destroy(tcp_listener);
   }
+  // The CURLOPT_RESOLVE list owned by the proxy must outlive in-flight curl
+  // easy handles, which is why https_client_cleanup runs first.
   https_client_cleanup(&https_client);
+  doh_proxy_destroy(proxy);
   stat_cleanup(&stat);
 
   ev_loop_destroy(loop);
