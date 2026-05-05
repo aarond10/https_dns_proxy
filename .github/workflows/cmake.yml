@@ -44,7 +44,7 @@ jobs:
     - name: Test
       run: make -C ${{github.workspace}}/ test ARGS="--verbose"
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ success() || failure() }}
       with:
         name: robot-logs-${{ matrix.compiler }}
