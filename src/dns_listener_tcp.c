@@ -1,11 +1,16 @@
 //NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #define _GNU_SOURCE  // needed for having accept4()
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
-#include "dns_server_tcp.h"
+#include "dns_common.h"
+#include "dns_listener_tcp.h"
 #include "logging.h"
 
 // Platform compatibility
@@ -33,8 +38,10 @@ enum {
   TCP_DNS_MAX_PAYLOAD = UINT16_MAX - sizeof(uint16_t),  // Max after 2-byte length prefix
 };
 
+typedef struct dns_listener_tcp_s dns_listener_tcp_t;
+
 struct tcp_client_s {
-  struct dns_server_tcp_s * d;
+  dns_listener_tcp_t * d;
 
   uint64_t id;
   int sock;
@@ -52,10 +59,12 @@ struct tcp_client_s {
   struct tcp_client_s * next;
 } __attribute__((packed)) __attribute__((aligned(128)));
 
-struct dns_server_tcp_s {
+struct dns_listener_tcp_s {
+  dns_listener_t base;
+
   struct ev_loop *loop;
 
-  dns_req_received_cb cb;
+  dns_request_fn cb;
   void *cb_data;
 
   int sock;
@@ -70,7 +79,7 @@ struct dns_server_tcp_s {
 
 
 static void remove_client(struct tcp_client_s * client) {
-  dns_server_tcp_t *d = client->d;
+  dns_listener_tcp_t *d = client->d;
 
   DLOG_CLIENT("Removing client, socket %d", client->sock);
 
@@ -114,7 +123,7 @@ static int get_dns_request(struct tcp_client_s *client,
     return 0;  // Partial request
   }
   // copy whole request
-  *dns_req = (char *)malloc(*req_size);  // To free buffer after https request is complete.
+  *dns_req = (char *)malloc(*req_size);  // freed when DoH request completes
   if (*dns_req == NULL) {
     FLOG_CLIENT("Out of mem");
   }
@@ -128,7 +137,7 @@ static int get_dns_request(struct tcp_client_s *client,
 static void read_cb(struct ev_loop __attribute__((unused)) *loop,
                     ev_io *w, int __attribute__((unused)) revents) {
   struct tcp_client_s *client = (struct tcp_client_s *)w->data;
-  dns_server_tcp_t *d = client->d;
+  dns_listener_tcp_t *d = client->d;
 
   // Receive data
   char buf[DNS_REQUEST_BUFFER_SIZE];  // if there would be more data, callback will be called again
@@ -191,7 +200,7 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
       return;
     }
 
-    d->cb(d, 1, d->cb_data, (struct sockaddr*)&client->raddr, dns_req, req_size);
+    d->cb(d->cb_data, &d->base, (struct sockaddr*)&client->raddr, dns_req, req_size);
     request_received = 1;
   }
 
@@ -209,7 +218,7 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
 
 static void accept_cb(struct ev_loop __attribute__((unused)) *loop,
                       ev_io *w, int __attribute__((unused)) revents) {
-  dns_server_tcp_t *d = (dns_server_tcp_t *)w->data;
+  dns_listener_tcp_t *d = (dns_listener_tcp_t *)w->data;
 
   struct sockaddr_storage client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
@@ -258,7 +267,7 @@ static void accept_cb(struct ev_loop __attribute__((unused)) *loop,
   DLOG_CLIENT("Accepted client %u of %u, socket %d", d->client_count, d->client_limit, client->sock);
 }
 
-// Creates and bind a listening non-blocking TCP socket for incoming requests.
+// Creates and binds a listening non-blocking TCP socket for incoming requests.
 static int get_tcp_listen_sock(struct addrinfo *listen_addrinfo) {
   int sock = socket(listen_addrinfo->ai_family, SOCK_STREAM, 0);
   if (sock < 0) {
@@ -308,33 +317,12 @@ static int get_tcp_listen_sock(struct addrinfo *listen_addrinfo) {
   return sock;
 }
 
-dns_server_tcp_t * dns_server_tcp_create(
-    struct ev_loop *loop, struct addrinfo *listen_addrinfo,
-    dns_req_received_cb cb, void *data, uint16_t tcp_client_limit) {
-  dns_server_tcp_t * d = (dns_server_tcp_t *) malloc(sizeof(dns_server_tcp_t));
-  if (d == NULL) {
-    FLOG("Out of mem");
-  }
-  d->loop = loop;
-  d->cb = cb;
-  d->cb_data = data;
-  d->sock = get_tcp_listen_sock(listen_addrinfo);
-  d->addrlen = listen_addrinfo->ai_addrlen;
-  d->client_id = 0;
-  d->client_count = 0;
-  d->client_limit = tcp_client_limit;
-  d->clients = NULL;
+static void tcp_respond(dns_listener_t *self, struct sockaddr *raddr,
+                        const char __attribute__((unused)) *dns_req,
+                        size_t __attribute__((unused)) dns_req_len,
+                        char *resp, size_t resp_len) {
+  dns_listener_tcp_t *d = (dns_listener_tcp_t *)self;
 
-  ev_io_init(&d->accept_watcher, accept_cb, d->sock, EV_READ);
-  d->accept_watcher.data = d;
-  ev_io_start(d->loop, &d->accept_watcher);
-
-  return d;
-}
-
-void dns_server_tcp_respond(dns_server_tcp_t *d,
-    struct sockaddr *raddr, char *resp, size_t resp_len)
-{
   // Limit response size to prevent overflow when accounting for the 2-byte
   // length prefix. The total on-wire size would be resp_len + sizeof(uint16_t).
   if (resp_len < DNS_HEADER_LENGTH || resp_len > TCP_DNS_MAX_PAYLOAD) {
@@ -402,13 +390,42 @@ void dns_server_tcp_respond(dns_server_tcp_t *d,
   ev_timer_again(d->loop, &client->timer_watcher);
 }
 
-void dns_server_tcp_stop(dns_server_tcp_t *d) {
+static void tcp_stop(dns_listener_t *self) {
+  dns_listener_tcp_t *d = (dns_listener_tcp_t *)self;
   while (d->clients) {
     remove_client(d->clients);  //NOLINT(clang-analyzer-unix.Malloc) false use after free detection
   }
   ev_io_stop(d->loop, &d->accept_watcher);
 }
 
-void dns_server_tcp_cleanup(dns_server_tcp_t *d) {
+static void tcp_destroy(dns_listener_t *self) {
+  dns_listener_tcp_t *d = (dns_listener_tcp_t *)self;
   close(d->sock);
+  free(d);
+}
+
+dns_listener_t * dns_tcp_listener_create(struct ev_loop *loop,
+                                         struct addrinfo *listen_addrinfo,
+                                         uint16_t client_limit,
+                                         dns_request_fn cb, void *ctx) {
+  dns_listener_tcp_t * d = (dns_listener_tcp_t *)calloc(1, sizeof(dns_listener_tcp_t));
+  if (d == NULL) {
+    FLOG("Out of mem");
+  }
+  d->base.respond = tcp_respond;
+  d->base.stop = tcp_stop;
+  d->base.destroy = tcp_destroy;
+  d->base.transport = DNS_TRANSPORT_TCP;
+  d->loop = loop;
+  d->cb = cb;
+  d->cb_data = ctx;
+  d->sock = get_tcp_listen_sock(listen_addrinfo);
+  d->addrlen = listen_addrinfo->ai_addrlen;
+  d->client_limit = client_limit;
+
+  ev_io_init(&d->accept_watcher, accept_cb, d->sock, EV_READ);
+  d->accept_watcher.data = d;
+  ev_io_start(d->loop, &d->accept_watcher);
+
+  return &d->base;
 }

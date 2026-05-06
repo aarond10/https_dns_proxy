@@ -1,90 +1,18 @@
 #include <ares.h>
-#include <errno.h>
+#include <arpa/inet.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-#include "dns_server.h"
+#include "dns_common.h"
+#include "dns_truncate.h"
 #include "logging.h"
 
-
-// Creates and bind a listening UDP socket for incoming requests.
-static int get_listen_sock(struct addrinfo *listen_addrinfo) {
-  int sock = socket(listen_addrinfo->ai_family, SOCK_DGRAM, 0);
-  if (sock < 0) {
-    FLOG("Error creating socket: %s (%d)", strerror(errno), errno);
-  }
-
-  uint16_t port = 0;
-  char ipstr[INET6_ADDRSTRLEN];
-  if (listen_addrinfo->ai_family == AF_INET) {
-    port = ntohs(((struct sockaddr_in*) listen_addrinfo->ai_addr)->sin_port);
-    inet_ntop(AF_INET, &((struct sockaddr_in *)listen_addrinfo->ai_addr)->sin_addr, ipstr, sizeof(ipstr));
-  } else if (listen_addrinfo->ai_family == AF_INET6) {
-    port = ntohs(((struct sockaddr_in6*) listen_addrinfo->ai_addr)->sin6_port);
-    inet_ntop(AF_INET6, &((struct sockaddr_in6 *)listen_addrinfo->ai_addr)->sin6_addr, ipstr, sizeof(ipstr));
-  } else {
-    FLOG("Unknown address family: %d", listen_addrinfo->ai_family);
-  }
-
-  int res = bind(sock, listen_addrinfo->ai_addr, listen_addrinfo->ai_addrlen);
-  if (res < 0) {
-    close(sock);
-    FLOG("Error binding on %s:%d UDP: %s (%d)", ipstr, port,
-         strerror(errno), errno);
-  }
-
-  ILOG("Listening on %s:%d UDP", ipstr, port);
-
-  return sock;
-}
-
-static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
-                       ev_io *w, int __attribute__((unused)) revents) {
-  dns_server_t *d = (dns_server_t *)w->data;
-
-  char tmp_buf[DNS_REQUEST_BUFFER_SIZE];
-  struct sockaddr_storage tmp_raddr;
-  socklen_t tmp_addrlen = d->addrlen;  // recvfrom can write to addrlen
-  ssize_t len = recvfrom(w->fd, tmp_buf, DNS_REQUEST_BUFFER_SIZE, MSG_TRUNC,
-                         (struct sockaddr*)&tmp_raddr, &tmp_addrlen);
-  if (len < 0) {
-    ELOG("recvfrom failed: %s", strerror(errno));
-    return;
-  }
-  if (len > DNS_REQUEST_BUFFER_SIZE) {
-    WLOG("Unsupported request received, too large: %d. Limit is: %d",
-         len, DNS_REQUEST_BUFFER_SIZE);
-    return;
-  }
-
-  if (len < DNS_HEADER_LENGTH) {
-    WLOG("Malformed request received, too short: %d", len);
-    return;
-  }
-
-  char *dns_req = (char *)malloc((size_t)len);  // To free buffer after https request is complete.
-  if (dns_req == NULL) {
-    FLOG("Out of mem");
-  }
-  memcpy(dns_req, tmp_buf, (size_t)len);
-
-  d->cb(d, 0, d->cb_data, (struct sockaddr*)&tmp_raddr, dns_req, (size_t)len);
-}
-
-void dns_server_init(dns_server_t *d, struct ev_loop *loop,
-                     struct addrinfo *listen_addrinfo,
-                     dns_req_received_cb cb, void *data) {
-  d->loop = loop;
-  d->sock = get_listen_sock(listen_addrinfo);
-  d->addrlen = listen_addrinfo->ai_addrlen;
-  d->cb = cb;
-  d->cb_data = data;
-  ev_io_init(&d->watcher, watcher_cb, d->sock, EV_READ);
-  d->watcher.data = d;
-  ev_io_start(d->loop, &d->watcher);
-}
-
+// Returns the size limit the request peer is willing to accept. Reads the
+// EDNS0 OPT record from the request's additional section. Falls back to the
+// RFC1035 4.2.1 default of 512 if the request can't be parsed or the OPT
+// advertises a smaller size (RFC6891 4.3 mandates that values below 512
+// MUST be treated as 512).
 static uint16_t get_edns_udp_size(const char *dns_req, const size_t dns_req_len) {
   ares_dns_record_t *dnsrec = NULL;
   ares_status_t parse_status = ares_dns_parse((const unsigned char *)dns_req, dns_req_len, 0, &dnsrec);
@@ -108,12 +36,12 @@ static uint16_t get_edns_udp_size(const char *dns_req, const size_t dns_req_len)
   ares_dns_record_destroy(dnsrec);
   if (udp_size < DNS_SIZE_LIMIT) {
     DLOG("%04hX: EDNS0 UDP buffer size %u overruled to %d", tx_id, udp_size, DNS_SIZE_LIMIT);
-    return DNS_SIZE_LIMIT;  // RFC6891 4.3 "Values lower than 512 MUST be treated as equal to 512."
+    return DNS_SIZE_LIMIT;
   }
   return udp_size;
 }
 
-static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size_limit) {
+static void truncate_to_size_limit(char *buf, size_t *buflen, const uint16_t size_limit) {
   const size_t old_size = *buflen;
   buf[2] |= 0x02;  // anyway: set truncation flag
 
@@ -195,33 +123,17 @@ static void truncate_dns_response(char *buf, size_t *buflen, const uint16_t size
   }
 }
 
-void dns_server_respond(dns_server_t *d, struct sockaddr *raddr,
-    const char *dns_req, const size_t dns_req_len, char *dns_resp, size_t dns_resp_len) {
-  if (dns_resp_len < DNS_HEADER_LENGTH) {
-    WLOG("Malformed response received, invalid length: %u", dns_resp_len);
+void dns_truncate_for_udp(const char *dns_req, size_t dns_req_len,
+                          char *resp, size_t *resp_len) {
+  if (*resp_len <= DNS_SIZE_LIMIT) {
+    return;  // always fits
+  }
+  const uint16_t udp_size = get_edns_udp_size(dns_req, dns_req_len);
+  if (*resp_len <= udp_size) {
+    uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
+    DLOG("%04hX: DNS response size %zu larger than %d but EDNS0 UDP buffer size %u allows it",
+         tx_id, *resp_len, DNS_SIZE_LIMIT, udp_size);
     return;
   }
-  if (dns_resp_len > DNS_SIZE_LIMIT) {
-    const uint16_t udp_size = get_edns_udp_size(dns_req, dns_req_len);
-    if (dns_resp_len > udp_size) {
-      truncate_dns_response(dns_resp, &dns_resp_len, udp_size);
-    } else {
-      uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
-      DLOG("%04hX: DNS response size %u larger than %d but EDNS0 UDP buffer size %u allows it",
-           tx_id, dns_resp_len, DNS_SIZE_LIMIT, udp_size);
-    }
-  }
-
-  ssize_t len = sendto(d->sock, dns_resp, dns_resp_len, 0, raddr, d->addrlen);
-  if(len == -1) {
-    DLOG("sendto failed: %s", strerror(errno));
-  }
-}
-
-void dns_server_stop(dns_server_t *d) {
-  ev_io_stop(d->loop, &d->watcher);
-}
-
-void dns_server_cleanup(dns_server_t *d) {
-  close(d->sock);
+  truncate_to_size_limit(resp, resp_len, udp_size);
 }
