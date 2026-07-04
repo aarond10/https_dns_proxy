@@ -163,7 +163,7 @@ static ev_tstamp get_timeout(dns_poller_t *d)
     static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
     struct timeval tv;
     struct timeval *tvp = ares_timeout(d->ares, &max_tv, &tv);
-    ev_tstamp after = (double)tvp->tv_sec + (double)tvp->tv_usec * 1e-6;
+    ev_tstamp after = (double)tvp->tv_sec + ((double)tvp->tv_usec * 1e-6);
     return after > 0.1 ? after : 0.1;
 }
 

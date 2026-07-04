@@ -98,7 +98,7 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
     stat_connection_opened(client->stat);
   }
 
-#if defined(IP_TOS)
+#ifdef IP_TOS
   if (purpose != CURLSOCKTYPE_IPCXN) {
     return sock;
   }
@@ -107,7 +107,7 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
     setsockopt(sock, IPPROTO_IP, IP_TOS,
                &client->opt->dscp, sizeof(client->opt->dscp));
   }
-#if defined(IPV6_TCLASS)
+#ifdef IPV6_TCLASS
   else if (addr->family == AF_INET6) {
     setsockopt(sock, IPPROTO_IPV6, IPV6_TCLASS,
                &client->opt->dscp, sizeof(client->opt->dscp));
@@ -148,7 +148,7 @@ static void https_log_data(int level, struct https_fetch_ctx *ctx,
   const size_t width = 0x10;
 
   for (size_t i = 0; i < size; i += width) {
-    char hex[3 * width + 1];
+    char hex[(3 * width) + 1];
     char str[width + 1];
     size_t hex_off = 0;
     size_t str_off = 0;
@@ -660,8 +660,8 @@ static void https_client_multi_init(https_client_t *c, struct curl_slist *header
   c->header_list = header_list;
 
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
-  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, HTTPS_CONNECTION_LIMIT);
-  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_HOST_CONNECTIONS, HTTPS_CONNECTION_LIMIT);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)HTTPS_CONNECTION_LIMIT);
+  ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_MAX_HOST_CONNECTIONS, (long)HTTPS_CONNECTION_LIMIT);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETDATA, c);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_SOCKETFUNCTION, multi_sock_cb);
   ASSERT_CURL_MULTI_SETOPT(c->curlm, CURLMOPT_TIMERDATA, c);
