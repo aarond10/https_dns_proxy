@@ -24,9 +24,14 @@
 #include "options.h"
 #include "stat.h"
 
-static int is_ipv4_address(char *str) {
+static int is_ipv4_address(const char *str) {
     struct in6_addr addr;
     return inet_pton(AF_INET, str, &addr) == 1;
+}
+
+static int is_ip_address(const char *str) {
+    struct in6_addr addr;
+    return is_ipv4_address(str) || inet_pton(AF_INET6, str, &addr) == 1;
 }
 
 enum url_type {
@@ -305,6 +310,9 @@ int main(int argc, char *argv[]) {
         doh_proxy_set_port(proxy, port);
         if (opt.resolver_ip == NULL) {
           dns_poller = (dns_poller_t *)calloc(1, sizeof(dns_poller_t));
+          if (dns_poller == NULL) {
+            FLOG("Out of mem");
+          }
           doh_proxy_await_bootstrap(proxy, systemd_notify_ready);
           dns_poller_init(dns_poller, loop, opt.bootstrap_dns,
                           opt.bootstrap_dns_polling_interval, opt.source_addr,
@@ -312,6 +320,9 @@ int main(int argc, char *argv[]) {
                           doh_proxy_handle_resolver_update, proxy);
           ILOG("DNS polling initialized for '%s'", hostname);
         } else {
+          if (!is_ip_address(opt.resolver_ip)) {
+            FLOG("Resolver IP override '%s' is not a valid IP literal", opt.resolver_ip);
+          }
           const size_t resolv_buf_len = strlen(hostname) + 1 + PORT_STR_LENGTH + 1 + strlen(opt.resolver_ip) + 1;
           char * resolv_buf = (char *)calloc(resolv_buf_len, sizeof(char));
           (void)snprintf(resolv_buf, resolv_buf_len, "%s:%u:%s", hostname, port, opt.resolver_ip);
@@ -323,6 +334,9 @@ int main(int argc, char *argv[]) {
         break;
       case URL_TYPE_IP:
         doh_proxy_set_port(proxy, port);
+        if (opt.resolver_ip != NULL) {
+          WLOG("Resolver URL already contains an IP address, ignoring -R %s", opt.resolver_ip);
+        }
         ILOG("Resolver prefix '%s' doesn't appear to contain a hostname. "
              "DNS polling disabled.", opt.resolver_url);
         systemd_notify_ready();

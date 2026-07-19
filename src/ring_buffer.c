@@ -15,7 +15,7 @@ struct ring_buffer
     uint32_t size;
     uint32_t next;  // next slot to use in storage
     uint8_t full;
-} __attribute__((packed)) __attribute__((aligned(32)));
+};
 
 void ring_buffer_init(struct ring_buffer **rbp, uint32_t size)
 {

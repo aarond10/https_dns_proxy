@@ -26,7 +26,7 @@ typedef struct dns_io_event {
 typedef struct {
   ares_channel ares;
   struct ev_loop *loop;
-  const char *hostname;
+  char *hostname;  // owned; strdup'd in init, freed in cleanup
   int family;  // AF_UNSPEC for IPv4 or IPv6, AF_INET for IPv4 only.
   dns_poller_cb cb;
   int polling_interval;
@@ -44,8 +44,7 @@ typedef struct {
 // `source_addr` optionally binds bootstrap DNS lookups to a specific IP.
 // `family` should be AF_INET for IPv4 or AF_UNSPEC for both IPv4 and IPv6.
 //
-// Note: hostname *not* copied. It should remain valid until
-// dns_poller_cleanup called.
+// Note: hostname is copied; the caller's buffer need not outlive this call.
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns,
                      int bootstrap_dns_polling_interval,

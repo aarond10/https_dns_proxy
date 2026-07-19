@@ -131,13 +131,20 @@ if(USE_CLANG_TIDY)
     message(STATUS "clang-tidy not found.")
   else()
     message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-    set(CLANG_TIDY_CHECKS "-checks=*,-readability-identifier-length,-altera-unroll-loops,-concurrency-mt-unsafe,")
-    string(APPEND CLANG_TIDY_CHECKS "-bugprone-easily-swappable-parameters,-*magic-numbers,-hicpp-signed-bitwise,")
-    string(APPEND CLANG_TIDY_CHECKS "-readability-function-cognitive-complexity,-altera-id-dependent-backward-branch,")
-    string(APPEND CLANG_TIDY_CHECKS "-misc-include-cleaner,-llvmlibc-restrict-system-libc-headers,")
+    # Opt in to the check modules relevant to portable C instead of "*": the
+    # wildcard also enables domain-specific modules (altera-* for FPGA/OpenCL
+    # kernels, llvmlibc-*, android-*, ...) whose fixits have previously written
+    # inappropriate attributes into this codebase via -fix (see altera-struct-
+    # pack-align: extended alignment is UB on calloc'd structs, and packing
+    # misaligns embedded sockaddr_storage/libev watchers).
+    set(CLANG_TIDY_CHECKS "-checks=-*,bugprone-*,cert-*,clang-analyzer-*,concurrency-*,")
+    string(APPEND CLANG_TIDY_CHECKS "misc-*,performance-*,portability-*,readability-*,")
+    string(APPEND CLANG_TIDY_CHECKS "-readability-identifier-length,-concurrency-mt-unsafe,")
+    string(APPEND CLANG_TIDY_CHECKS "-bugprone-easily-swappable-parameters,-*magic-numbers,")
+    string(APPEND CLANG_TIDY_CHECKS "-readability-function-cognitive-complexity,-misc-include-cleaner,")
     string(APPEND CLANG_TIDY_CHECKS "-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,")
     string(APPEND CLANG_TIDY_CHECKS "-*function-size,-clang-diagnostic-*variadic-macro-arguments*")
-    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix" "-fix-errors" "${CLANG_TIDY_CHECKS}")
+    set(DO_CLANG_TIDY "${CLANG_TIDY_EXE}" "${CLANG_TIDY_CHECKS}")
   endif()
 else()
   message(STATUS "Not using clang-tidy.")
