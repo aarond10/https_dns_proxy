@@ -38,6 +38,7 @@ void options_init(struct Options *opt) {
   opt->bootstrap_dns_polling_interval = 120;
   opt->ipv4 = 0;
   opt->resolver_url = "https://dns.google/dns-query";
+  opt->resolver_ip = NULL;
   opt->curl_proxy = NULL;
   opt->source_addr = NULL;
   opt->use_http_version = DEFAULT_HTTP_VERSION;
@@ -59,7 +60,7 @@ int parse_int(char * str) {
 
 enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv) {
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:e:t:l:vxqm:L:s:S:C:F:hV")) != -1) {
+  while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:R:e:t:l:vxqm:L:s:S:C:F:hV")) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -93,6 +94,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       break;
     case 'r': // resolver url prefix
       opt->resolver_url = optarg;
+      break;
+    case 'R': // resolver ip address
+      opt->resolver_ip = optarg;
       break;
     case 't': // curl http proxy
       opt->curl_proxy = optarg;
@@ -226,7 +230,8 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   options_init(&defaults);
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]\n", argv[0]);
   printf("        [-b <dns_servers>] [-i <polling_interval>] [-4]\n");
-  printf("        [-r <resolver_url>] [-t <proxy_server>] [-S <source_addr>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
+  printf("        [-r <resolver_url>] [-R <resolver_ip>] [-t <proxy_server>] [-S <source_addr>]\n");
+  printf("        [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
   printf("        [-d] [-u <user>] [-g <group>] \n");
   printf("        [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]\n");
   printf("\n DNS server\n");
@@ -249,6 +254,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("\n HTTPS client\n");
   printf("  -r resolver_url        The HTTPS path to the resolver URL. (Default: %s)\n",
          defaults.resolver_url);
+  printf("  -R resolver_ip         The IP address of the resolver, instead of using DNS resolution.\n");
   printf("  -t proxy_server        Optional HTTP proxy. e.g. socks5://127.0.0.1:1080\n");
   printf("                         Remote name resolution will be used if the protocol\n");
   printf("                         supports it (http, https, socks4a, socks5h), otherwise\n");

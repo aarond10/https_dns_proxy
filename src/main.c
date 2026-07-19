@@ -2,10 +2,10 @@
 // (C) 2016 Aaron Drew
 
 #include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -29,27 +29,53 @@ static int is_ipv4_address(char *str) {
     return inet_pton(AF_INET, str, &addr) == 1;
 }
 
-static int hostname_from_url(const char* url_in,
-                             char* hostname, const size_t hostname_len) {
-  int res = 0;
+enum url_type {
+  URL_TYPE_ERROR,
+  URL_TYPE_IP,
+  URL_TYPE_HOSTNAME,
+};
+
+static enum url_type parse_url(const char* url_in,
+                               char* hostname, const size_t hostname_len,
+                               uint16_t *port) {
+  enum url_type res = URL_TYPE_ERROR;
   CURLU *url = curl_url();
   if (url != NULL) {
     CURLUcode rc = curl_url_set(url, CURLUPART_URL, url_in, 0);
     if (rc == CURLUE_OK) {
+      // Extract port first
+      char *port_str = NULL;
+      rc = curl_url_get(url, CURLUPART_PORT, &port_str, 0);
+      DLOG("CURLUPART_PORT: %s, %s", curl_url_strerror(rc), port_str ? port_str : "NULL");
+      if (rc == CURLUE_OK && port_str != NULL && strlen(port_str) > 0) {
+        char *endptr = NULL;
+        unsigned long value = strtoul(port_str, &endptr, 10);
+        if (*endptr == '\0' && value <= 65535UL) {
+          *port = (uint16_t)value;
+        }
+      }
+      curl_free(port_str);
+
+      // Extract host
       char *host = NULL;
       rc = curl_url_get(url, CURLUPART_HOST, &host, 0);
+      DLOG("CURLUPART_HOST: %s, %s", curl_url_strerror(rc), host ? host : "NULL");
       if (rc == CURLUE_OK && host != NULL) {
         const size_t host_len = strlen(host);
-        if (hostname_len > 0 &&
-            host_len < hostname_len &&
-            host[0] != '[' && host[host_len-1] != ']' && // skip IPv6 address
-            !is_ipv4_address(host)) {
-          strncpy(hostname, host, hostname_len-1);
-          hostname[hostname_len-1] = '\0';
-          res = 1; // success
+        if (host_len > 0) {
+          if ((host[0] == '[' && host[host_len-1] == ']') || // IPv6 address
+              is_ipv4_address(host)) {
+            res = URL_TYPE_IP;
+          } else if (host_len < hostname_len) {
+            (void)snprintf(hostname, hostname_len, "%s", host);
+            res = URL_TYPE_HOSTNAME;
+          }
         }
       }
       curl_free(host);
+    }
+    else {
+      DLOG("Error parsing URL '%s': %s", url_in, curl_url_strerror(rc));
     }
     curl_url_cleanup(url);
   }
@@ -69,7 +95,7 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
-static void systemd_notify_ready(void __attribute__((__unused__)) *unused) {
+static void systemd_notify_ready(void) {
 #if HAS_LIBSYSTEMD == 1
   static uint8_t called_once = 0;
   if (called_once != 0) {
@@ -141,8 +167,9 @@ int main(int argc, char *argv[]) {
       exit(0);  // asking for help is not a problem
     case OPR_VERSION: {
       printf("%s\n", sw_version());
+      CURLcode init_res = curl_global_init(CURL_GLOBAL_DEFAULT);  // needed to ensure, that curl_version*() calls will work properly!
       curl_version_info_data *curl_ver = curl_version_info(CURLVERSION_NOW);
-      if (curl_ver != NULL) {
+      if (init_res == CURLE_OK && curl_ver != NULL) {
         printf("Using: ev/%d.%d c-ares/%s %s\n",
                ev_version_major(), ev_version_minor(),
                ares_version(NULL), curl_version());
@@ -151,6 +178,7 @@ int main(int argc, char *argv[]) {
                curl_ver->features & CURL_VERSION_HTTP3 ? "HTTP3 " : "",
                curl_ver->features & CURL_VERSION_HTTPS_PROXY ? "HTTPS-proxy " : "",
                curl_ver->features & CURL_VERSION_IPV6 ? "IPv6" : "");
+        curl_global_cleanup();
         exit(0);
       } else {
         printf("\nFailed to get curl version info!\n");
@@ -266,34 +294,55 @@ int main(int argc, char *argv[]) {
 
   logging_events_init(loop);
 
-  dns_poller_t dns_poller;
-  uint8_t using_dns_poller = 0;
-  char hostname[255] = {0};  // Domain names shouldn't exceed 253 chars.
+  dns_poller_t * dns_poller = NULL;
   if (!proxy_supports_name_resolution(opt.curl_proxy)) {
-    if (hostname_from_url(opt.resolver_url, hostname, sizeof(hostname))) {
-      using_dns_poller = 1;
-      doh_proxy_await_bootstrap(proxy);
-      doh_proxy_set_on_ready(proxy, systemd_notify_ready, NULL);
-      dns_poller_init(&dns_poller, loop, opt.bootstrap_dns,
-                      opt.bootstrap_dns_polling_interval, opt.source_addr,
-                      hostname,
-                      opt.ipv4 ? AF_INET : AF_UNSPEC,
-                      doh_proxy_handle_resolver_update, proxy);
-      ILOG("DNS polling initialized for '%s'", hostname);
-    } else {
-      ILOG("Resolver prefix '%s' doesn't appear to contain a "
-           "hostname. DNS polling disabled.", opt.resolver_url);
-      systemd_notify_ready(NULL);
+    char hostname[HOSTNAME_BUFFER_SIZE] = {0};
+    uint16_t port = 443;  // Default for HTTPS
+    const enum url_type url_type = parse_url(opt.resolver_url, hostname, sizeof(hostname),
+                                             &port);
+    switch (url_type) {
+      case URL_TYPE_HOSTNAME:
+        doh_proxy_set_port(proxy, port);
+        if (opt.resolver_ip == NULL) {
+          dns_poller = (dns_poller_t *)calloc(1, sizeof(dns_poller_t));
+          doh_proxy_await_bootstrap(proxy, systemd_notify_ready);
+          dns_poller_init(dns_poller, loop, opt.bootstrap_dns,
+                          opt.bootstrap_dns_polling_interval, opt.source_addr,
+                          hostname, opt.ipv4 ? AF_INET : AF_UNSPEC,
+                          doh_proxy_handle_resolver_update, proxy);
+          ILOG("DNS polling initialized for '%s'", hostname);
+        } else {
+          const size_t resolv_buf_len = strlen(hostname) + 1 + PORT_STR_LENGTH + 1 + strlen(opt.resolver_ip) + 1;
+          char * resolv_buf = (char *)calloc(resolv_buf_len, sizeof(char));
+          (void)snprintf(resolv_buf, resolv_buf_len, "%s:%u:%s", hostname, port, opt.resolver_ip);
+          doh_proxy_set_resolv(proxy, resolv_buf);
+          ILOG("DNS polling disabled. Using static IP '%s'", resolv_buf);
+          free(resolv_buf);
+          systemd_notify_ready();
+        }
+        break;
+      case URL_TYPE_IP:
+        doh_proxy_set_port(proxy, port);
+        ILOG("Resolver prefix '%s' doesn't appear to contain a hostname. "
+             "DNS polling disabled.", opt.resolver_url);
+        systemd_notify_ready();
+        break;
+      case URL_TYPE_ERROR:  // fallthrough
+      default:
+        FLOG("Failed to parse resolver URL: %s", opt.resolver_url);
+        break;
     }
   } else {
-    systemd_notify_ready(NULL);
+    systemd_notify_ready();
   }
 
   ev_run(loop, 0);
   DLOG("loop breaked");
 
-  if (using_dns_poller) {
-    dns_poller_cleanup(&dns_poller);
+  if (dns_poller != NULL) {
+    dns_poller_cleanup(dns_poller);
+    free(dns_poller);
+    dns_poller = NULL;
   }
 
   logging_events_cleanup(loop);

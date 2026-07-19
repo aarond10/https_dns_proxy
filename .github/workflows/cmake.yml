@@ -8,12 +8,12 @@ jobs:
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     strategy:
       fail-fast: false
       matrix:
-        compiler: [gcc-13, clang-18]
+        compiler: [gcc-15, clang-22]
 
     steps:
     - uses: actions/checkout@main
@@ -44,7 +44,7 @@ jobs:
     - name: Test
       run: make -C ${{github.workspace}}/ test ARGS="--verbose"
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: ${{ success() || failure() }}
       with:
         name: robot-logs-${{ matrix.compiler }}

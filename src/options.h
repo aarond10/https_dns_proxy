@@ -39,6 +39,9 @@ struct Options {
   // Resolver URL prefix to use. Must start with https://.
   const char *resolver_url;
 
+  // Resolver IP address
+  const char *resolver_ip;
+
   // Optional http proxy if required.
   // e.g. "socks5://127.0.0.1:1080"
   const char *curl_proxy;

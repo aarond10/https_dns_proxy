@@ -57,7 +57,7 @@ static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
     const char *res = NULL;
 
     // Check that we have space for at least one character plus null terminator
-    if (pos >= list + POLLER_ADDR_LIST_SIZE - 1) {
+    if ((pos - list) >= POLLER_ADDR_LIST_SIZE - 1) {
       DLOG("Not enough space for more addresses");
       break;
     }
@@ -81,7 +81,7 @@ static char *get_addr_listing(struct ares_addrinfo_node * nodes) {
     if (res != NULL) {
       pos += strlen(pos);
       // Check we have room for the comma and null terminator
-      if (pos >= list + POLLER_ADDR_LIST_SIZE - 1) {
+      if ((pos - list) >= POLLER_ADDR_LIST_SIZE - 1) {
         DLOG("Not enough space for comma separator");
         break;
       }
@@ -163,7 +163,7 @@ static ev_tstamp get_timeout(dns_poller_t *d)
     static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
     struct timeval tv;
     struct timeval *tvp = ares_timeout(d->ares, &max_tv, &tv);
-    ev_tstamp after = (double)tvp->tv_sec + (double)tvp->tv_usec * 1e-6;
+    ev_tstamp after = (double)tvp->tv_sec + ((double)tvp->tv_usec * 1e-6);
     return after > 0.1 ? after : 0.1;
 }
 

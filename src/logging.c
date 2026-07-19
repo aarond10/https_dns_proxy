@@ -19,7 +19,6 @@ static int loglevel = LOG_ERROR;                     // NOLINT(cppcoreguidelines
 static ev_timer logging_timer;                       // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_signal sigusr2;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static ev_async flight_recorder_async;               // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-static struct ev_loop *logging_loop = NULL;          // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static struct ring_buffer * flight_recorder = NULL;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 static const char * const SeverityStr[] = {
@@ -54,17 +53,15 @@ static void logging_flight_recorder_dump_async_cb(struct ev_loop __attribute__((
   logging_flight_recorder_dump();
 }
 
-static void logging_flight_recorder_dump_cb(struct ev_loop __attribute__((unused)) *loop,
+static void logging_flight_recorder_dump_cb(struct ev_loop *loop,
     ev_signal __attribute__((__unused__)) *w,
     int __attribute__((__unused__)) revents) {
   // Signal handler: just trigger async watcher to defer to main loop
   // This ensures fprintf() is called outside of signal context
-  ev_async_send(logging_loop, &flight_recorder_async);
+  ev_async_send(loop, &flight_recorder_async);
 }
 
 void logging_events_init(struct ev_loop *loop) {
-  logging_loop = loop;
-
   /* don't start timer if we will never write messages that are not flushed */
   if (loglevel < LOG_FLUSH_LEVEL) {
     DLOG("starting periodic log flush timer");

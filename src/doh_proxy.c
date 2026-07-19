@@ -1,43 +1,42 @@
 #include <arpa/inet.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "dns_common.h"
+#include "dns_poller.h"
 #include "doh_proxy.h"
 #include "logging.h"
 
 struct doh_proxy {
   struct ev_loop *loop;
   https_client_t *client;
-  const char *resolver_url;
   stat_t *stat;
 
-  // CURLOPT_RESOLVE entries (one slist node, "host:443:ip1,ip2,..."). NULL
-  // until the first successful resolver update arrives.
+  // CURLOPT_RESOLVE entries (one slist node, "host:443:ip1,ip2,...").
+  // NULL until the first successful resolver update arrives.
   struct curl_slist *resolv;
+
+  const char *resolver_url;
+  uint16_t resolver_port;
 
   // True until the first successful resolver update completes. While set,
   // inbound DNS requests are dropped (we'd otherwise leak through libcurl's
   // fallback resolver and risk a recursion through our own listener).
   uint8_t awaiting_bootstrap;
-
-  doh_proxy_ready_fn on_ready;
-  void *on_ready_ctx;
-  uint8_t on_ready_fired;
-};
+  doh_proxy_bootstrap_done_cb bootstrap_done_cb;
+} __attribute__((aligned(64)));
 
 // Per-request transient state. Lives from doh_proxy_handle_request to
 // https_resp_cb, when the response (or failure) returns from libcurl.
-// NOLINTNEXTLINE(altera-struct-pack-align)
 typedef struct {
   doh_proxy_t *proxy;
   dns_listener_t *listener;
-  uint16_t tx_id;
   ev_tstamp start_tstamp;
   struct sockaddr_storage raddr;
   char *dns_req;
   size_t dns_req_len;
-} doh_request_t;
+} __attribute__((packed)) __attribute__((aligned(128))) doh_request_t;
 
 doh_proxy_t * doh_proxy_create(struct ev_loop *loop,
                                https_client_t *client,
@@ -50,25 +49,28 @@ doh_proxy_t * doh_proxy_create(struct ev_loop *loop,
   p->loop = loop;
   p->client = client;
   p->resolver_url = resolver_url;
+  p->resolver_port = 443;
   p->stat = stat;
   return p;
 }
 
-void doh_proxy_await_bootstrap(doh_proxy_t *p) {
-  p->awaiting_bootstrap = 1;
-}
-
-void doh_proxy_set_on_ready(doh_proxy_t *p, doh_proxy_ready_fn cb, void *cb_ctx) {
-  p->on_ready = cb;
-  p->on_ready_ctx = cb_ctx;
-}
-
-static void fire_on_ready(doh_proxy_t *p) {
-  if (p->on_ready_fired || !p->on_ready) {
-    return;
+void doh_proxy_await_bootstrap(doh_proxy_t *p, doh_proxy_bootstrap_done_cb cb) {
+  if (p != NULL) {
+    p->awaiting_bootstrap = 1;
+    p->bootstrap_done_cb = cb;
   }
-  p->on_ready_fired = 1;
-  p->on_ready(p->on_ready_ctx);
+}
+
+void doh_proxy_set_port(doh_proxy_t *p, uint16_t port) {
+  if (p != NULL) {
+    p->resolver_port = port;
+  }
+}
+
+void doh_proxy_set_resolv(doh_proxy_t *p, const char *buf) {
+  if (p != NULL) {
+    p->resolv = curl_slist_append(NULL, buf);
+  }
 }
 
 // Returns 1 if `addr_list` is a (possibly equal, possibly proper) subset of
@@ -111,19 +113,21 @@ void doh_proxy_handle_resolver_update(const char *hostname, void *ctx,
     return;
   }
 
-  char buf[255 + (sizeof(":443:") - 1) + POLLER_ADDR_LIST_SIZE];
+  char buf[HOSTNAME_BUFFER_SIZE + 1 + PORT_STR_LENGTH + 1 + POLLER_ADDR_LIST_SIZE];
   memset(buf, 0, sizeof(buf));
-  if (strlen(hostname) > 254) { FLOG("Hostname too long."); }
-  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:443:", hostname);
+  if (strlen(hostname) > 254) { FLOG("Hostname too long"); }
+  int ip_start = snprintf(buf, sizeof(buf) - 1, "%s:%u:", hostname, p->resolver_port);
   if (ip_start < 0) {
     abort();  // must be impossible
   }
   (void)snprintf(buf + ip_start, sizeof(buf) - 1 - (uint32_t)ip_start, "%s", addr_list);
 
   if (p->resolv && p->resolv->data) {
-    char *old_addr_list = strstr(p->resolv->data, ":443:");
+    char port_colon[10];
+    (void)snprintf(port_colon, sizeof(port_colon), ":%u:", p->resolver_port);
+    char * old_addr_list = strstr(p->resolv->data, port_colon);
     if (old_addr_list) {
-      old_addr_list += sizeof(":443:") - 1;
+      old_addr_list += strlen(port_colon);
       if (!addr_list_reduced(addr_list, old_addr_list)) {
         DLOG("DNS server IP address unchanged (%s).", buf + ip_start);
         free((void*)addr_list);
@@ -142,7 +146,7 @@ void doh_proxy_handle_resolver_update(const char *hostname, void *ctx,
 
   if (p->awaiting_bootstrap) {
     p->awaiting_bootstrap = 0;
-    fire_on_ready(p);
+    p->bootstrap_done_cb();
   }
 }
 
@@ -153,16 +157,17 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
     return;
   }
   doh_proxy_t *p = req->proxy;
-  DLOG("Received response for id: %hX, len: %zu", req->tx_id, buflen);
+  const uint16_t req_id = ntohs(*((uint16_t*)req->dns_req));
+  DLOG("Received response for id: %04hX, len: %zu", req_id, buflen);
 
   if (buf != NULL) {  // NULL on timeout / DNS failure / similar.
     if (buflen < DNS_HEADER_LENGTH) {
-      WLOG("%04hX: Malformed response received, too short: %u", req->tx_id, buflen);
+      WLOG("%04hX: Malformed response received, too short: %u", req_id, buflen);
     } else {
-      const uint16_t response_id = ntohs(*((uint16_t*)buf));
-      if (req->tx_id != response_id) {
-        WLOG("DNS request and response IDs are not matching: %hX != %hX",
-             req->tx_id, response_id);
+      const uint16_t resp_id = ntohs(*((uint16_t*)buf));
+      if (req_id != resp_id) {
+        WLOG("DNS request and response IDs are not matching: %04hX != %04hX",
+             req_id, resp_id);
       } else {
         req->listener->respond(req->listener, (struct sockaddr*)&req->raddr,
                                req->dns_req, req->dns_req_len, buf, buflen);
@@ -184,22 +189,21 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
                               char *dns_req, size_t dns_req_len) {
   doh_proxy_t *p = (doh_proxy_t *)ctx;
 
-  uint16_t tx_id = ntohs(*((uint16_t*)dns_req));
-  DLOG("Received request for id: %hX, len: %zu", tx_id, dns_req_len);
+  const uint16_t req_id = ntohs(*((uint16_t*)dns_req));
+  DLOG("Received request for id: %04hX, len: %zu", req_id, dns_req_len);
 
   if (p->awaiting_bootstrap) {
-    WLOG("%04hX: Query received before bootstrapping is completed, discarding.", tx_id);
+    WLOG("%04hX: Query received before bootstrapping is completed, discarding.", req_id);
     free(dns_req);
     return;
   }
 
   doh_request_t *req = (doh_request_t *)calloc(1, sizeof(doh_request_t));
   if (req == NULL) {
-    FLOG("%04hX: Out of mem", tx_id);
+    FLOG("%04hX: Out of mem", req_id);
   }
   req->proxy = p;
   req->listener = listener;
-  req->tx_id = tx_id;
   req->dns_req = dns_req;
   req->dns_req_len = dns_req_len;
   // raddr length depends on family; sockaddr_storage holds either. Copy what
@@ -216,7 +220,7 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
   }
 
   https_client_fetch(p->client, p->resolver_url, req->dns_req, dns_req_len,
-                     p->resolv, req->tx_id, doh_response_cb, req);
+                     p->resolv, req_id, doh_response_cb, req);
 }
 
 void doh_proxy_destroy(doh_proxy_t *p) {
