@@ -35,7 +35,10 @@ string(APPEND CMAKE_C_FLAGS " -fstack-protector-strong -D_FORTIFY_SOURCE=3 -fPIE
 set(CMAKE_C_FLAGS_DEBUG "-gdwarf-4 -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fPIE -Wl,-z,relro,-z,now")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fPIE")
+if (NOT APPLE)  # ld64 doesn't support -z; PIE binaries are the macOS default anyway
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,relro,-z,now")
+endif()
 
 if (CMAKE_C_COMPILER_ID MATCHES GNU)
 string(APPEND CMAKE_C_FLAGS " -Warray-bounds=2 -Wduplicated-cond -Wduplicated-branches -Wrestrict")
