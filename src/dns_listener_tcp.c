@@ -55,7 +55,7 @@ struct tcp_client_s {
   ev_timer timer_watcher;
 
   struct tcp_client_s * next;
-} __attribute__((packed)) __attribute__((aligned(128)));
+};
 
 struct dns_listener_tcp_s {
   dns_listener_t base;
@@ -73,7 +73,7 @@ struct dns_listener_tcp_s {
   uint16_t client_count;
   uint16_t client_limit;
   struct tcp_client_s * clients;
-} __attribute__((packed)) __attribute__((aligned(128)));
+};
 
 
 static void remove_client(struct tcp_client_s * client) {
@@ -332,7 +332,7 @@ static void tcp_respond(dns_listener_t *self, struct sockaddr *raddr,
   // Limit response size to prevent overflow when accounting for the 2-byte
   // length prefix. The total on-wire size would be resp_len + sizeof(uint16_t).
   if (resp_len < DNS_HEADER_LENGTH || resp_len > TCP_DNS_MAX_PAYLOAD) {
-    WLOG("Malformed response received, invalid length: %u", resp_len);
+    WLOG("Malformed response received, invalid length: %zu", resp_len);
     return;
   }
   const uint16_t response_id = ntohs(*((uint16_t*)resp));
@@ -355,7 +355,7 @@ static void tcp_respond(dns_listener_t *self, struct sockaddr *raddr,
   // below is a blocking syscall (not an event loop yield). If remove_client()
   // is called due to send errors, the function returns immediately.
 
-  DLOG_CLIENT("Sending %u bytes", resp_len);
+  DLOG_CLIENT("Sending %zu bytes", resp_len);
 
   // send length of response
   uint16_t resp_size = htons((uint16_t)resp_len);

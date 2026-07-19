@@ -75,9 +75,9 @@ static uint16_t get_edns_udp_size(const char *dns_req, const size_t dns_req_len)
  * 3. EDNS0/OPT Preservation (RFC 6891):
  * The OPT pseudo-RR (Type 41) is critical for extended error tracking, cookies, and DNSSEC signaling.
  * RFC 6891 mandates that OPT records should be preserved in truncated messages if they were present
- * in the request. This function scans the Additional section, locates the OPT record, and uses
- * memmove() to safely relocate it to sit directly flush against the end of the Question section,
- * preserving it in the truncated response stream.
+ * in the request. This function scans the Additional section and removes every record except the
+ * OPT one; re-serializing via c-ares then leaves the OPT record directly after the Question
+ * section, preserving it in the truncated response stream.
  *
  * 4. Trusted Data Assumption:
  * DoH resolver response is considered trusted input, so assuming that it complies with RFCs
@@ -142,7 +142,7 @@ static void truncate_to_size_limit(uint8_t *buf, size_t *buflen, size_t size_lim
     memcpy(buf, new_resp, new_resp_len);
     *buflen = new_resp_len;
     buf[2] |= 0x02;  // set truncation flag
-    ILOG("%04hX: DNS response size truncated from %u to %u to keep %u limit",
+    ILOG("%04hX: DNS response size truncated from %zu to %zu to keep %zu limit",
          resp_id, old_size, new_resp_len, size_limit);
   }
 

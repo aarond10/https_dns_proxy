@@ -66,7 +66,7 @@ struct Options {
 
   // Number of logs to be kept by flight recorder
   int flight_recorder_size;
-} __attribute__((aligned(128)));
+};
 typedef struct Options options_t;
 
 enum OptionsParseResult {
