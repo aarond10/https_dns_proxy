@@ -25,7 +25,7 @@ struct doh_proxy {
   // fallback resolver and risk a recursion through our own listener).
   uint8_t awaiting_bootstrap;
   doh_proxy_bootstrap_done_cb bootstrap_done_cb;
-} __attribute__((aligned(64)));
+};
 
 // Per-request transient state. Lives from doh_proxy_handle_request to
 // https_resp_cb, when the response (or failure) returns from libcurl.
@@ -36,7 +36,7 @@ typedef struct {
   struct sockaddr_storage raddr;
   char *dns_req;
   size_t dns_req_len;
-} __attribute__((packed)) __attribute__((aligned(128))) doh_request_t;
+} doh_request_t;
 
 doh_proxy_t * doh_proxy_create(struct ev_loop *loop,
                                https_client_t *client,
@@ -146,7 +146,9 @@ void doh_proxy_handle_resolver_update(const char *hostname, void *ctx,
 
   if (p->awaiting_bootstrap) {
     p->awaiting_bootstrap = 0;
-    p->bootstrap_done_cb();
+    if (p->bootstrap_done_cb != NULL) {
+      p->bootstrap_done_cb();
+    }
   }
 }
 
@@ -162,7 +164,7 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
 
   if (buf != NULL) {  // NULL on timeout / DNS failure / similar.
     if (buflen < DNS_HEADER_LENGTH) {
-      WLOG("%04hX: Malformed response received, too short: %u", req_id, buflen);
+      WLOG("%04hX: Malformed response received, too short: %zu", req_id, buflen);
     } else {
       const uint16_t resp_id = ntohs(*((uint16_t*)buf));
       if (req_id != resp_id) {

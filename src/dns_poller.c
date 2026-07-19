@@ -237,7 +237,10 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   }
 
   d->loop = loop;
-  d->hostname = hostname;
+  d->hostname = strdup(hostname);
+  if (d->hostname == NULL) {
+    FLOG("Out of mem");
+  }
   d->family = family;
   set_bootstrap_source_addr(d->ares, source_addr, family);
   d->cb = cb;
@@ -269,5 +272,6 @@ void dns_poller_cleanup(dns_poller_t *d) {
   ares_destroy(d->ares);
   ev_timer_stop(d->loop, &d->timer);
   ares_library_cleanup();
+  free(d->hostname);
   free(d->io_events);
 }

@@ -21,7 +21,7 @@ typedef struct dns_listener_udp_s {
 
   dns_request_fn cb;
   void *cb_data;
-} __attribute__((aligned(128))) dns_listener_udp_t;
+} dns_listener_udp_t;
 
 // Creates and binds a listening UDP socket for incoming requests.
 static int get_listen_sock(struct addrinfo *listen_addrinfo) {
@@ -91,7 +91,7 @@ static void udp_respond(dns_listener_t *self, struct sockaddr *raddr,
   dns_listener_udp_t *d = (dns_listener_udp_t *)self;
 
   if (dns_resp_len < DNS_HEADER_LENGTH) {
-    WLOG("Malformed response received, invalid length: %u", dns_resp_len);
+    WLOG("Malformed response received, invalid length: %zu", dns_resp_len);
     return;
   }
   dns_truncate_for_udp(dns_req, dns_req_len, dns_resp, &dns_resp_len);
