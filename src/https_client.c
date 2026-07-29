@@ -357,6 +357,12 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       WLOG_REQ("curl request failed with write error (probably response content was too large)");
       break;
     case CURLE_OPERATION_TIMEDOUT:
+    case CURLE_HTTP2:
+    case CURLE_HTTP2_STREAM:
+    case CURLE_GOT_NOTHING:
+    case CURLE_SEND_ERROR:
+      // These all indicate a stale/broken (often reused HTTP/2) connection,
+      // not a one-off content error - same recovery path as a timeout.
       if (!ev_is_active(&client->reset_timer)) {
         ILOG_REQ("Client reset timer started");
         ev_timer_start(client->loop, &client->reset_timer);
