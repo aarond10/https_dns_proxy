@@ -347,6 +347,11 @@ static int https_fetch_ctx_process_response(https_client_t *client,
   long long_resp = 0;
   char *str_resp = NULL;
   int faulty_response = 1;
+  // Set for connection-reuse hiccups that the reset-timer path already
+  // recovers from automatically - these are routine, not warning-worthy,
+  // and logging them at WARNING just spams flash-constrained routers with
+  // an expected condition. Genuinely unexpected failures still log at WARNING.
+  int recoverable = 0;
 
   switch (curl_result_code) {
     case CURLE_OK:
@@ -363,11 +368,17 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     case CURLE_SEND_ERROR:
       // These all indicate a stale/broken (often reused HTTP/2) connection,
       // not a one-off content error - same recovery path as a timeout.
+      recoverable = 1;
       if (!ev_is_active(&client->reset_timer)) {
         ILOG_REQ("Client reset timer started");
         ev_timer_start(client->loop, &client->reset_timer);
       }
-      __attribute__((fallthrough));
+      ILOG_REQ("curl request failed with %d: %s (recoverable, reset timer will recycle connection)",
+               curl_result_code, curl_easy_strerror(curl_result_code));
+      if (ctx->curl_errbuf[0] != 0) {
+        ILOG_REQ("curl error message: %s", ctx->curl_errbuf);
+      }
+      break;
     default:
       WLOG_REQ("curl request failed with %d: %s", curl_result_code, curl_easy_strerror(curl_result_code));
       if (ctx->curl_errbuf[0] != 0) {
@@ -385,8 +396,8 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       curl_off_t uploaded_bytes = 0;
       if (curl_easy_getinfo(ctx->curl, CURLINFO_SIZE_UPLOAD_T, &uploaded_bytes) == CURLE_OK &&
           uploaded_bytes > 0) {
-        WLOG_REQ("Connecting and sending request to resolver was successful, "
-                 "but no response was sent back");
+        LOG(recoverable ? LOG_INFO : LOG_WARNING, "%04hX: Connecting and sending request to resolver was successful, "
+                 "but no response was sent back", ctx->id);
         if (client->opt->use_http_version == 1) {
           // for example Unbound DoH servers does not support HTTP/1.x, only HTTP/2
           WLOG("Resolver may not support current HTTP/%s protocol version",
@@ -398,7 +409,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
         // that have been opened a long time ago (if CURLOPT_MAXAGE_CONN can not be increased
         // it is 118 seconds)
         // also: when no internet connection, this floods the log for every failed request
-        WLOG_REQ("No response (probably connection has been closed or timed out)");
+        LOG(recoverable ? LOG_INFO : LOG_WARNING, "%04hX: No response (probably connection has been closed or timed out)", ctx->id);
       }
     } else {
       WLOG_REQ("curl response code: %d, content length: %zu", long_resp, ctx->buflen);
