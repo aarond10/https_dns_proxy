@@ -331,7 +331,12 @@ static void https_fetch_ctx_init(https_client_t *client,
   if (multi_code != CURLM_OK) {
     ELOG_REQ("curl_multi_add_handle error %d: %s", multi_code, curl_multi_strerror(multi_code));
     if (multi_code == CURLM_ABORTED_BY_CALLBACK) {
-      WLOG_REQ("Resetting HTTPS client to recover from faulty state!");
+      WLOG_REQ("Resetting HTTPS client to 
+               
+               
+               
+               
+               from faulty state!");
       https_client_reset(client);
     } else {
       https_fetch_ctx_cleanup(client, NULL, client->fetches, -1);  // dropping current failed request
