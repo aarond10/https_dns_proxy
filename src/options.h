@@ -46,7 +46,7 @@ struct Options {
   // e.g. "socks5://127.0.0.1:1080"
   const char *curl_proxy;
 
-  // Source address for outbound HTTPS connections
+  // Source address or device for outbound HTTPS connections and ares
   const char *source_addr;
 
   // 1 = Use only HTTP/1.1 for limited OpenWRT libcurl (which is not built with HTTP/2 support)

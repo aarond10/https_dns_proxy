@@ -153,7 +153,8 @@ static void set_bootstrap_source_addr(ares_channel channel,
     }
     ares_set_local_ip6(channel, (const unsigned char *)&addr_v6);
   } else {
-    WLOG("Bootstrap source address '%s' is not a valid IP literal", source_addr);
+    // otherwise treat it as a device/interface name
+    ares_set_local_dev(channel, source_addr);
     return;
   }
 }

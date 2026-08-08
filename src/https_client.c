@@ -321,7 +321,7 @@ static void https_fetch_ctx_init(https_client_t *client,
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_PROXY, client->opt->curl_proxy);
   }
   if (client->opt->source_addr) {
-    DLOG_REQ("Using source address: %s", client->opt->source_addr);
+    DLOG_REQ("Using source address or device: %s", client->opt->source_addr);
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, client->opt->source_addr);
   }
   if (client->opt->ca_info) {
