@@ -18,6 +18,11 @@
 typedef void (*dns_poller_cb)(const char* hostname, void *data,
                               const char *addr_list);
 
+typedef struct dns_io_event {
+  ev_io watcher;
+  struct dns_io_event *next;
+} dns_io_event_t;
+
 typedef struct {
   ares_channel ares;
   struct ev_loop *loop;
@@ -29,8 +34,7 @@ typedef struct {
   void *cb_data;
 
   ev_timer timer;
-  ev_io *io_events;
-  unsigned io_events_count;
+  dns_io_event_t *io_events;
 } dns_poller_t;
 
 // Initializes c-ares and starts a timer for periodic DNS resolution on the

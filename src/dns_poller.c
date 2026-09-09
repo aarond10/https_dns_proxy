@@ -13,9 +13,9 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
 }
 
 static struct ev_io * get_io_event(dns_poller_t *d, int sock) {
-  for (unsigned i = 0; i < d->io_events_count; i++) {
-    if (d->io_events[i].fd == sock) {
-      return &d->io_events[i];
+  for (dns_io_event_t *event = d->io_events; event; event = event->next) {
+    if (event->watcher.fd == sock) {
+      return &event->watcher;
     }
   }
   return NULL;
@@ -27,16 +27,24 @@ static void sock_state_cb(void *data, int fd, int read, int write) {
   struct ev_io *io_event_ptr = get_io_event(d, fd);
   if (io_event_ptr) {
     ev_io_stop(d->loop, io_event_ptr);
-    io_event_ptr->fd = 0;
+    io_event_ptr->fd = ARES_SOCKET_BAD;
     DLOG("Released used io event: %p", io_event_ptr);
   }
   if (!read && !write) {
     return;
   }
   // reserve and start new event on unused slot
-  io_event_ptr = get_io_event(d, 0);
+  io_event_ptr = get_io_event(d, ARES_SOCKET_BAD);
   if (!io_event_ptr) {
-    FLOG("c-ares needed more IO event handler, than the number of provided nameservers: %u", d->io_events_count);
+    // libev retains watcher pointers: allocate stable nodes instead of reallocating.
+    dns_io_event_t *event = calloc(1, sizeof(*event));
+    if (!event) {
+      FLOG("Out of mem allocating DNS socket watcher");
+    }
+    event->next = d->io_events;
+    d->io_events = event;
+    io_event_ptr = &event->watcher;
+    io_event_ptr->data = d;
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   ev_io_init(io_event_ptr, sock_cb, fd,
@@ -213,6 +221,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *source_addr,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
+  d->io_events = NULL;
   int r = ares_library_init(ARES_LIB_INIT_ALL);
   if (r != ARES_SUCCESS) {
     FLOG("ares_library_init error: %s", ares_strerror(r));
@@ -247,27 +256,16 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   ev_timer_init(&d->timer, timer_cb, 0, 0);
   d->timer.data = d;
   ev_timer_start(d->loop, &d->timer);
-
-  unsigned nameservers = 1;
-  for (unsigned i = 0; bootstrap_dns[i]; i++) {
-    if (bootstrap_dns[i] == ',') {
-      nameservers++;
-    }
-  }
-  DLOG("Nameservers count: %d", nameservers);
-  d->io_events = (ev_io *)calloc(nameservers, sizeof(ev_io));  // zeroed!
-  if (!d->io_events) {
-    FLOG("Out of mem");
-  }
-  for (unsigned i = 0; i < nameservers; i++) {
-    d->io_events[i].data = d;
-  }
-  d->io_events_count = nameservers;
 }
 
 void dns_poller_cleanup(dns_poller_t *d) {
   ares_destroy(d->ares);
   ev_timer_stop(d->loop, &d->timer);
   ares_library_cleanup();
-  free(d->io_events);
+  while (d->io_events) {
+    dns_io_event_t *event = d->io_events;
+    d->io_events = event->next;
+    ev_io_stop(d->loop, &event->watcher);
+    free(event);
+  }
 }

@@ -192,6 +192,11 @@ install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}.service
 
 # TESTING
 
+enable_testing()
+add_test(NAME dns_poller_watchers
+  COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
+          sh ${CMAKE_SOURCE_DIR}/tests/unit/run_dns_poller_test.sh)
+
 find_program(
   PYTHON3_EXE
   NAMES "python3"
@@ -201,8 +206,6 @@ if(NOT PYTHON3_EXE)
   message(STATUS "python3 not found, robot testing not possible")
 else()
   message(STATUS "python3 found: ${PYTHON3_EXE}")
-
-  enable_testing()
 
   # Robot framework tests
   add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot
