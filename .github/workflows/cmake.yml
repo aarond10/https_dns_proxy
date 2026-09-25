@@ -33,7 +33,7 @@ jobs:
     - name: Configure CMake
       env:
         CC: ${{ matrix.compiler }}
-      run: cmake -D CMAKE_BUILD_TYPE=Debug -D PYTHON3_EXE=${{github.workspace}}/venv/bin/python3 -B ${{github.workspace}}/
+      run: cmake -D CMAKE_BUILD_TYPE=Debug -D BUILD_TESTING=ON -D PYTHON3_EXE=${{github.workspace}}/venv/bin/python3 -B ${{github.workspace}}/
 
     - name: Build
       env:

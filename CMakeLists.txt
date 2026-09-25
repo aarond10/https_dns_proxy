@@ -192,24 +192,34 @@ install(FILES ${CMAKE_BINARY_DIR}/${TARGET_NAME}.service
 
 # TESTING
 
-enable_testing()
-add_test(NAME dns_poller_watchers
-  COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
-          sh ${CMAKE_SOURCE_DIR}/tests/unit/run_dns_poller_test.sh)
+option(BUILD_TESTING "Build tests" OFF)
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(dns_poller_watchers_test
+    tests/unit/test_dns_poller.c
+    src/logging.c
+    src/ring_buffer.c)
+  set_property(SOURCE tests/unit/test_dns_poller.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="dns_poller_test")
+  target_link_libraries(dns_poller_watchers_test cares ev)
+  set_property(TARGET dns_poller_watchers_test PROPERTY C_STANDARD 11)
+  add_test(NAME dns_poller_watchers COMMAND dns_poller_watchers_test)
+  set_tests_properties(dns_poller_watchers PROPERTIES LABELS unit)
 
-find_program(
-  PYTHON3_EXE
-  NAMES "python3"
-  DOC "Path to python3 executable"
-  )
-if(NOT PYTHON3_EXE)
-  message(STATUS "python3 not found, robot testing not possible")
-else()
-  message(STATUS "python3 found: ${PYTHON3_EXE}")
+  find_program(
+    PYTHON3_EXE
+    NAMES "python3"
+    DOC "Path to python3 executable"
+    )
+  if(NOT PYTHON3_EXE)
+    message(STATUS "python3 not found, robot testing not possible")
+  else()
+    message(STATUS "python3 found: ${PYTHON3_EXE}")
 
-  # Robot framework tests
-  add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot
-           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests/robot)
+    # Robot framework tests
+    add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests/robot)
+  endif()
 endif()
 
 # Clean target (removes entire build directory)

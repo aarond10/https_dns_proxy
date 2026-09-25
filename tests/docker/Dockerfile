@@ -24,4 +24,4 @@ WORKDIR /src
 
 # Default command: build and run tests
 # Symlink needed because Robot test expects binary at project root
-CMD ["bash", "-c", "cmake -S . -B build && cmake --build build && ln -sf build/https_dns_proxy https_dns_proxy && ctest --test-dir build --output-on-failure"]
+CMD ["bash", "-c", "cmake -S . -B build -DBUILD_TESTING=ON && cmake --build build && ln -sf build/https_dns_proxy https_dns_proxy && ctest --test-dir build --output-on-failure"]
