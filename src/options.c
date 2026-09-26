@@ -154,6 +154,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       return OPR_OPTION_ERROR;
     }
     opt->uid = p->pw_uid;
+    if (!opt->group) {
+      opt->gid = p->pw_gid;
+    }
   }
   if (opt->group) {
     struct group *g = getgrnam(opt->group);
@@ -169,7 +172,8 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
   }
   opt->dscp <<= 2;
   // Get noisy about bad security practices.
-  if (getuid() == 0 && (!opt->user || !opt->group)) {
+  if (getuid() == 0 &&
+      (opt->uid == (uid_t)-1 || opt->gid == (gid_t)-1)) {
     printf("----------------------------\n"
            "WARNING: Running as root without dropping privileges "
            "is NOT recommended.\n"
@@ -278,6 +282,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("\n Process\n");
   printf("  -d                     Daemonize.\n");
   printf("  -u user                Optional user to drop to if launched as root.\n");
+  printf("                         Also uses the user's primary group unless -g is set.\n");
   printf("  -g group               Optional group to drop to if launched as root.\n");
   printf("\n Logging\n");
   printf("  -v                     Increase logging verbosity. (Default: error)\n");

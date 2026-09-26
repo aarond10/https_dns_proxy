@@ -204,6 +204,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_l
  Process
   -d                     Daemonize.
   -u user                Optional user to drop to if launched as root.
+                         Also uses the user's primary group unless -g is set.
   -g group               Optional group to drop to if launched as root.
 
  Logging
