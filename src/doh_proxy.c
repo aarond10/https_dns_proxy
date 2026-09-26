@@ -156,12 +156,18 @@ void doh_proxy_handle_resolver_update(const char *hostname, void *ctx,
   }
   free((void*)addr_list);
   DLOG("Received new DNS server IP '%s'", buf + ip_start);
-  curl_slist_free_all(p->resolv);
-  p->resolv = curl_slist_append(NULL, buf);
+  struct curl_slist *new_resolv = curl_slist_append(NULL, buf);
+  if (new_resolv == NULL) {
+    FLOG("Out of mem updating DNS server IP");
+  }
 
   // Reset libcurl: in-flight connections were aimed at the old IP, and curl
   // gets confused if we leave them around with a different CURLOPT_RESOLVE.
+  // The old list must remain alive until every easy handle referencing it has
+  // been removed and cleaned up by the reset.
   https_client_reset(p->client);
+  curl_slist_free_all(p->resolv);
+  p->resolv = new_resolv;
 
   if (p->awaiting_bootstrap) {
     p->awaiting_bootstrap = 0;

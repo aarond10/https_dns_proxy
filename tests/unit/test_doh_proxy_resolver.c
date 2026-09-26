@@ -13,10 +13,17 @@ static uint64_t response_connection_id;
 static uint64_t completion_connection_id;
 static unsigned response_calls;
 static unsigned completion_calls;
+static const char *expected_resolver_during_reset;
+static int reset_saw_expected_resolver;
 
 void https_client_reset(https_client_t *unused_client) {
   (void)unused_client;
   reset_calls++;
+  if (expected_resolver_during_reset != NULL &&
+      proxy != NULL && proxy->resolv != NULL &&
+      strcmp(proxy->resolv->data, expected_resolver_during_reset) == 0) {
+    reset_saw_expected_resolver = 1;
+  }
 }
 
 void https_client_fetch(https_client_t *unused_client, const char *url,
@@ -56,6 +63,8 @@ static void setUp(void) {
   completion_connection_id = 0;
   response_calls = 0;
   completion_calls = 0;
+  expected_resolver_during_reset = NULL;
+  reset_saw_expected_resolver = 0;
   proxy = doh_proxy_create(NULL, &client, "https://resolver.test/dns-query", NULL);
   doh_proxy_set_resolv(proxy, "resolver.test:443:192.0.2.1,192.0.2.2");
 }
@@ -75,9 +84,12 @@ static void update_resolver(const char *addresses) {
 }
 
 static void test_new_address_triggers_resolver_update(void) {
+  expected_resolver_during_reset =
+      "resolver.test:443:192.0.2.1,192.0.2.2";
   update_resolver("192.0.2.1,192.0.2.2,192.0.2.3");
 
   TEST_ASSERT(reset_calls == 1);
+  TEST_ASSERT(reset_saw_expected_resolver);
   TEST_ASSERT(strcmp(proxy->resolv->data,
                      "resolver.test:443:192.0.2.1,192.0.2.2,192.0.2.3") == 0);
 }
