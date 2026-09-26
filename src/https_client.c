@@ -366,6 +366,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
     case CURLE_HTTP2_STREAM:
     case CURLE_GOT_NOTHING:
     case CURLE_SEND_ERROR:
+    case CURLE_RECV_ERROR:
       // These all indicate a stale/broken (often reused HTTP/2) connection,
       // not a one-off content error - same recovery path as a timeout.
       recoverable = 1;

@@ -268,7 +268,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("  -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.\n"\
          "                         (Default: %d, Min: 0, Max: 3600)\n",
          defaults.max_idle_time);
-  printf("  -L conn_loss_time      Time in seconds to tolerate connection timeouts of reused connections.\n"\
+  printf("  -L conn_loss_time      Seconds before resetting after a recoverable connection failure.\n"\
          "                         This option mitigates half-open TCP connection issue (e.g. WAN IP change).\n"\
          "                         (Default: %d, Min: 5, Max: 60)\n",
          defaults.conn_loss_time);

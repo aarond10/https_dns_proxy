@@ -194,7 +194,7 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_l
   -q                     Use HTTP/3 (QUIC) only.
   -m max_idle_time       Maximum idle time in seconds allowed for reusing a HTTPS connection.
                          (Default: 118, Min: 0, Max: 3600)
-  -L conn_loss_time      Time in seconds to tolerate connection timeouts of reused connections.
+  -L conn_loss_time      Seconds before resetting after a recoverable connection failure.
                          This option mitigates half-open TCP connection issue (e.g. WAN IP change).
                          (Default: 15, Min: 5, Max: 60)
   -C ca_path             Optional file containing CA certificates.
