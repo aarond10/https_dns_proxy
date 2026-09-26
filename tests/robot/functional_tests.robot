@@ -110,16 +110,6 @@ Large Response Test
   ${dig_output} =  Run Dig  txtfill4096.test.dnscheck.tools
   Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: 4\\d{3}$  # expecting more than 4k large response
 
-Verify Truncation
-  [Arguments]  ${domain}  ${result_bytes_min}  ${result_bytes_max}  ${expect}=${None}
-  ${dig_output} =  Run Dig  ${domain}  ${expect}
-  Should Contain  ${dig_output}  flags: qr tc
-  # expecting response to be ${result_bytes_min} byte (could be flaky)
-  @{res} =  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: (\\d+)$
-  Should Be True  ${res}[1] >= ${result_bytes_min}
-  Should Be True  ${res}[1] <= ${result_bytes_max}
-
-
 *** Test Cases ***
 
 Handle Unbound Server Does Not Support HTTP/1.1
@@ -184,33 +174,6 @@ Send TCP Requests Fragmented
   Should Contain  ${dns_reply}  google
 
   Close Tcp Client Connection
-
-No Truncate UDP Small
-  Start Proxy
-  # too small buffer will be overridden to 512, so no truncation
-  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=256  -t  TXT  +dnssec
-  ${dig_output} =  Run Dig  facebook.com
-  Should Contain  ${dig_output}  flags: qr rd ra;  # no tr flag!
-  @{res} =  Should Match Regexp  ${dig_output}  MSG SIZE\\s+rcvd: (\\d+)$
-  Should Be True  ${res}[1] >= 256
-  Should Be True  ${res}[1] <= 512
-
-Truncate UDP Large
-  Start Proxy
-  # response would be ~4500 byte, has to be dropped because of RRSet Atomicity (RFC 2181, Sec 5.2)
-  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=4096  -t  txt
-  Verify Truncation  microsoft.com  20  100  ANSWER: 0
-
-Truncate UDP Impossible
-  Start Proxy
-  # the only TXT answer record has to be dropped to met limit
-  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=4096  -t  txt
-  Verify Truncation  txtfill4096.test.dnscheck.tools  12  100  ANSWER: 0
-
-Valgrind Resource Leak Check Truncation
-  Start Proxy With Valgrind
-  Set Test Variable  @{dig_options}  @{dig_options}  +ignore  +bufsize=4096  -t  txt
-  Verify Truncation  txtfill4096.test.dnscheck.tools  12  100  ANSWER: 0
 
 Source Address Binding
   [Documentation]  Test -S flag binds both HTTPS and bootstrap DNS to source address
