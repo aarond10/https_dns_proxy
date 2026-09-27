@@ -260,6 +260,17 @@ if(BUILD_TESTING)
   add_test(NAME https_client_limits COMMAND https_client_limits_test)
   set_tests_properties(https_client_limits PROPERTIES LABELS unit)
 
+  add_executable(doh_proxy_resolver_test
+    tests/unit/test_doh_proxy_resolver.c
+    src/logging.c
+    src/ring_buffer.c)
+  set_property(SOURCE tests/unit/test_doh_proxy_resolver.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="doh_proxy_resolver_test")
+  target_link_libraries(doh_proxy_resolver_test curl ev)
+  set_property(TARGET doh_proxy_resolver_test PROPERTY C_STANDARD 11)
+  add_test(NAME doh_proxy_resolver COMMAND doh_proxy_resolver_test)
+  set_tests_properties(doh_proxy_resolver PROPERTIES LABELS unit)
+
   find_program(VALGRIND_EXE NAMES valgrind)
   if(VALGRIND_EXE)
     add_test(NAME dns_truncate_valgrind
