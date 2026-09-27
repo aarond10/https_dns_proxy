@@ -249,7 +249,6 @@ if(BUILD_TESTING)
 
   add_executable(https_client_limits_test
     tests/unit/test_https_client_limits.c
-    src/https_client.c
     src/logging.c
     src/ring_buffer.c
     src/stat.c)

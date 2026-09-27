@@ -6,6 +6,7 @@
 #include "dns_common.h"
 #include "https_client.h"
 #include "test_harness.h"
+#include "../../src/https_client.c"
 
 typedef struct {
   size_t calls;
@@ -76,7 +77,43 @@ static void test_rejects_requests_above_fetch_limit(void) {
   TEST_ASSERT(callback_state.failures == 1);
 }
 
+static void test_socket_watchers_grow_and_support_fd_zero(void) {
+  CURL *fake_easy_handle = (CURL *)(uintptr_t)1;
+  enum { WATCHER_COUNT = 16 };
+
+  for (curl_socket_t fd = 0; fd < WATCHER_COUNT; fd++) {
+    TEST_ASSERT(multi_sock_cb(fake_easy_handle, fd, CURL_POLL_IN,
+                              &client, NULL) == 0);
+    struct ev_io *watcher = get_io_event(client.io_events, fd);
+    TEST_ASSERT(watcher != NULL);
+    TEST_ASSERT(watcher->fd == fd);
+    TEST_ASSERT(ev_is_active(watcher));
+  }
+
+  struct ev_io *fd_zero_watcher = get_io_event(client.io_events, 0);
+  TEST_ASSERT(fd_zero_watcher != NULL);
+  TEST_ASSERT(multi_sock_cb(fake_easy_handle, 0, CURL_POLL_REMOVE,
+                            &client, NULL) == 0);
+  TEST_ASSERT(get_io_event(client.io_events, 0) == NULL);
+  TEST_ASSERT(!ev_is_active(fd_zero_watcher));
+
+  TEST_ASSERT(multi_sock_cb(fake_easy_handle, WATCHER_COUNT,
+                            CURL_POLL_OUT, &client, NULL) == 0);
+  TEST_ASSERT(get_io_event(client.io_events, WATCHER_COUNT) == fd_zero_watcher);
+}
+
+static void test_aborted_multi_action_schedules_client_reset(void) {
+  TEST_ASSERT(!ev_is_active(&client.reset_timer));
+
+  TEST_ASSERT(handle_multi_action_result(
+                  &client, CURLM_ABORTED_BY_CALLBACK) == -1);
+
+  TEST_ASSERT(ev_is_active(&client.reset_timer));
+}
+
 int main(void) {
   TEST_RUN(test_rejects_requests_above_fetch_limit);
+  TEST_RUN(test_socket_watchers_grow_and_support_fd_zero);
+  TEST_RUN(test_aborted_multi_action_schedules_client_reset);
   return test_summary();
 }

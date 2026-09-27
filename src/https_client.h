@@ -31,6 +31,11 @@ struct https_fetch_ctx {
   struct https_fetch_ctx *next;
 };
 
+struct https_io_event {
+  ev_io watcher;
+  struct https_io_event *next;
+};
+
 // Holds state on the whole multiplexed CURL machine.
 typedef struct {
   struct ev_loop *loop;
@@ -40,7 +45,7 @@ typedef struct {
   size_t fetch_count;
 
   ev_timer timer;
-  ev_io io_events[HTTPS_SOCKET_LIMIT];
+  struct https_io_event *io_events;
   int connections;
 
   options_t *opt;
