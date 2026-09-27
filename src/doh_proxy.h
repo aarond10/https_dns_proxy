@@ -42,7 +42,7 @@ void doh_proxy_set_resolv(doh_proxy_t *p, const char *buf);
 // dns_request_fn — pass to dns_*_listener_create as the request callback.
 // `ctx` must be a doh_proxy_t *.
 void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
-                              struct sockaddr *raddr,
+                              struct sockaddr *raddr, uint64_t connection_id,
                               char *dns_req, size_t dns_req_len);
 
 // dns_poller_cb — pass to dns_poller_init as the resolver-update callback.

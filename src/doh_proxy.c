@@ -34,6 +34,7 @@ typedef struct {
   dns_listener_t *listener;
   ev_tstamp start_tstamp;
   struct sockaddr_storage raddr;
+  uint64_t connection_id;
   char *dns_req;
   size_t dns_req_len;
 } doh_request_t;
@@ -190,6 +191,7 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
              req_id, resp_id);
       } else {
         req->listener->respond(req->listener, (struct sockaddr*)&req->raddr,
+                               req->connection_id,
                                req->dns_req, req->dns_req_len, buf, buflen);
         if (p->stat) {
           stat_request_end(p->stat, buflen,
@@ -200,13 +202,14 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
     }
   }
 
-  req->listener->request_complete(req->listener, (struct sockaddr*)&req->raddr);
+  req->listener->request_complete(req->listener, (struct sockaddr*)&req->raddr,
+                                  req->connection_id);
   free((void*)req->dns_req);
   free(req);
 }
 
 void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
-                              struct sockaddr *raddr,
+                              struct sockaddr *raddr, uint64_t connection_id,
                               char *dns_req, size_t dns_req_len) {
   doh_proxy_t *p = (doh_proxy_t *)ctx;
 
@@ -215,7 +218,7 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
 
   if (p->awaiting_bootstrap) {
     WLOG("%04hX: Query received before bootstrapping is completed, discarding.", req_id);
-    listener->request_complete(listener, raddr);
+    listener->request_complete(listener, raddr, connection_id);
     free(dns_req);
     return;
   }
@@ -226,6 +229,7 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
   }
   req->proxy = p;
   req->listener = listener;
+  req->connection_id = connection_id;
   req->dns_req = dns_req;
   req->dns_req_len = dns_req_len;
   // raddr length depends on family; sockaddr_storage holds either. Copy what

@@ -245,7 +245,7 @@ if(BUILD_TESTING)
   target_link_libraries(dns_listener_tcp_test ev)
   set_property(TARGET dns_listener_tcp_test PROPERTY C_STANDARD 11)
   add_test(NAME dns_listener_tcp COMMAND dns_listener_tcp_test)
-  set_tests_properties(dns_listener_tcp PROPERTIES LABELS unit)
+  set_tests_properties(dns_listener_tcp PROPERTIES LABELS unit TIMEOUT 20)
 
   add_executable(https_client_limits_test
     tests/unit/test_https_client_limits.c
