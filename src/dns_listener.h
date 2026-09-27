@@ -33,6 +33,9 @@ struct dns_listener {
   void (*respond)(dns_listener_t *self, struct sockaddr *raddr,
                   const char *dns_req, size_t dns_req_len,
                   char *dns_resp, size_t dns_resp_len);
+  // Release any transport-level capacity reserved for this request. The
+  // proxy core calls this exactly once whether the request succeeds or fails.
+  void (*request_complete)(dns_listener_t *self, struct sockaddr *raddr);
   // Stop accepting new requests. Existing per-client state (TCP) is retained
   // so any in-flight DoH responses can still be delivered during graceful
   // drain.

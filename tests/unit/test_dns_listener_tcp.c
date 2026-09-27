@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "test_harness.h"
 #include "../../src/dns_listener_tcp.c"
@@ -80,10 +82,38 @@ static void test_extracts_complete_request(void) {
   }
 }
 
+static void test_request_completion_resumes_client_reads(void) {
+  int sockets[2];
+  TEST_ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
+  struct ev_loop *loop = ev_loop_new(0);
+  TEST_ASSERT(loop != NULL);
+
+  dns_listener_tcp_t listener;
+  memset(&listener, 0, sizeof(listener));
+  listener.loop = loop;
+  listener.clients = &client;
+  client.d = &listener;
+  client.sock = sockets[0];
+  client.pending_requests = TCP_CLIENT_REQUEST_LIMIT;
+  ev_io_init(&client.read_watcher, read_cb, client.sock, EV_READ);
+  client.read_watcher.data = &client;
+
+  tcp_request_complete(&listener.base, (struct sockaddr*)&client.raddr);
+
+  TEST_ASSERT(client.pending_requests == TCP_CLIENT_REQUEST_LIMIT - 1);
+  TEST_ASSERT(ev_is_active(&client.read_watcher));
+
+  ev_io_stop(loop, &client.read_watcher);
+  ev_loop_destroy(loop);
+  close(sockets[0]);
+  close(sockets[1]);
+}
+
 int main(void) {
   TEST_RUN(test_waits_for_complete_length_prefix);
   TEST_RUN(test_large_length_does_not_wrap_frame_size);
   TEST_RUN(test_rejects_zero_length_request_without_allocating);
   TEST_RUN(test_extracts_complete_request);
+  TEST_RUN(test_request_completion_resumes_client_reads);
   return test_summary();
 }

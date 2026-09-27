@@ -287,6 +287,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ctx->buflen = 0;
   ctx->next = client->fetches;
   client->fetches = ctx;
+  client->fetch_count++;
 
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_RESOLVE, resolv);
 
@@ -555,6 +556,10 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   } else {
     client->fetches = ctx->next;
   }
+  if (client->fetch_count == 0) {
+    FLOG_REQ("HTTPS fetch count underflow");
+  }
+  client->fetch_count--;
   free(ctx);
 }
 
@@ -718,6 +723,11 @@ void https_client_fetch(https_client_t *c, const char *url,
                         const char* postdata, size_t postdata_len,
                         struct curl_slist *resolv, uint16_t id,
                         https_response_cb cb, void *data) {
+  if (c->fetch_count >= HTTPS_FETCH_LIMIT) {
+    WLOG("%04hX: Too many HTTPS requests in flight, dropping request", id);
+    cb(data, NULL, 0);
+    return;
+  }
   struct https_fetch_ctx *ctx =
       (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
   if (!ctx) {

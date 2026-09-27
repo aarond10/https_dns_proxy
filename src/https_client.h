@@ -9,6 +9,7 @@
 enum {
   HTTPS_SOCKET_LIMIT = 12,
   HTTPS_CONNECTION_LIMIT = 8,
+  HTTPS_FETCH_LIMIT = 64,
 };
 
 // Callback type for receiving data when a transfer finishes.
@@ -36,6 +37,7 @@ typedef struct {
   CURLM *curlm;
   struct curl_slist *header_list;
   struct https_fetch_ctx *fetches;
+  size_t fetch_count;
 
   ev_timer timer;
   ev_io io_events[HTTPS_SOCKET_LIMIT];

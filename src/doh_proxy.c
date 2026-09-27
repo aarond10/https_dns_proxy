@@ -200,6 +200,7 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
     }
   }
 
+  req->listener->request_complete(req->listener, (struct sockaddr*)&req->raddr);
   free((void*)req->dns_req);
   free(req);
 }
@@ -214,6 +215,7 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
 
   if (p->awaiting_bootstrap) {
     WLOG("%04hX: Query received before bootstrapping is completed, discarding.", req_id);
+    listener->request_complete(listener, raddr);
     free(dns_req);
     return;
   }

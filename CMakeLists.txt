@@ -247,6 +247,19 @@ if(BUILD_TESTING)
   add_test(NAME dns_listener_tcp COMMAND dns_listener_tcp_test)
   set_tests_properties(dns_listener_tcp PROPERTIES LABELS unit)
 
+  add_executable(https_client_limits_test
+    tests/unit/test_https_client_limits.c
+    src/https_client.c
+    src/logging.c
+    src/ring_buffer.c
+    src/stat.c)
+  set_property(SOURCE tests/unit/test_https_client_limits.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="https_client_limits_test")
+  target_link_libraries(https_client_limits_test curl ev m)
+  set_property(TARGET https_client_limits_test PROPERTY C_STANDARD 11)
+  add_test(NAME https_client_limits COMMAND https_client_limits_test)
+  set_tests_properties(https_client_limits PROPERTIES LABELS unit)
+
   find_program(VALGRIND_EXE NAMES valgrind)
   if(VALGRIND_EXE)
     add_test(NAME dns_truncate_valgrind
