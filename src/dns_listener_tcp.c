@@ -110,11 +110,23 @@ static void remove_client(struct tcp_client_s * client) {
 
 static int get_dns_request(struct tcp_client_s *client,
     char ** dns_req, uint16_t * req_size) {
+  if (client->input_buffer_used < sizeof(uint16_t)) {
+    return 0;  // Partial length prefix
+  }
+
   // check if whole request is available
-  *req_size = ntohs(*((uint16_t*)client->input_buffer));
-  uint16_t data_size = sizeof(uint16_t) + *req_size;
+  uint16_t network_req_size = 0;
+  memcpy(&network_req_size, client->input_buffer, sizeof(network_req_size));
+  *req_size = ntohs(network_req_size);
+  const size_t data_size = sizeof(uint16_t) + (size_t)*req_size;
   if (data_size > client->input_buffer_used) {
     return 0;  // Partial request
+  }
+  if (*req_size < DNS_HEADER_LENGTH) {
+    client->input_buffer_used -= (uint32_t)data_size;
+    memmove(client->input_buffer, client->input_buffer + data_size, client->input_buffer_used);
+    *dns_req = NULL;
+    return 1;
   }
   // copy whole request
   *dns_req = (char *)malloc(*req_size);  // freed when DoH request completes
@@ -123,7 +135,7 @@ static int get_dns_request(struct tcp_client_s *client,
   }
   memcpy(*dns_req, client->input_buffer + sizeof(uint16_t), *req_size);
   // move down data of next request(s) if any
-  client->input_buffer_used -= data_size;
+  client->input_buffer_used -= (uint32_t)data_size;
   memmove(client->input_buffer, client->input_buffer + data_size, client->input_buffer_used);
   return 1;
 }

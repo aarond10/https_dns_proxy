@@ -236,6 +236,17 @@ if(BUILD_TESTING)
   add_test(NAME resolver_update COMMAND resolver_update_test)
   set_tests_properties(resolver_update PROPERTIES LABELS unit)
 
+  add_executable(dns_listener_tcp_test
+    tests/unit/test_dns_listener_tcp.c
+    src/logging.c
+    src/ring_buffer.c)
+  set_property(SOURCE tests/unit/test_dns_listener_tcp.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="dns_listener_tcp_test")
+  target_link_libraries(dns_listener_tcp_test ev)
+  set_property(TARGET dns_listener_tcp_test PROPERTY C_STANDARD 11)
+  add_test(NAME dns_listener_tcp COMMAND dns_listener_tcp_test)
+  set_tests_properties(dns_listener_tcp PROPERTIES LABELS unit)
+
   find_program(VALGRIND_EXE NAMES valgrind)
   if(VALGRIND_EXE)
     add_test(NAME dns_truncate_valgrind
