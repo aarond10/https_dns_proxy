@@ -167,7 +167,7 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       return OPR_OPTION_ERROR;
     }
     opt->uid = p->pw_uid;
-    if (!opt->group) {
+    if (!opt->group && geteuid() == 0) {
       opt->gid = p->pw_gid;
     }
   }
