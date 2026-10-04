@@ -12,6 +12,7 @@
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
+#include "outbound_interface.h"
 #include "stat.h"
 
 #define DOH_CONTENT_TYPE "application/dns-message"
@@ -94,6 +95,15 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
   if (sock == -1) {
     ELOG("Could not open curl socket %d:%s", errno, strerror(errno));
+    return CURL_SOCKET_BAD;
+  }
+  if (client->opt->outbound_interface != NULL &&
+      outbound_interface_bind_socket(sock,
+                                     client->opt->outbound_interface) != 0) {
+    const int bind_errno = errno;
+    ELOG("Failed to bind HTTPS socket to interface '%s': %s (%d)",
+         client->opt->outbound_interface, strerror(bind_errno), bind_errno);
+    (void)close(sock);
     return CURL_SOCKET_BAD;
   }
 
@@ -329,7 +339,14 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
   if (client->opt->source_addr) {
     DLOG_REQ("Using source address: %s", client->opt->source_addr);
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, client->opt->source_addr);
+    if (client->opt->outbound_interface != NULL) {
+      char source_address[sizeof("host!") + INET6_ADDRSTRLEN];
+      (void)snprintf(source_address, sizeof(source_address), "host!%s",
+                     client->opt->source_addr);
+      ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, source_address);
+    } else {
+      ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, client->opt->source_addr);
+    }
   }
   if (client->opt->ca_info) {
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CAINFO, client->opt->ca_info);

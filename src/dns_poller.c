@@ -1,9 +1,11 @@
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netdb.h>
 #include <string.h>
 
 #include "dns_poller.h"
 #include "logging.h"
+#include "outbound_interface.h"
 
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     ev_io *w, int revents) {
@@ -166,6 +168,19 @@ static void set_bootstrap_source_addr(ares_channel channel,
   }
 }
 
+static int configure_bootstrap_socket(ares_socket_t socket_fd,
+                                      int __attribute__((unused)) type,
+                                      void *userdata) {
+  dns_poller_t *d = (dns_poller_t *)userdata;
+  if (outbound_interface_bind_socket(socket_fd, d->outbound_interface) != 0) {
+    const int bind_errno = errno;
+    ELOG("Failed to bind bootstrap DNS socket to interface '%s': %s (%d)",
+         d->outbound_interface, strerror(bind_errno), bind_errno);
+    return -1;
+  }
+  return ARES_SUCCESS;
+}
+
 static ev_tstamp get_timeout(dns_poller_t *d)
 {
     static struct timeval max_tv = {.tv_sec = 5, .tv_usec = 0};
@@ -219,6 +234,7 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns,
                      int bootstrap_dns_polling_interval,
                      const char *source_addr,
+                     const char *outbound_interface,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data) {
   d->io_events = NULL;
@@ -258,8 +274,19 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
   if (d->hostname == NULL) {
     FLOG("Out of mem");
   }
+  d->outbound_interface = NULL;
+  if (outbound_interface != NULL) {
+    d->outbound_interface = strdup(outbound_interface);
+    if (d->outbound_interface == NULL) {
+      FLOG("Out of mem");
+    }
+  }
   d->family = family;
   set_bootstrap_source_addr(d->ares, source_addr, family);
+  if (d->outbound_interface != NULL) {
+    ares_set_socket_configure_callback(d->ares, configure_bootstrap_socket,
+                                       d);
+  }
   d->cb = cb;
   d->polling_interval = bootstrap_dns_polling_interval;
   d->request_ongoing = 0;
@@ -280,4 +307,5 @@ void dns_poller_cleanup(dns_poller_t *d) {
     free(event);
   }
   free(d->hostname);
+  free(d->outbound_interface);
 }

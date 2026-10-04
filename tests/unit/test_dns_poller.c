@@ -25,7 +25,7 @@ static void setUp(void) {
     test_fail(__FILE__, __LINE__, "ev_loop_new(0)");
     return;
   }
-  dns_poller_init(&poller, loop, "127.0.0.1,127.0.0.2", 60, NULL,
+  dns_poller_init(&poller, loop, "127.0.0.1,127.0.0.2", 60, NULL, NULL,
                   "example.com", AF_INET, NULL, NULL);
   poller_initialized = 1;
   ev_timer_stop(loop, &poller.timer);
@@ -140,11 +140,18 @@ static void test_query_cache_disabled(void) {
 #endif
 }
 
+static void test_rejects_socket_when_interface_binding_fails(void) {
+  poller.outbound_interface = strdup("");
+  TEST_ASSERT(poller.outbound_interface != NULL);
+  TEST_ASSERT(configure_bootstrap_socket(ARES_SOCKET_BAD, 0, &poller) == -1);
+}
+
 int main(void) {
   TEST_RUN(test_allocates_watchers_beyond_nameserver_count);
   TEST_RUN(test_reuses_released_watcher);
   TEST_RUN(test_fd_zero_does_not_alias_free_watcher);
   TEST_RUN(test_cleanup_stops_active_watchers);
   TEST_RUN(test_query_cache_disabled);
+  TEST_RUN(test_rejects_socket_when_interface_binding_fails);
   return test_summary();
 }

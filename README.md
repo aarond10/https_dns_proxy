@@ -162,6 +162,7 @@ Just run it as a daemon and point traffic at it. Commandline flags are:
 Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]
         [-b <dns_servers>] [-i <polling_interval>] [-4]
         [-r <resolver_url>] [-t <proxy_server>] [-S <source_addr>] [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]
+        [--outbound-interface <interface>]
         [-d] [-u <user>] [-g <group>]
         [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]
 
@@ -189,6 +190,9 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_l
                          bootstrap DNS servers.
   -S source_addr         Source IPv4/v6 address for outbound HTTPS and bootstrap DNS.
                          (Default: system default)
+  -I, --outbound-interface interface
+                         Linux network interface for outbound HTTPS and bootstrap DNS.
+                         Incompatible with -u; requires CAP_NET_RAW.
   -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken
                          or limited builds of libcurl.
   -q                     Use HTTP/3 (QUIC) only.
@@ -219,6 +223,27 @@ Usage: ./https_dns_proxy [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_l
                          (Default: 0, Disabled: 0, Min: 100, Max: 100000)
   -V                     Print versions and exit.
   -h                     Print help and exit.
+```
+
+`--outbound-interface` may be combined with `-S`, `-d`, and the HTTP version
+options. When combined with `-I`, `-S` must be an IP literal.
+It cannot be combined with the in-process `-u` privilege drop, which
+clears Linux capabilities. When using `-t`, the proxy connection is bound to the
+interface, but local resolution of a proxy hostname is not.
+
+Interface binding is checked before daemonization and on every subsequently
+created HTTPS and bootstrap DNS socket. Missing permissions, an absent
+interface, or loss of the interface therefore fails closed.
+
+### Interface-binding privileges
+
+Linux requires `CAP_NET_RAW`. Grant it to the final service user through the
+service manager rather than using `-u`. For example, a systemd override can use:
+
+```ini
+[Service]
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
 ```
 
 ## Testing

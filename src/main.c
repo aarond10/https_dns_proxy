@@ -22,6 +22,7 @@
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
+#include "outbound_interface.h"
 #include "stat.h"
 
 static int is_ipv4_address(const char *str) {
@@ -161,6 +162,30 @@ static const char * sw_version(void) {
 #endif
 }
 
+static void validate_outbound_settings(const options_t *opt) {
+  if (opt->outbound_interface == NULL) {
+    return;
+  }
+  if (outbound_interface_validate(opt->outbound_interface) != 0) {
+    const int bind_errno = errno;
+    switch (bind_errno) {
+      case ENODEV:
+        FLOG("Outbound interface '%s' does not exist", opt->outbound_interface);
+        break;
+      case EPERM:
+      case EACCES:
+        FLOG("Permission denied binding to outbound interface '%s'; "
+             "start as the final service user with CAP_NET_RAW",
+             opt->outbound_interface);
+        break;
+      default:
+        FLOG("Cannot bind outbound sockets to interface '%s': %s (%d)",
+             opt->outbound_interface, strerror(bind_errno), bind_errno);
+        break;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   struct Options opt;
   options_init(&opt);
@@ -278,6 +303,8 @@ int main(int argc, char *argv[]) {
     FLOG("Failed to set uid");
   }
 
+  validate_outbound_settings(&opt);
+
   if (opt.daemonize) {
     // daemon() is non-standard. If needed, see OpenSSH openbsd-compat/daemon.c
     if (daemon(0, 0) == -1) {
@@ -316,6 +343,7 @@ int main(int argc, char *argv[]) {
           doh_proxy_await_bootstrap(proxy, systemd_notify_ready);
           dns_poller_init(dns_poller, loop, opt.bootstrap_dns,
                           opt.bootstrap_dns_polling_interval, opt.source_addr,
+                          opt.outbound_interface,
                           hostname, opt.ipv4 ? AF_INET : AF_UNSPEC,
                           doh_proxy_handle_resolver_update, proxy);
           ILOG("DNS polling initialized for '%s'", hostname);

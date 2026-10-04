@@ -205,6 +205,7 @@ if(BUILD_TESTING)
   add_executable(dns_poller_watchers_test
     tests/unit/test_dns_poller.c
     src/logging.c
+    src/outbound_interface.c
     src/ring_buffer.c)
   set_property(SOURCE tests/unit/test_dns_poller.c APPEND
     PROPERTY COMPILE_DEFINITIONS __FILENAME__="dns_poller_test")
@@ -250,6 +251,7 @@ if(BUILD_TESTING)
   add_executable(https_client_limits_test
     tests/unit/test_https_client_limits.c
     src/logging.c
+    src/outbound_interface.c
     src/ring_buffer.c
     src/stat.c)
   set_property(SOURCE tests/unit/test_https_client_limits.c APPEND
@@ -269,6 +271,36 @@ if(BUILD_TESTING)
   set_property(TARGET doh_proxy_resolver_test PROPERTY C_STANDARD 11)
   add_test(NAME doh_proxy_resolver COMMAND doh_proxy_resolver_test)
   set_tests_properties(doh_proxy_resolver PROPERTIES LABELS unit)
+
+  add_executable(outbound_interface_test
+    tests/unit/test_outbound_interface.c)
+  set_property(SOURCE tests/unit/test_outbound_interface.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="outbound_interface_test")
+  set_property(TARGET outbound_interface_test PROPERTY C_STANDARD 11)
+  add_test(NAME outbound_interface COMMAND outbound_interface_test)
+  set_tests_properties(outbound_interface PROPERTIES LABELS unit)
+
+  add_executable(options_test
+    tests/unit/test_options.c)
+  set_property(SOURCE tests/unit/test_options.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="options_test")
+  set_property(TARGET options_test PROPERTY C_STANDARD 11)
+  add_test(NAME options COMMAND options_test)
+  set_tests_properties(options PROPERTIES LABELS unit)
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(outbound_interface_linux_test
+      tests/linux/test_outbound_interface_linux.c
+      src/outbound_interface.c)
+    target_include_directories(outbound_interface_linux_test PRIVATE tests/unit)
+    set_property(SOURCE tests/linux/test_outbound_interface_linux.c APPEND
+      PROPERTY COMPILE_DEFINITIONS __FILENAME__="outbound_interface_linux_test")
+    set_property(TARGET outbound_interface_linux_test PROPERTY C_STANDARD 11)
+    add_test(NAME outbound_interface_linux COMMAND outbound_interface_linux_test)
+    set_tests_properties(outbound_interface_linux PROPERTIES
+      SKIP_RETURN_CODE 77
+      LABELS linux-privileged)
+  endif()
 
   find_program(VALGRIND_EXE NAMES valgrind)
   if(VALGRIND_EXE)

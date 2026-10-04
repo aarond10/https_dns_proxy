@@ -111,9 +111,22 @@ static void test_aborted_multi_action_schedules_client_reset(void) {
   TEST_ASSERT(ev_is_active(&client.reset_timer));
 }
 
+static void test_rejects_socket_when_interface_binding_fails(void) {
+  struct curl_sockaddr address;
+  memset(&address, 0, sizeof(address));
+  address.family = AF_INET;
+  address.socktype = SOCK_STREAM;
+  options.outbound_interface = "";
+
+  TEST_ASSERT(opensocket_callback(&client, CURLSOCKTYPE_IPCXN, &address) ==
+              CURL_SOCKET_BAD);
+  TEST_ASSERT(client.connections == 0);
+}
+
 int main(void) {
   TEST_RUN(test_rejects_requests_above_fetch_limit);
   TEST_RUN(test_socket_watchers_grow_and_support_fd_zero);
   TEST_RUN(test_aborted_multi_action_schedules_client_reset);
+  TEST_RUN(test_rejects_socket_when_interface_binding_fails);
   return test_summary();
 }
