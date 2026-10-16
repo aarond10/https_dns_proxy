@@ -234,6 +234,14 @@ void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
     .sock_state_cb_data = d
   };
   int optmask = ARES_OPT_TIMEOUTMS | ARES_OPT_TRIES | ARES_OPT_SOCK_STATE_CB;
+#ifdef ARES_OPT_QUERY_CACHE
+  // The poller re-resolves on its own schedule, so the c-ares query cache
+  // (on by default since c-ares 1.31) adds nothing. While the network is
+  // down it answers from whichever of the A/AAAA records has not expired
+  // yet, and that partial list would be installed as a change.
+  options.qcache_max_ttl = 0;
+  optmask |= ARES_OPT_QUERY_CACHE;
+#endif
 
   r = ares_init_options(&d->ares, &options, optmask);
   if (r != ARES_SUCCESS) {

@@ -225,6 +225,17 @@ if(BUILD_TESTING)
   add_test(NAME dns_truncate COMMAND dns_truncate_test)
   set_tests_properties(dns_truncate PROPERTIES LABELS unit)
 
+  add_executable(resolver_update_test
+    tests/unit/test_resolver_update.c
+    src/logging.c
+    src/ring_buffer.c)
+  set_property(SOURCE tests/unit/test_resolver_update.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="resolver_update_test")
+  target_link_libraries(resolver_update_test curl ev)
+  set_property(TARGET resolver_update_test PROPERTY C_STANDARD 11)
+  add_test(NAME resolver_update COMMAND resolver_update_test)
+  set_tests_properties(resolver_update PROPERTIES LABELS unit)
+
   find_program(VALGRIND_EXE NAMES valgrind)
   if(VALGRIND_EXE)
     add_test(NAME dns_truncate_valgrind
