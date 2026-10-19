@@ -126,10 +126,25 @@ static void test_cleanup_stops_active_watchers(void) {
   TEST_ASSERT(ev_run(loop, EVRUN_NOWAIT) == 0);
 }
 
+static void test_query_cache_disabled(void) {
+#ifdef ARES_OPT_QUERY_CACHE
+  struct ares_options saved;
+  int optmask = 0;
+  memset(&saved, 0, sizeof(saved));
+  TEST_ASSERT(ares_save_options(poller.ares, &saved, &optmask) == ARES_SUCCESS);
+  const int cache_option_set = (optmask & ARES_OPT_QUERY_CACHE) != 0;
+  const unsigned int max_ttl = saved.qcache_max_ttl;
+  ares_destroy_options(&saved);
+  TEST_ASSERT(cache_option_set);
+  TEST_ASSERT(max_ttl == 0);
+#endif
+}
+
 int main(void) {
   TEST_RUN(test_allocates_watchers_beyond_nameserver_count);
   TEST_RUN(test_reuses_released_watcher);
   TEST_RUN(test_fd_zero_does_not_alias_free_watcher);
   TEST_RUN(test_cleanup_stops_active_watchers);
+  TEST_RUN(test_query_cache_disabled);
   return test_summary();
 }

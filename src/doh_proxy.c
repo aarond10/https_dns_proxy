@@ -73,10 +73,26 @@ void doh_proxy_set_resolv(doh_proxy_t *p, const char *buf) {
   }
 }
 
-// Returns 1 if `addr_list` is a (possibly equal, possibly proper) subset of
-// `full_list`, where both are comma-separated IP literals. Used to decide
-// whether a fresh poll result actually changed anything; if every IP in the
-// new list is already in the old list, we skip the curl reset.
+// Returns 1 if the comma-separated `list` has an element that is exactly the
+// `address_len` bytes at `address`. Whole elements are compared, so
+// "192.0.2.1" does not match "192.0.2.10".
+static int addr_list_contains(const char *list, const char *address,
+                              size_t address_len) {
+  const char *pos = list;
+  const char *end = list + strlen(list);
+  while (pos < end) {
+    const char *comma = strchr(pos, ',');
+    const size_t element_len = (size_t)(comma ? comma - pos : end - pos);
+    if (element_len == address_len && strncmp(pos, address, address_len) == 0) {
+      return 1;
+    }
+    pos += element_len + 1;
+  }
+  return 0;
+}
+
+// Returns 1 if `list` contains an address that is missing from `full_list`.
+// Both are comma-separated IP literals.
 static int addr_list_reduced(const char* full_list, const char* list) {
   const char *pos = list;
   const char *end = list + strlen(list);
@@ -91,10 +107,7 @@ static int addr_list_reduced(const char* full_list, const char* list) {
     strncpy(current, pos, ip_len);
     current[ip_len] = '\0';
 
-    const char *match_begin = strstr(full_list, current);
-    if (!match_begin ||
-        !(match_begin == full_list || *(match_begin - 1) == ',') ||
-        !(*(match_begin + ip_len) == ',' || *(match_begin + ip_len) == '\0')) {
+    if (!addr_list_contains(full_list, current, ip_len)) {
       DLOG("IP address missing: %s", current);
       return 1;
     }
@@ -128,7 +141,12 @@ void doh_proxy_handle_resolver_update(const char *hostname, void *ctx,
     char * old_addr_list = strstr(p->resolv->data, port_colon);
     if (old_addr_list) {
       old_addr_list += strlen(port_colon);
-      if (!addr_list_reduced(addr_list, old_addr_list)) {
+      // Only an identical set of addresses counts as unchanged. A poll made
+      // while the network is down can return a subset (e.g. c-ares still had
+      // only the AAAA answer cached). That subset gets installed, so the
+      // full list that comes back afterwards must be installed again.
+      if (!addr_list_reduced(addr_list, old_addr_list) &&
+          !addr_list_reduced(old_addr_list, addr_list)) {
         DLOG("DNS server IP address unchanged (%s).", buf + ip_start);
         free((void*)addr_list);
         return;
