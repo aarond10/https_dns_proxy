@@ -12,6 +12,7 @@
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
+#include "outbound_interface.h"
 #include "stat.h"
 
 #define DOH_CONTENT_TYPE "application/dns-message"
@@ -55,6 +56,12 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
                                     struct https_fetch_ctx *ctx,
                                     int curl_result_code);
 
+static void schedule_client_reset(https_client_t *client, ev_tstamp delay) {
+  ev_timer_stop(client->loop, &client->reset_timer);
+  ev_timer_set(&client->reset_timer, delay, 0);
+  ev_timer_start(client->loop, &client->reset_timer);
+}
+
 static size_t write_buffer(void *buf, size_t size, size_t nmemb, void *userp) {
   GET_PTR(struct https_fetch_ctx, ctx, userp);
   size_t write_size = size * nmemb;
@@ -88,6 +95,15 @@ static curl_socket_t opensocket_callback(void *clientp, curlsocktype purpose,
   curl_socket_t sock = socket(addr->family, addr->socktype, addr->protocol);
   if (sock == -1) {
     ELOG("Could not open curl socket %d:%s", errno, strerror(errno));
+    return CURL_SOCKET_BAD;
+  }
+  if (client->opt->outbound_interface != NULL &&
+      outbound_interface_bind_socket(sock,
+                                     client->opt->outbound_interface) != 0) {
+    const int bind_errno = errno;
+    ELOG("Failed to bind HTTPS socket to interface '%s': %s (%d)",
+         client->opt->outbound_interface, strerror(bind_errno), bind_errno);
+    (void)close(sock);
     return CURL_SOCKET_BAD;
   }
 
@@ -287,6 +303,7 @@ static void https_fetch_ctx_init(https_client_t *client,
   ctx->buflen = 0;
   ctx->next = client->fetches;
   client->fetches = ctx;
+  client->fetch_count++;
 
   ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_RESOLVE, resolv);
 
@@ -322,7 +339,14 @@ static void https_fetch_ctx_init(https_client_t *client,
   }
   if (client->opt->source_addr) {
     DLOG_REQ("Using source address: %s", client->opt->source_addr);
-    ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, client->opt->source_addr);
+    if (client->opt->outbound_interface != NULL) {
+      char source_address[sizeof("host!") + INET6_ADDRSTRLEN];
+      (void)snprintf(source_address, sizeof(source_address), "host!%s",
+                     client->opt->source_addr);
+      ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, source_address);
+    } else {
+      ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_INTERFACE, client->opt->source_addr);
+    }
   }
   if (client->opt->ca_info) {
     ASSERT_CURL_EASY_SETOPT(ctx, CURLOPT_CAINFO, client->opt->ca_info);
@@ -372,7 +396,7 @@ static int https_fetch_ctx_process_response(https_client_t *client,
       recoverable = 1;
       if (!ev_is_active(&client->reset_timer)) {
         ILOG_REQ("Client reset timer started");
-        ev_timer_start(client->loop, &client->reset_timer);
+        schedule_client_reset(client, (ev_tstamp)client->opt->conn_loss_time);
       }
       ILOG_REQ("curl request failed with %d: %s (recoverable, reset timer will recycle connection)",
                curl_result_code, curl_easy_strerror(curl_result_code));
@@ -533,6 +557,17 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   if (code != CURLM_OK) {
     FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
   }
+  // Release the slot before notifying the caller, which may submit another
+  // request. Detach the context as well so the list and count stay consistent.
+  if (prev) {
+    prev->next = ctx->next;
+  } else {
+    client->fetches = ctx->next;
+  }
+  if (client->fetch_count == 0) {
+    FLOG_REQ("HTTPS fetch count underflow");
+  }
+  client->fetch_count--;
   int drop_reply = 0;
   if (curl_result_code < 0) {
     WLOG_REQ("Request was aborted");
@@ -550,11 +585,6 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
   curl_easy_cleanup(ctx->curl);
   free(ctx->buf);
-  if (prev) {
-    prev->next = ctx->next;
-  } else {
-    client->fetches = ctx->next;
-  }
   free(ctx);
 }
 
@@ -580,6 +610,19 @@ static void check_multi_info(https_client_t *c) {
   }
 }
 
+static int handle_multi_action_result(https_client_t *client, CURLMcode code) {
+  if (code == CURLM_OK) {
+    return 0;
+  }
+  if (code == CURLM_ABORTED_BY_CALLBACK) {
+    WLOG("curl_multi_socket_action aborted by callback; scheduling HTTPS client reset");
+    schedule_client_reset(client, 0);
+    return -1;
+  }
+  FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+  return -1;
+}
+
 static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
                     struct ev_io *w, int revents) {
   GET_PTR(https_client_t, c, w->data);
@@ -588,16 +631,10 @@ static void sock_cb(struct ev_loop __attribute__((unused)) *loop,
       c->curlm, w->fd, (revents & EV_READ ? CURL_CSELECT_IN : 0) |
                        (revents & EV_WRITE ? CURL_CSELECT_OUT : 0),
       &ignore);
-  if (code == CURLM_OK) {
-    check_multi_info(c);
+  if (handle_multi_action_result(c, code) != 0) {
+    return;
   }
-  else {
-    FLOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
-    if (code == CURLM_ABORTED_BY_CALLBACK) {
-      WLOG("Resetting HTTPS client to recover from faulty state!");
-      https_client_reset(c);
-    }
-  }
+  check_multi_info(c);
 }
 
 static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
@@ -606,27 +643,41 @@ static void timer_cb(struct ev_loop __attribute__((unused)) *loop,
   int ignore = 0;
   CURLMcode code = curl_multi_socket_action(c->curlm, CURL_SOCKET_TIMEOUT, 0,
                                             &ignore);
-  if (code != CURLM_OK) {
-    ELOG("curl_multi_socket_action error %d: %s", code, curl_multi_strerror(code));
+  if (handle_multi_action_result(c, code) != 0) {
+    return;
   }
   check_multi_info(c);
 }
 
-static struct ev_io * get_io_event(struct ev_io io_events[], curl_socket_t sock) {
-  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
-    if (io_events[i].fd == sock) {
-      return &io_events[i];
+static struct ev_io * get_io_event(struct https_io_event *io_events,
+                                   curl_socket_t sock) {
+  for (struct https_io_event *event = io_events;
+       event != NULL; event = event->next) {
+    if (event->watcher.fd == sock) {
+      return &event->watcher;
     }
   }
   return NULL;
 }
 
-static void dump_io_events(struct ev_io io_events[]) {
-  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
+static void dump_io_events(struct https_io_event *io_events) {
+  int index = 0;
+  for (struct https_io_event *event = io_events;
+       event != NULL; event = event->next) {
+    const ev_io *watcher = &event->watcher;
     ILOG("IO event #%d: fd=%d, events=%d/%s%s",
-         i+1, io_events[i].fd, io_events[i].events,
-         (io_events[i].events & EV_READ ? "R" : ""),
-         (io_events[i].events & EV_WRITE ? "W" : ""));
+         ++index, watcher->fd, watcher->events,
+         (watcher->events & EV_READ ? "R" : ""),
+         (watcher->events & EV_WRITE ? "W" : ""));
+  }
+}
+
+static void free_io_events(https_client_t *client) {
+  while (client->io_events != NULL) {
+    struct https_io_event *event = client->io_events;
+    client->io_events = event->next;
+    ev_io_stop(client->loop, &event->watcher);
+    free(event);
   }
 }
 
@@ -640,19 +691,26 @@ static int multi_sock_cb(CURL *curl, curl_socket_t sock, int what,
   struct ev_io *io_event_ptr = get_io_event(c->io_events, sock);
   if (io_event_ptr) {
     ev_io_stop(c->loop, io_event_ptr);
-    io_event_ptr->fd = 0;
+    io_event_ptr->fd = CURL_SOCKET_BAD;
     DLOG("Released used io event: %p", io_event_ptr);
   }
   if (what == CURL_POLL_REMOVE) {
     return 0;
   }
   // reserve and start new event on unused slot
-  io_event_ptr = get_io_event(c->io_events, 0);
+  io_event_ptr = get_io_event(c->io_events, CURL_SOCKET_BAD);
   if (!io_event_ptr) {
-    ELOG("curl needed more IO event handler, than the number of maximum sockets: %d", HTTPS_SOCKET_LIMIT);
-    dump_io_events(c->io_events);
-    logging_flight_recorder_dump();
-    return -1;
+    struct https_io_event *event =
+        (struct https_io_event *)calloc(1, sizeof(*event));
+    if (event == NULL) {
+      dump_io_events(c->io_events);
+      FLOG("Out of mem allocating curl socket watcher");
+    }
+    event->watcher.fd = CURL_SOCKET_BAD;
+    event->watcher.data = c;
+    event->next = c->io_events;
+    c->io_events = event;
+    io_event_ptr = &event->watcher;
   }
   DLOG("Reserved new io event: %p", io_event_ptr);
   ev_io_init(io_event_ptr, sock_cb, sock,
@@ -699,9 +757,6 @@ void https_client_init(https_client_t *c, options_t *opt,
   c->loop = loop;
   c->fetches = NULL;
   c->timer.data = c;
-  for (int i = 0; i < HTTPS_SOCKET_LIMIT; i++) {
-    c->io_events[i].data = c;
-  }
   c->opt = opt;
   c->stat = stat;
 
@@ -718,6 +773,11 @@ void https_client_fetch(https_client_t *c, const char *url,
                         const char* postdata, size_t postdata_len,
                         struct curl_slist *resolv, uint16_t id,
                         https_response_cb cb, void *data) {
+  if (c->fetch_count >= HTTPS_FETCH_LIMIT) {
+    WLOG("%04hX: Too many HTTPS requests in flight, dropping request", id);
+    cb(data, NULL, 0);
+    return;
+  }
   struct https_fetch_ctx *ctx =
       (struct https_fetch_ctx *)calloc(1, sizeof(struct https_fetch_ctx));
   if (!ctx) {
@@ -730,6 +790,7 @@ void https_client_reset(https_client_t *c) {
   struct curl_slist *header_list = c->header_list;
   c->header_list = NULL;
   https_client_cleanup(c);
+  ev_timer_set(&c->reset_timer, (ev_tstamp)c->opt->conn_loss_time, 0);
   https_client_multi_init(c, header_list);
 }
 
@@ -739,5 +800,8 @@ void https_client_cleanup(https_client_t *c) {
   }
   curl_slist_free_all(c->header_list);
   curl_multi_cleanup(c->curlm);
+  c->curlm = NULL;
+  ev_timer_stop(c->loop, &c->timer);
   ev_timer_stop(c->loop, &c->reset_timer);
+  free_io_events(c);
 }

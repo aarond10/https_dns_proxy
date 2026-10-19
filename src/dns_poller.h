@@ -27,6 +27,7 @@ typedef struct {
   ares_channel ares;
   struct ev_loop *loop;
   char *hostname;  // owned; strdup'd in init, freed in cleanup
+  char *outbound_interface;  // owned; optional interface used by socket callback
   int family;  // AF_UNSPEC for IPv4 or IPv6, AF_INET for IPv4 only.
   dns_poller_cb cb;
   int polling_interval;
@@ -41,14 +42,17 @@ typedef struct {
 // provided ev_loop. `bootstrap_dns` is a comma-separated list of DNS servers to
 // use for the lookup `hostname` every `interval_seconds`. For each successful
 // lookup, `cb` will be called with the resolved address.
-// `source_addr` optionally binds bootstrap DNS lookups to a specific IP.
+// `source_addr` optionally binds bootstrap DNS lookups to a specific IP and
+// `outbound_interface` optionally binds them to a Linux network interface.
 // `family` should be AF_INET for IPv4 or AF_UNSPEC for both IPv4 and IPv6.
 //
-// Note: hostname is copied; the caller's buffer need not outlive this call.
+// Note: hostname and outbound_interface are copied; the caller's buffers need
+// not outlive this call.
 void dns_poller_init(dns_poller_t *d, struct ev_loop *loop,
                      const char *bootstrap_dns,
                      int bootstrap_dns_polling_interval,
                      const char *source_addr,
+                     const char *outbound_interface,
                      const char *hostname,
                      int family, dns_poller_cb cb, void *cb_data);
 

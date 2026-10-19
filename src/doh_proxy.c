@@ -34,6 +34,7 @@ typedef struct {
   dns_listener_t *listener;
   ev_tstamp start_tstamp;
   struct sockaddr_storage raddr;
+  uint64_t connection_id;
   char *dns_req;
   size_t dns_req_len;
 } doh_request_t;
@@ -155,12 +156,18 @@ void doh_proxy_handle_resolver_update(const char *hostname, void *ctx,
   }
   free((void*)addr_list);
   DLOG("Received new DNS server IP '%s'", buf + ip_start);
-  curl_slist_free_all(p->resolv);
-  p->resolv = curl_slist_append(NULL, buf);
+  struct curl_slist *new_resolv = curl_slist_append(NULL, buf);
+  if (new_resolv == NULL) {
+    FLOG("Out of mem updating DNS server IP");
+  }
 
   // Reset libcurl: in-flight connections were aimed at the old IP, and curl
   // gets confused if we leave them around with a different CURLOPT_RESOLVE.
+  // The old list must remain alive until every easy handle referencing it has
+  // been removed and cleaned up by the reset.
   https_client_reset(p->client);
+  curl_slist_free_all(p->resolv);
+  p->resolv = new_resolv;
 
   if (p->awaiting_bootstrap) {
     p->awaiting_bootstrap = 0;
@@ -190,6 +197,7 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
              req_id, resp_id);
       } else {
         req->listener->respond(req->listener, (struct sockaddr*)&req->raddr,
+                               req->connection_id,
                                req->dns_req, req->dns_req_len, buf, buflen);
         if (p->stat) {
           stat_request_end(p->stat, buflen,
@@ -200,12 +208,16 @@ static void doh_response_cb(void *data, char *buf, size_t buflen) {
     }
   }
 
+  if (req->listener->request_complete != NULL) {
+    req->listener->request_complete(req->listener, (struct sockaddr*)&req->raddr,
+                                    req->connection_id);
+  }
   free((void*)req->dns_req);
   free(req);
 }
 
 void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
-                              struct sockaddr *raddr,
+                              struct sockaddr *raddr, uint64_t connection_id,
                               char *dns_req, size_t dns_req_len) {
   doh_proxy_t *p = (doh_proxy_t *)ctx;
 
@@ -214,6 +226,9 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
 
   if (p->awaiting_bootstrap) {
     WLOG("%04hX: Query received before bootstrapping is completed, discarding.", req_id);
+    if (listener->request_complete != NULL) {
+      listener->request_complete(listener, raddr, connection_id);
+    }
     free(dns_req);
     return;
   }
@@ -224,6 +239,7 @@ void doh_proxy_handle_request(void *ctx, dns_listener_t *listener,
   }
   req->proxy = p;
   req->listener = listener;
+  req->connection_id = connection_id;
   req->dns_req = dns_req;
   req->dns_req_len = dns_req_len;
   // raddr length depends on family; sockaddr_storage holds either. Copy what

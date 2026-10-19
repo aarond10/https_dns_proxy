@@ -82,10 +82,11 @@ static void watcher_cb(struct ev_loop __attribute__((unused)) *loop,
   }
   memcpy(dns_req, tmp_buf, (size_t)len);
 
-  d->cb(d->cb_data, &d->base, (struct sockaddr*)&tmp_raddr, dns_req, (size_t)len);
+  d->cb(d->cb_data, &d->base, (struct sockaddr*)&tmp_raddr, 0, dns_req, (size_t)len);
 }
 
 static void udp_respond(dns_listener_t *self, struct sockaddr *raddr,
+                        uint64_t __attribute__((unused)) connection_id,
                         const char *dns_req, size_t dns_req_len,
                         char *dns_resp, size_t dns_resp_len) {
   dns_listener_udp_t *d = (dns_listener_udp_t *)self;

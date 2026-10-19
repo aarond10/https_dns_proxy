@@ -205,6 +205,7 @@ if(BUILD_TESTING)
   add_executable(dns_poller_watchers_test
     tests/unit/test_dns_poller.c
     src/logging.c
+    src/outbound_interface.c
     src/ring_buffer.c)
   set_property(SOURCE tests/unit/test_dns_poller.c APPEND
     PROPERTY COMPILE_DEFINITIONS __FILENAME__="dns_poller_test")
@@ -236,6 +237,71 @@ if(BUILD_TESTING)
   add_test(NAME resolver_update COMMAND resolver_update_test)
   set_tests_properties(resolver_update PROPERTIES LABELS unit)
 
+  add_executable(dns_listener_tcp_test
+    tests/unit/test_dns_listener_tcp.c
+    src/logging.c
+    src/ring_buffer.c)
+  set_property(SOURCE tests/unit/test_dns_listener_tcp.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="dns_listener_tcp_test")
+  target_link_libraries(dns_listener_tcp_test ev)
+  set_property(TARGET dns_listener_tcp_test PROPERTY C_STANDARD 11)
+  add_test(NAME dns_listener_tcp COMMAND dns_listener_tcp_test)
+  set_tests_properties(dns_listener_tcp PROPERTIES LABELS unit TIMEOUT 20)
+
+  add_executable(https_client_limits_test
+    tests/unit/test_https_client_limits.c
+    src/logging.c
+    src/outbound_interface.c
+    src/ring_buffer.c
+    src/stat.c)
+  set_property(SOURCE tests/unit/test_https_client_limits.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="https_client_limits_test")
+  target_link_libraries(https_client_limits_test curl ev m)
+  set_property(TARGET https_client_limits_test PROPERTY C_STANDARD 11)
+  add_test(NAME https_client_limits COMMAND https_client_limits_test)
+  set_tests_properties(https_client_limits PROPERTIES LABELS unit)
+
+  add_executable(doh_proxy_resolver_test
+    tests/unit/test_doh_proxy_resolver.c
+    src/logging.c
+    src/ring_buffer.c)
+  set_property(SOURCE tests/unit/test_doh_proxy_resolver.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="doh_proxy_resolver_test")
+  target_link_libraries(doh_proxy_resolver_test curl ev)
+  set_property(TARGET doh_proxy_resolver_test PROPERTY C_STANDARD 11)
+  add_test(NAME doh_proxy_resolver COMMAND doh_proxy_resolver_test)
+  set_tests_properties(doh_proxy_resolver PROPERTIES LABELS unit)
+
+  add_executable(outbound_interface_test
+    tests/unit/test_outbound_interface.c)
+  set_property(SOURCE tests/unit/test_outbound_interface.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="outbound_interface_test")
+  set_property(TARGET outbound_interface_test PROPERTY C_STANDARD 11)
+  add_test(NAME outbound_interface COMMAND outbound_interface_test)
+  set_tests_properties(outbound_interface PROPERTIES LABELS unit)
+
+  add_executable(options_test
+    tests/unit/test_options.c)
+  set_property(SOURCE tests/unit/test_options.c APPEND
+    PROPERTY COMPILE_DEFINITIONS __FILENAME__="options_test")
+  set_property(TARGET options_test PROPERTY C_STANDARD 11)
+  add_test(NAME options COMMAND options_test)
+  set_tests_properties(options PROPERTIES LABELS unit)
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(outbound_interface_linux_test
+      tests/linux/test_outbound_interface_linux.c
+      src/outbound_interface.c)
+    target_include_directories(outbound_interface_linux_test PRIVATE tests/unit)
+    set_property(SOURCE tests/linux/test_outbound_interface_linux.c APPEND
+      PROPERTY COMPILE_DEFINITIONS __FILENAME__="outbound_interface_linux_test")
+    set_property(TARGET outbound_interface_linux_test PROPERTY C_STANDARD 11)
+    add_test(NAME outbound_interface_linux COMMAND outbound_interface_linux_test)
+    set_tests_properties(outbound_interface_linux PROPERTIES
+      SKIP_RETURN_CODE 77
+      LABELS linux-privileged)
+  endif()
+
   find_program(VALGRIND_EXE NAMES valgrind)
   if(VALGRIND_EXE)
     add_test(NAME dns_truncate_valgrind
@@ -256,6 +322,21 @@ if(BUILD_TESTING)
     message(STATUS "python3 not found, robot testing not possible")
   else()
     message(STATUS "python3 found: ${PYTHON3_EXE}")
+
+    find_program(OPENSSL_EXE NAMES openssl)
+    if(OPENSSL_EXE)
+      add_test(NAME tcp_lifecycle
+        COMMAND ${PYTHON3_EXE} ${CMAKE_SOURCE_DIR}/tests/integration/test_tcp_lifecycle.py
+          --binary $<TARGET_FILE:https_dns_proxy> --openssl ${OPENSSL_EXE})
+      set_tests_properties(tcp_lifecycle PROPERTIES LABELS integration TIMEOUT 90)
+      if(VALGRIND_EXE)
+        add_test(NAME tcp_lifecycle_valgrind
+          COMMAND ${PYTHON3_EXE} ${CMAKE_SOURCE_DIR}/tests/integration/test_tcp_lifecycle.py
+            --binary $<TARGET_FILE:https_dns_proxy> --openssl ${OPENSSL_EXE}
+            --valgrind ${VALGRIND_EXE})
+        set_tests_properties(tcp_lifecycle_valgrind PROPERTIES LABELS memcheck TIMEOUT 120)
+      endif()
+    endif()
 
     # Robot framework tests
     add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot

@@ -1,4 +1,6 @@
 import socket
+import time
+from pathlib import Path
 
 
 class DnsTcpClient:
@@ -14,6 +16,25 @@ class DnsTcpClient:
 
     def __init__(self):
         self.client_socket = None
+
+    def wait_for_proxy_ready(self, process, logfile, timeout=15):
+        deadline = time.monotonic() + float(timeout)
+        ready_markers = (
+            "Received new DNS server IP", "DNS polling disabled.",
+            "Systemd notify succeeded", "NOTIFY_SOCKET not set",
+            "Systemd notify skipped",
+        )
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise AssertionError("Proxy exited before it became ready")
+            try:
+                output = Path(logfile).read_text(errors="replace")
+                if any(marker in output for marker in ready_markers):
+                    return
+            except FileNotFoundError:
+                pass
+            time.sleep(0.05)
+        raise AssertionError(f"Proxy did not finish bootstrapping within {timeout}s")
 
     def open_tcp_client_connection(self, host, port):
         try:

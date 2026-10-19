@@ -1,5 +1,8 @@
+#include <arpa/inet.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <grp.h>
+#include <net/if.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,6 +44,7 @@ void options_init(struct Options *opt) {
   opt->resolver_ip = NULL;
   opt->curl_proxy = NULL;
   opt->source_addr = NULL;
+  opt->outbound_interface = NULL;
   opt->use_http_version = DEFAULT_HTTP_VERSION;
   opt->max_idle_time = 118;
   opt->conn_loss_time = 15;
@@ -59,8 +63,14 @@ int parse_int(char * str) {
 }
 
 enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char **argv) {
+  static const struct option long_options[] = {
+    {"outbound-interface", required_argument, NULL, 'I'},
+    {NULL, 0, NULL, 0}
+  };
   int c = 0;
-  while ((c = getopt(argc, argv, "a:c:p:T:du:g:b:i:4r:R:e:t:l:vxqm:L:s:S:C:F:hV")) != -1) {
+  while ((c = getopt_long(argc, argv,
+                          "a:c:p:T:du:g:b:i:4r:R:e:t:l:vxqm:L:s:S:I:C:F:hV",
+                          long_options, NULL)) != -1) {
     switch (c) {
     case 'a': // listen_addr
       opt->listen_addr = optarg;
@@ -131,6 +141,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
     case 'S': // source address
       opt->source_addr = optarg;
       break;
+    case 'I': // outbound interface
+      opt->outbound_interface = optarg;
+      break;
     case 'C': // CA info
       opt->ca_info = optarg;
       break;
@@ -154,6 +167,9 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
       return OPR_OPTION_ERROR;
     }
     opt->uid = p->pw_uid;
+    if (!opt->group && geteuid() == 0) {
+      opt->gid = p->pw_gid;
+    }
   }
   if (opt->group) {
     struct group *g = getgrnam(opt->group);
@@ -169,7 +185,8 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
   }
   opt->dscp <<= 2;
   // Get noisy about bad security practices.
-  if (getuid() == 0 && (!opt->user || !opt->group)) {
+  if (getuid() == 0 &&
+      (opt->uid == (uid_t)-1 || opt->gid == (gid_t)-1)) {
     printf("----------------------------\n"
            "WARNING: Running as root without dropping privileges "
            "is NOT recommended.\n"
@@ -222,6 +239,32 @@ enum OptionsParseResult options_parse_args(struct Options *opt, int argc, char *
     printf("TCP client limit must be between 0 and %u.\n", MAX_TCP_CLIENTS);
     return OPR_OPTION_ERROR;
   }
+  if (opt->outbound_interface != NULL) {
+    if (opt->source_addr != NULL) {
+      struct in_addr address_v4;
+      struct in6_addr address_v6;
+      if (inet_pton(AF_INET, opt->source_addr, &address_v4) != 1 &&
+          inet_pton(AF_INET6, opt->source_addr, &address_v6) != 1) {
+        printf("-S must be an IP literal when using --outbound-interface.\n");
+        return OPR_OPTION_ERROR;
+      }
+    }
+#if !defined(__linux__) && !defined(OUTBOUND_INTERFACE_TEST)
+    printf("Outbound interface binding is supported only on Linux.\n");
+    return OPR_OPTION_ERROR;
+#endif
+    const size_t interface_length = strlen(opt->outbound_interface);
+    if (interface_length == 0 || interface_length >= IFNAMSIZ) {
+      printf("Outbound interface name must contain between 1 and %u characters.\n",
+             (unsigned)(IFNAMSIZ - 1));
+      return OPR_OPTION_ERROR;
+    }
+    if (opt->user != NULL) {
+      printf("--outbound-interface cannot be combined with -u. Start directly "
+             "as the target user with CAP_NET_RAW supplied by the service manager.\n");
+      return OPR_OPTION_ERROR;
+    }
+  }
   return OPR_SUCCESS;
 }
 
@@ -231,6 +274,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("Usage: %s [-a <listen_addr>] [-p <listen_port>] [-T <tcp_client_limit>]\n", argv[0]);
   printf("        [-b <dns_servers>] [-i <polling_interval>] [-4]\n");
   printf("        [-r <resolver_url>] [-R <resolver_ip>] [-t <proxy_server>] [-S <source_addr>]\n");
+  printf("        [--outbound-interface <interface>]\n");
   printf("        [-x] [-q] [-C <ca_path>] [-c <dscp_codepoint>]\n");
   printf("        [-d] [-u <user>] [-g <group>] \n");
   printf("        [-v]+ [-l <logfile>] [-s <statistic_interval>] [-F <log_limit>] [-V] [-h]\n");
@@ -262,6 +306,9 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("                         bootstrap DNS servers.\n");
   printf("  -S source_addr         Source IPv4/v6 address for outbound HTTPS and bootstrap DNS.\n");
   printf("                         (Default: system default)\n");
+  printf("  -I, --outbound-interface interface\n");
+  printf("                         Linux network interface for outbound HTTPS and bootstrap DNS.\n");
+  printf("                         Incompatible with -u; requires CAP_NET_RAW.\n");
   printf("  -x                     Use HTTP/1.1 instead of HTTP/2. Useful with broken\n"
          "                         or limited builds of libcurl.\n");
   printf("  -q                     Use HTTP/3 (QUIC) only.\n");
@@ -278,6 +325,7 @@ void options_show_usage(int __attribute__((unused)) argc, char **argv) {
   printf("\n Process\n");
   printf("  -d                     Daemonize.\n");
   printf("  -u user                Optional user to drop to if launched as root.\n");
+  printf("                         Also uses the user's primary group unless -g is set.\n");
   printf("  -g group               Optional group to drop to if launched as root.\n");
   printf("\n Logging\n");
   printf("  -v                     Increase logging verbosity. (Default: error)\n");

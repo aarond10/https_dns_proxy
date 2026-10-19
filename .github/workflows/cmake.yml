@@ -44,6 +44,9 @@ jobs:
     - name: Test
       run: make -C ${{github.workspace}}/ test ARGS="--verbose"
 
+    - name: Test Linux interface binding
+      run: sudo env HDP_RUN_PRIVILEGED_TEST=1 ctest --test-dir "${{github.workspace}}" -R '^outbound_interface_linux$' --output-on-failure --no-tests=error
+
     - uses: actions/upload-artifact@v7
       if: ${{ success() || failure() }}
       with:

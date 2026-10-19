@@ -46,8 +46,11 @@ struct Options {
   // e.g. "socks5://127.0.0.1:1080"
   const char *curl_proxy;
 
-  // Source address for outbound HTTPS connections
+  // Source address for outbound HTTPS and bootstrap DNS sockets.
   const char *source_addr;
+
+  // Linux network interface for outbound HTTPS and bootstrap DNS sockets.
+  const char *outbound_interface;
 
   // 1 = Use only HTTP/1.1 for limited OpenWRT libcurl (which is not built with HTTP/2 support)
   // 2 = Use only HTTP/2 default

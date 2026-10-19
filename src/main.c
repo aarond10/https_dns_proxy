@@ -22,6 +22,7 @@
 #include "https_client.h"
 #include "logging.h"
 #include "options.h"
+#include "outbound_interface.h"
 #include "stat.h"
 
 static int is_ipv4_address(const char *str) {
@@ -100,6 +101,16 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
+static void shutdown_timeout_cb(struct ev_loop *loop,
+                                 ev_timer __attribute__((__unused__)) *w,
+                                 int __attribute__((__unused__)) revents) {
+  // A one-shot timer is stopped before its callback. Balance the ev_unref()
+  // used below to allow an otherwise idle shutdown to finish immediately.
+  ev_ref(loop);
+  ILOG("Shutdown grace period expired, aborting outstanding requests");
+  ev_break(loop, EVBREAK_ALL);
+}
+
 static void systemd_notify_ready(void) {
 #if HAS_LIBSYSTEMD == 1
   static uint8_t called_once = 0;
@@ -159,6 +170,30 @@ static const char * sw_version(void) {
 #else
   return "2025.8.26-atLeast";  // update date sometimes, like 1-2 times a year
 #endif
+}
+
+static void validate_outbound_settings(const options_t *opt) {
+  if (opt->outbound_interface == NULL) {
+    return;
+  }
+  if (outbound_interface_validate(opt->outbound_interface) != 0) {
+    const int bind_errno = errno;
+    switch (bind_errno) {
+      case ENODEV:
+        FLOG("Outbound interface '%s' does not exist", opt->outbound_interface);
+        break;
+      case EPERM:
+      case EACCES:
+        FLOG("Permission denied binding to outbound interface '%s'; "
+             "start as the final service user with CAP_NET_RAW",
+             opt->outbound_interface);
+        break;
+      default:
+        FLOG("Cannot bind outbound sockets to interface '%s': %s (%d)",
+             opt->outbound_interface, strerror(bind_errno), bind_errno);
+        break;
+    }
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -278,6 +313,8 @@ int main(int argc, char *argv[]) {
     FLOG("Failed to set uid");
   }
 
+  validate_outbound_settings(&opt);
+
   if (opt.daemonize) {
     // daemon() is non-standard. If needed, see OpenSSH openbsd-compat/daemon.c
     if (daemon(0, 0) == -1) {
@@ -316,6 +353,7 @@ int main(int argc, char *argv[]) {
           doh_proxy_await_bootstrap(proxy, systemd_notify_ready);
           dns_poller_init(dns_poller, loop, opt.bootstrap_dns,
                           opt.bootstrap_dns_polling_interval, opt.source_addr,
+                          opt.outbound_interface,
                           hostname, opt.ipv4 ? AF_INET : AF_UNSPEC,
                           doh_proxy_handle_resolver_update, proxy);
           ILOG("DNS polling initialized for '%s'", hostname);
@@ -369,17 +407,26 @@ int main(int argc, char *argv[]) {
   }
   stat_stop(&stat);
 
+  ev_timer shutdown_timer;
+  ev_timer_init(&shutdown_timer, shutdown_timeout_cb, DNS_SHUTDOWN_TIMEOUT_S, 0);
+  ev_timer_start(loop, &shutdown_timer);
+  ev_unref(loop);
   DLOG("re-entering loop");
   ev_run(loop, 0);
+  if (ev_is_active(&shutdown_timer)) {
+    ev_ref(loop);
+    ev_timer_stop(loop, &shutdown_timer);
+  }
   DLOG("loop finished all events");
 
+  // Aborting transfers invokes completion callbacks. Keep the listeners and
+  // proxy alive until those callbacks have released their request state.
+  // The proxy's CURLOPT_RESOLVE list must also outlive the curl easy handles.
+  https_client_cleanup(&https_client);
   udp_listener->destroy(udp_listener);
   if (tcp_listener != NULL) {
     tcp_listener->destroy(tcp_listener);
   }
-  // The CURLOPT_RESOLVE list owned by the proxy must outlive in-flight curl
-  // easy handles, which is why https_client_cleanup runs first.
-  https_client_cleanup(&https_client);
   doh_proxy_destroy(proxy);
   stat_cleanup(&stat);
 
