@@ -323,6 +323,21 @@ if(BUILD_TESTING)
   else()
     message(STATUS "python3 found: ${PYTHON3_EXE}")
 
+    find_program(OPENSSL_EXE NAMES openssl)
+    if(OPENSSL_EXE)
+      add_test(NAME tcp_lifecycle
+        COMMAND ${PYTHON3_EXE} ${CMAKE_SOURCE_DIR}/tests/integration/test_tcp_lifecycle.py
+          --binary $<TARGET_FILE:https_dns_proxy> --openssl ${OPENSSL_EXE})
+      set_tests_properties(tcp_lifecycle PROPERTIES LABELS integration TIMEOUT 90)
+      if(VALGRIND_EXE)
+        add_test(NAME tcp_lifecycle_valgrind
+          COMMAND ${PYTHON3_EXE} ${CMAKE_SOURCE_DIR}/tests/integration/test_tcp_lifecycle.py
+            --binary $<TARGET_FILE:https_dns_proxy> --openssl ${OPENSSL_EXE}
+            --valgrind ${VALGRIND_EXE})
+        set_tests_properties(tcp_lifecycle_valgrind PROPERTIES LABELS memcheck TIMEOUT 120)
+      endif()
+    endif()
+
     # Robot framework tests
     add_test(NAME robot COMMAND ${PYTHON3_EXE} -m robot.run functional_tests.robot
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests/robot)

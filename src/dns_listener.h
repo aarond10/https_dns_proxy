@@ -13,6 +13,8 @@
 
 typedef struct dns_listener dns_listener_t;
 
+enum { DNS_SHUTDOWN_TIMEOUT_S = 5 };
+
 // Transport classification, exposed for callers that need to bin metrics or
 // log per-transport — not used for dispatch (dispatch is via the function
 // pointers on dns_listener itself).
@@ -37,6 +39,7 @@ struct dns_listener {
                   char *dns_resp, size_t dns_resp_len);
   // Release any transport-level capacity reserved for this request. The
   // proxy core calls this exactly once whether the request succeeds or fails.
+  // May be NULL for transports that do not reserve per-request capacity.
   void (*request_complete)(dns_listener_t *self, struct sockaddr *raddr, uint64_t connection_id);
   // Stop accepting new requests. Existing per-client state (TCP) is retained
   // so any in-flight DoH responses can still be delivered during graceful

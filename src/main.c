@@ -101,6 +101,16 @@ static void sigpipe_cb(struct ev_loop __attribute__((__unused__)) *loop,
   ELOG("Received SIGPIPE. Ignoring.");
 }
 
+static void shutdown_timeout_cb(struct ev_loop *loop,
+                                 ev_timer __attribute__((__unused__)) *w,
+                                 int __attribute__((__unused__)) revents) {
+  // A one-shot timer is stopped before its callback. Balance the ev_unref()
+  // used below to allow an otherwise idle shutdown to finish immediately.
+  ev_ref(loop);
+  ILOG("Shutdown grace period expired, aborting outstanding requests");
+  ev_break(loop, EVBREAK_ALL);
+}
+
 static void systemd_notify_ready(void) {
 #if HAS_LIBSYSTEMD == 1
   static uint8_t called_once = 0;
@@ -397,17 +407,26 @@ int main(int argc, char *argv[]) {
   }
   stat_stop(&stat);
 
+  ev_timer shutdown_timer;
+  ev_timer_init(&shutdown_timer, shutdown_timeout_cb, DNS_SHUTDOWN_TIMEOUT_S, 0);
+  ev_timer_start(loop, &shutdown_timer);
+  ev_unref(loop);
   DLOG("re-entering loop");
   ev_run(loop, 0);
+  if (ev_is_active(&shutdown_timer)) {
+    ev_ref(loop);
+    ev_timer_stop(loop, &shutdown_timer);
+  }
   DLOG("loop finished all events");
 
+  // Aborting transfers invokes completion callbacks. Keep the listeners and
+  // proxy alive until those callbacks have released their request state.
+  // The proxy's CURLOPT_RESOLVE list must also outlive the curl easy handles.
+  https_client_cleanup(&https_client);
   udp_listener->destroy(udp_listener);
   if (tcp_listener != NULL) {
     tcp_listener->destroy(tcp_listener);
   }
-  // The CURLOPT_RESOLVE list owned by the proxy must outlive in-flight curl
-  // easy handles, which is why https_client_cleanup runs first.
-  https_client_cleanup(&https_client);
   doh_proxy_destroy(proxy);
   stat_cleanup(&stat);
 

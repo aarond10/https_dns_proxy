@@ -182,6 +182,23 @@ static void test_resume_drains_buffer_before_reading_socket(void) {
   TEST_ASSERT(memcmp(unread, frame, sizeof(frame)) == 0);
 }
 
+static void test_dispatches_buffered_request_when_socket_would_block(void) {
+  TEST_ASSERT(fcntl(sockets[0], F_SETFL, O_NONBLOCK) == 0);
+  const uint16_t length = htons(DNS_HEADER_LENGTH);
+  memcpy(client.input_buffer, &length, sizeof(length));
+  client.input_buffer_used = sizeof(length) + DNS_HEADER_LENGTH;
+  unsigned requests = 0;
+  listener.cb = consume_request;
+  listener.cb_data = &requests;
+
+  read_cb(listener.loop, &client.read_watcher, EV_READ);
+
+  TEST_ASSERT(requests == 1);
+  TEST_ASSERT(client.pending_requests == 1);
+  TEST_ASSERT(client.input_buffer_used == 0);
+  TEST_ASSERT(listener.clients == &client);
+}
+
 static void test_read_respects_remaining_input_capacity(void) {
   client.input_buffer_size = TCP_DNS_MAX_FRAME;
   client.input_buffer = realloc(client.input_buffer, client.input_buffer_size);
@@ -300,6 +317,59 @@ static struct tcp_client_s *heap_client(void) {
   return owned;
 }
 
+static void test_dispatch_rejects_short_request(void) {
+  struct tcp_client_s *owned = heap_client();
+  TEST_ASSERT(owned != NULL);
+  const uint16_t length = htons(DNS_HEADER_LENGTH - 1);
+  memcpy(owned->input_buffer, &length, sizeof(length));
+  owned->input_buffer_used = sizeof(length) + DNS_HEADER_LENGTH - 1;
+
+  const int result = dispatch_client_requests(owned);
+  if (listener.clients == NULL) {
+    sockets[0] = -1;
+  }
+
+  TEST_ASSERT(result == -1);
+  TEST_ASSERT(listener.clients == NULL);
+}
+
+static void test_output_limit_drops_client_and_frees_queue(void) {
+  struct tcp_client_s *owned = heap_client();
+  TEST_ASSERT(owned != NULL);
+  TEST_ASSERT(fcntl(sockets[0], F_SETFL, O_NONBLOCK) == 0);
+  char fill[4096] = {0};
+  while (send(sockets[0], fill, sizeof(fill), MSG_NOSIGNAL) > 0) {
+  }
+  TEST_ASSERT(errno == EAGAIN || errno == EWOULDBLOCK);
+  char response[UINT16_MAX] = {0};
+  tcp_respond(&listener.base, (struct sockaddr *)&owned->raddr,
+              owned->id, NULL, 0, response, sizeof(response));
+  TEST_ASSERT(owned->output_head != NULL);
+  TEST_ASSERT(owned->output_bytes == TCP_DNS_MAX_FRAME);
+
+  tcp_respond(&listener.base, (struct sockaddr *)&owned->raddr,
+              owned->id, NULL, 0, response, sizeof(response));
+  if (listener.clients == NULL) {
+    sockets[0] = -1;
+  }
+  TEST_ASSERT(listener.clients == NULL);
+  TEST_ASSERT(listener.client_count == 0);
+}
+
+static void test_failed_send_drops_client(void) {
+  struct tcp_client_s *owned = heap_client();
+  TEST_ASSERT(owned != NULL);
+  TEST_ASSERT(shutdown(sockets[0], SHUT_WR) == 0);
+  char response[DNS_HEADER_LENGTH] = {0};
+  tcp_respond(&listener.base, (struct sockaddr *)&owned->raddr,
+              owned->id, NULL, 0, response, sizeof(response));
+  if (listener.clients == NULL) {
+    sockets[0] = -1;
+  }
+  TEST_ASSERT(listener.clients == NULL);
+  TEST_ASSERT(listener.client_count == 0);
+}
+
 static void check_queued_response_drains(int stopping) {
   struct tcp_client_s *owned = heap_client();
   TEST_ASSERT(owned != NULL);
@@ -356,6 +426,9 @@ static void test_shutdown_waits_for_pending_response(void) {
   TEST_ASSERT(!ev_is_active(&owned->read_watcher));
   TEST_ASSERT(!ev_is_active(&listener.accept_watcher));
   const ev_tstamp deadline = owned->timer_watcher.at;
+  const ev_tstamp remaining = ev_timer_remaining(listener.loop, &owned->timer_watcher);
+  TEST_ASSERT(remaining >= DNS_SHUTDOWN_TIMEOUT_S - 0.1 &&
+              remaining <= DNS_SHUTDOWN_TIMEOUT_S + 0.1);
   char response[DNS_HEADER_LENGTH] = {0};
   tcp_respond(&listener.base, (struct sockaddr *)&owned->raddr,
               owned->id, NULL, 0, response, sizeof(response));
@@ -438,9 +511,13 @@ int main(void) {
   TEST_RUN(test_large_partial_request_grows_without_exiting);
   TEST_RUN(test_request_completion_resumes_client_reads);
   TEST_RUN(test_resume_drains_buffer_before_reading_socket);
+  TEST_RUN(test_dispatches_buffered_request_when_socket_would_block);
+  TEST_RUN(test_dispatch_rejects_short_request);
   TEST_RUN(test_read_respects_remaining_input_capacity);
   TEST_RUN(test_old_connection_cannot_complete_or_respond_to_new_client);
   TEST_RUN(test_queues_response_without_blocking_event_loop);
+  TEST_RUN(test_output_limit_drops_client_and_frees_queue);
+  TEST_RUN(test_failed_send_drops_client);
   TEST_RUN(test_half_close_keeps_queued_response_until_drained);
   TEST_RUN(test_shutdown_keeps_queued_response_until_drained);
   TEST_RUN(test_shutdown_waits_for_pending_response);

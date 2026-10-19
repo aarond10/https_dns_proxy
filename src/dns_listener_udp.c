@@ -103,11 +103,6 @@ static void udp_respond(dns_listener_t *self, struct sockaddr *raddr,
   }
 }
 
-static void udp_request_complete(dns_listener_t __attribute__((unused)) *self,
-                                 struct sockaddr __attribute__((unused)) *raddr,
-                                 uint64_t __attribute__((unused)) connection_id) {
-}
-
 static void udp_stop(dns_listener_t *self) {
   dns_listener_udp_t *d = (dns_listener_udp_t *)self;
   ev_io_stop(d->loop, &d->watcher);
@@ -127,7 +122,6 @@ dns_listener_t * dns_udp_listener_create(struct ev_loop *loop,
     FLOG("Out of mem");
   }
   d->base.respond = udp_respond;
-  d->base.request_complete = udp_request_complete;
   d->base.stop = udp_stop;
   d->base.destroy = udp_destroy;
   d->base.transport = DNS_TRANSPORT_UDP;

@@ -163,10 +163,39 @@ static void test_preserves_connection_identity_through_proxy_callbacks(void) {
   }
 }
 
+static void test_listener_without_completion_callback(void) {
+  dns_listener_t listener = {
+    .respond = record_response,
+    .transport = DNS_TRANSPORT_UDP
+  };
+  struct sockaddr_in address = {.sin_family = AF_INET};
+  for (unsigned attempt = 0; attempt < 3; attempt++) {
+    char *request = calloc(1, DNS_HEADER_LENGTH);
+    TEST_ASSERT(request != NULL);
+    pending_response_cb = NULL;
+    if (attempt == 2) {
+      doh_proxy_await_bootstrap(proxy, NULL);
+    }
+    doh_proxy_handle_request(proxy, &listener, (struct sockaddr *)&address,
+                             0, request, DNS_HEADER_LENGTH);
+    if (attempt == 2) {
+      TEST_ASSERT(pending_response_cb == NULL);
+    } else {
+      TEST_ASSERT(pending_response_cb != NULL);
+      char response[DNS_HEADER_LENGTH] = {0};
+      pending_response_cb(pending_response_data, attempt == 0 ? response : NULL,
+                           attempt == 0 ? sizeof(response) : 0);
+    }
+    TEST_ASSERT(response_calls == 1);
+    TEST_ASSERT(completion_calls == 0);
+  }
+}
+
 int main(void) {
   TEST_RUN(test_new_address_triggers_resolver_update);
   TEST_RUN(test_removed_address_triggers_resolver_update);
   TEST_RUN(test_exact_address_match_after_prefix_match);
   TEST_RUN(test_preserves_connection_identity_through_proxy_callbacks);
+  TEST_RUN(test_listener_without_completion_callback);
   return test_summary();
 }

@@ -29,13 +29,14 @@ Start Proxy
   [Arguments]  @{args}
   @{default_args} =  Create List  -v  -v  -v  -4  -p  ${PORT}
   @{proces_args} =  Combine Lists  ${default_args}  ${args}
+  ${proxy_log} =  Set Variable  ${TEMPDIR}${/}https-dns-proxy-${PORT}.log
   ${proxy} =  Start Process  ${BINARY_PATH}  @{proces_args}
-  ...  stderr=STDOUT  alias=proxy
+  ...  stdout=${proxy_log}  stderr=STDOUT  alias=proxy
   Set Test Variable  ${proxy}
   Set Test Variable  ${dig_timeout}  2
   Set Test Variable  ${dig_retry}  0
-  Sleep  0.5
-  Is Process Running  ${proxy}
+  Wait For Proxy Ready  ${proxy}  ${proxy_log}
+  Process Should Be Running  ${proxy}
   Common Test Setup
 
 Start Proxy With Valgrind
@@ -45,13 +46,14 @@ Start Proxy With Valgrind
   ...  --show-leak-kinds=all  --track-origins=yes  --keep-stacktraces=alloc-and-free
   ...  ${BINARY_PATH}  -v  -v  -v  -F  100  -4  -p  ${PORT}  # using flight recorder with smallest possible buffer size to test memory leak
   @{proces_args} =  Combine Lists  ${default_args}  ${args}
+  ${proxy_log} =  Set Variable  ${TEMPDIR}${/}https-dns-proxy-${PORT}.log
   ${proxy} =  Start Process  valgrind  @{proces_args}
-  ...  stderr=STDOUT  alias=proxy
+  ...  stdout=${proxy_log}  stderr=STDOUT  alias=proxy
   Set Test Variable  ${proxy}
   Set Test Variable  ${dig_timeout}  10
   Set Test Variable  ${dig_retry}  2
-  Sleep  6  # wait for valgrind to fire up the proxy
-  Is Process Running  ${proxy}
+  Wait For Proxy Ready  ${proxy}  ${proxy_log}
+  Process Should Be Running  ${proxy}
   Common Test Setup
 
 Stop Proxy

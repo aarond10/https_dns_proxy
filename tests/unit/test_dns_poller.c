@@ -132,10 +132,10 @@ static void test_query_cache_disabled(void) {
   int optmask = 0;
   memset(&saved, 0, sizeof(saved));
   TEST_ASSERT(ares_save_options(poller.ares, &saved, &optmask) == ARES_SUCCESS);
-  const int cache_option_set = (optmask & ARES_OPT_QUERY_CACHE) != 0;
   const unsigned int max_ttl = saved.qcache_max_ttl;
   ares_destroy_options(&saved);
-  TEST_ASSERT(cache_option_set);
+  // c-ares before 1.31 omits ARES_OPT_QUERY_CACHE when the cache is disabled.
+  // Newer releases retain it with a zero TTL; both represent a disabled cache.
   TEST_ASSERT(max_ttl == 0);
 #endif
 }

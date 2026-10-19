@@ -557,6 +557,17 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   if (code != CURLM_OK) {
     FLOG_REQ("curl_multi_remove_handle error %d: %s", code, curl_multi_strerror(code));
   }
+  // Release the slot before notifying the caller, which may submit another
+  // request. Detach the context as well so the list and count stay consistent.
+  if (prev) {
+    prev->next = ctx->next;
+  } else {
+    client->fetches = ctx->next;
+  }
+  if (client->fetch_count == 0) {
+    FLOG_REQ("HTTPS fetch count underflow");
+  }
+  client->fetch_count--;
   int drop_reply = 0;
   if (curl_result_code < 0) {
     WLOG_REQ("Request was aborted");
@@ -574,15 +585,6 @@ static void https_fetch_ctx_cleanup(https_client_t *client,
   ctx->cb(ctx->cb_data, ctx->buf, ctx->buflen);
   curl_easy_cleanup(ctx->curl);
   free(ctx->buf);
-  if (prev) {
-    prev->next = ctx->next;
-  } else {
-    client->fetches = ctx->next;
-  }
-  if (client->fetch_count == 0) {
-    FLOG_REQ("HTTPS fetch count underflow");
-  }
-  client->fetch_count--;
   free(ctx);
 }
 

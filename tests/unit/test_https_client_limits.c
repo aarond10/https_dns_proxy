@@ -77,6 +77,52 @@ static void test_rejects_requests_above_fetch_limit(void) {
   TEST_ASSERT(callback_state.failures == 1);
 }
 
+typedef struct {
+  size_t fetch_count;
+  size_t listed_fetches;
+} replacement_state_t;
+
+static void submit_replacement_request(void *data, char *buf, size_t buflen) {
+  (void)buf;
+  (void)buflen;
+  replacement_state_t *state = data;
+  state->fetch_count = client.fetch_count;
+  for (struct https_fetch_ctx *ctx = client.fetches; ctx != NULL; ctx = ctx->next) {
+    state->listed_fetches++;
+  }
+  static const char request[DNS_HEADER_LENGTH] = {0};
+  https_client_fetch(&client, "https://127.0.0.1/dns-query",
+                     request, sizeof(request), NULL, UINT16_MAX,
+                     response_cb, &callback_state);
+}
+
+static void test_completion_callback_can_replace_request_at_fetch_limit(void) {
+  static const char request[DNS_HEADER_LENGTH] = {0};
+  for (size_t i = 0; i < HTTPS_FETCH_LIMIT; i++) {
+    https_client_fetch(&client, "https://127.0.0.1/dns-query",
+                       request, sizeof(request), NULL, (uint16_t)i,
+                       response_cb, &callback_state);
+  }
+  TEST_ASSERT(client.fetch_count == HTTPS_FETCH_LIMIT);
+  replacement_state_t state = {0};
+  struct https_fetch_ctx *prev = client.fetches;
+  struct https_fetch_ctx *completed = prev->next;
+  completed->cb = submit_replacement_request;
+  completed->cb_data = &state;
+
+  https_fetch_ctx_cleanup(&client, prev, completed, -1);
+
+  TEST_ASSERT(state.fetch_count == HTTPS_FETCH_LIMIT - 1);
+  TEST_ASSERT(state.listed_fetches == HTTPS_FETCH_LIMIT - 1);
+  TEST_ASSERT(callback_state.calls == 0);
+  TEST_ASSERT(client.fetch_count == HTTPS_FETCH_LIMIT);
+  size_t listed_fetches = 0;
+  for (struct https_fetch_ctx *ctx = client.fetches; ctx != NULL; ctx = ctx->next) {
+    listed_fetches++;
+  }
+  TEST_ASSERT(listed_fetches == client.fetch_count);
+}
+
 static void test_socket_watchers_grow_and_support_fd_zero(void) {
   CURL *fake_easy_handle = (CURL *)(uintptr_t)1;
   enum { WATCHER_COUNT = 16 };
@@ -125,6 +171,7 @@ static void test_rejects_socket_when_interface_binding_fails(void) {
 
 int main(void) {
   TEST_RUN(test_rejects_requests_above_fetch_limit);
+  TEST_RUN(test_completion_callback_can_replace_request_at_fetch_limit);
   TEST_RUN(test_socket_watchers_grow_and_support_fd_zero);
   TEST_RUN(test_aborted_multi_action_schedules_client_reset);
   TEST_RUN(test_rejects_socket_when_interface_binding_fails);

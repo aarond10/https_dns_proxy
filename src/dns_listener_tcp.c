@@ -31,7 +31,6 @@
 enum {
   LISTEN_BACKLOG  =   5,
   IDLE_TIMEOUT_S  = 120,  // "two minutes" according to RFC1035 4.2.2
-  SHUTDOWN_TIMEOUT_S = 15,
   TCP_DNS_MAX_PAYLOAD = UINT16_MAX,
   TCP_DNS_MAX_FRAME = TCP_DNS_MAX_PAYLOAD + sizeof(uint16_t),
   TCP_CLIENT_REQUEST_LIMIT = 16,
@@ -155,25 +154,22 @@ static int get_dns_request(struct tcp_client_s *client,
   }
 
   // check if whole request is available
-  uint16_t network_req_size = 0;
-  memcpy(&network_req_size, client->input_buffer, sizeof(network_req_size));
-  *req_size = ntohs(network_req_size);
+  memcpy(req_size, client->input_buffer, sizeof(*req_size));
+  *req_size = ntohs(*req_size);
   const size_t data_size = sizeof(uint16_t) + (size_t)*req_size;
   if (data_size > client->input_buffer_used) {
     return 0;  // Partial request
   }
-  if (*req_size < DNS_HEADER_LENGTH) {
-    client->input_buffer_used -= (uint32_t)data_size;
-    memmove(client->input_buffer, client->input_buffer + data_size, client->input_buffer_used);
-    *dns_req = NULL;
-    return 1;
+  // Extract the frame; the caller validates the DNS header. Avoid malloc(0)
+  // for empty frames, since a NULL result is not an allocation failure.
+  *dns_req = NULL;
+  if (*req_size != 0) {
+    *dns_req = (char *)malloc(*req_size);  // freed when DoH request completes
+    if (*dns_req == NULL) {
+      FLOG_CLIENT("Out of mem");
+    }
+    memcpy(*dns_req, client->input_buffer + sizeof(uint16_t), *req_size);
   }
-  // copy whole request
-  *dns_req = (char *)malloc(*req_size);  // freed when DoH request completes
-  if (*dns_req == NULL) {
-    FLOG_CLIENT("Out of mem");
-  }
-  memcpy(*dns_req, client->input_buffer + sizeof(uint16_t), *req_size);
   // move down data of next request(s) if any
   client->input_buffer_used -= (uint32_t)data_size;
   memmove(client->input_buffer, client->input_buffer + data_size, client->input_buffer_used);
@@ -226,7 +222,7 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
     return;
   }
   const size_t read_size = remaining < sizeof(buf) ? remaining : sizeof(buf);
-  ssize_t len = recv(w->fd, buf, read_size, 0);
+  const ssize_t len = recv(w->fd, buf, read_size, 0);
   if (len == 0) {
     client->read_eof = 1;
     ev_io_stop(client->d->loop, &client->read_watcher);
@@ -239,51 +235,47 @@ static void read_cb(struct ev_loop __attribute__((unused)) *loop,
     if (errno == ECONNRESET) {
       DLOG_CLIENT("TCP client closed connection");
     } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      len = 0;
+      return;  // Buffered requests were already dispatched before recv().
     } else {
       WLOG_CLIENT("Read error: %s (%d), dropping client", strerror(errno), errno);
     }
-    if (len < 0) {
-      remove_client(client);
-      return;
-    }
+    remove_client(client);
+    return;
   }
 
-  if (len > 0) {
-    // Append data into input buffer
-    // Check for integer overflow and maximum message size
-    if ((size_t)len > TCP_DNS_MAX_FRAME - client->input_buffer_used) {
-      WLOG_CLIENT("Request too large, dropping client");
-      remove_client(client);
-      return;
-    }
-    const uint32_t free_space = client->input_buffer_size - client->input_buffer_used;
-    const uint32_t needed_space = client->input_buffer_used + (uint32_t)len;
-    // Limit buffer size to prevent memory exhaustion attacks
-    if (needed_space > TCP_DNS_MAX_FRAME) {
-      WLOG_CLIENT("Request too large, dropping client");
-      remove_client(client);
-      return;
-    }
-    DLOG_CLIENT("Received %d byte, free: %u", len, free_space);
-    if (free_space < len) {
-      for (client->input_buffer_size = 64;  // lower value does not make much sense
-           client->input_buffer_size < needed_space;
-           client->input_buffer_size *= 2) {
-      }
-      if (client->input_buffer_size > TCP_DNS_MAX_FRAME) {
-        client->input_buffer_size = TCP_DNS_MAX_FRAME;
-      }
-      DLOG_CLIENT("Resize input buffer to %u", client->input_buffer_size);
-      client->input_buffer = (char *) realloc((void*) client->input_buffer,  // NOLINT(bugprone-suspicious-realloc-usage) if realloc fails, program stops
-                                              client->input_buffer_size);
-      if (client->input_buffer == NULL) {
-        FLOG_CLIENT("Out of mem");
-      }
-    }
-    memcpy(client->input_buffer + client->input_buffer_used, buf, (size_t)len);
-    client->input_buffer_used = needed_space;
+  // Append data into input buffer
+  // Check for integer overflow and maximum message size
+  if ((size_t)len > TCP_DNS_MAX_FRAME - client->input_buffer_used) {
+    WLOG_CLIENT("Request too large, dropping client");
+    remove_client(client);
+    return;
   }
+  const uint32_t free_space = client->input_buffer_size - client->input_buffer_used;
+  const uint32_t needed_space = client->input_buffer_used + (uint32_t)len;
+  // Limit buffer size to prevent memory exhaustion attacks
+  if (needed_space > TCP_DNS_MAX_FRAME) {
+    WLOG_CLIENT("Request too large, dropping client");
+    remove_client(client);
+    return;
+  }
+  DLOG_CLIENT("Received %d byte, free: %u", len, free_space);
+  if (free_space < len) {
+    for (client->input_buffer_size = 64;  // lower value does not make much sense
+         client->input_buffer_size < needed_space;
+         client->input_buffer_size *= 2) {
+    }
+    if (client->input_buffer_size > TCP_DNS_MAX_FRAME) {
+      client->input_buffer_size = TCP_DNS_MAX_FRAME;
+    }
+    DLOG_CLIENT("Resize input buffer to %u", client->input_buffer_size);
+    client->input_buffer = (char *) realloc((void*) client->input_buffer,  // NOLINT(bugprone-suspicious-realloc-usage) if realloc fails, program stops
+                                            client->input_buffer_size);
+    if (client->input_buffer == NULL) {
+      FLOG_CLIENT("Out of mem");
+    }
+  }
+  memcpy(client->input_buffer + client->input_buffer_used, buf, (size_t)len);
+  client->input_buffer_used = needed_space;
 
   (void)dispatch_client_requests(client);
 }
@@ -503,7 +495,9 @@ static void tcp_respond(dns_listener_t *self, struct sockaddr *raddr,
     WLOG("Malformed response received, invalid length: %zu", resp_len);
     return;
   }
-  const uint16_t response_id = ntohs(*((uint16_t*)resp));
+  uint16_t response_id;
+  memcpy(&response_id, resp, sizeof(response_id));
+  response_id = ntohs(response_id);
 
   // find client data
   struct tcp_client_s *client = find_client(d, raddr, connection_id);
@@ -513,7 +507,7 @@ static void tcp_respond(dns_listener_t *self, struct sockaddr *raddr,
   }
 
   const size_t frame_len = sizeof(uint16_t) + resp_len;
-  if (frame_len > TCP_CLIENT_OUTPUT_LIMIT - client->output_bytes) {
+  if (frame_len > (TCP_CLIENT_OUTPUT_LIMIT - client->output_bytes)) {
     WLOG_CLIENT("Output queue limit exceeded, dropping client");
     remove_client(client);
     return;
@@ -568,7 +562,7 @@ static void tcp_stop(dns_listener_t *self) {
       remove_client(client);
     } else {
       ev_timer_stop(d->loop, &client->timer_watcher);
-      ev_timer_set(&client->timer_watcher, SHUTDOWN_TIMEOUT_S, 0);
+      ev_timer_set(&client->timer_watcher, DNS_SHUTDOWN_TIMEOUT_S, 0);
       ev_timer_start(d->loop, &client->timer_watcher);
     }
     client = next;
@@ -577,6 +571,9 @@ static void tcp_stop(dns_listener_t *self) {
 
 static void tcp_destroy(dns_listener_t *self) {
   dns_listener_tcp_t *d = (dns_listener_tcp_t *)self;
+  while (d->clients != NULL) {
+    remove_client(d->clients);
+  }
   close(d->sock);
   free(d);
 }
