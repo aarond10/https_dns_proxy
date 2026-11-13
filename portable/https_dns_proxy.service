@@ -1,0 +1,51 @@
+# systemd unit for the portable (static) https_dns_proxy binary.
+#
+# Install:
+#   install -m 755 https_dns_proxy-linux-amd64 /usr/local/bin/https_dns_proxy
+#   install -m 644 https_dns_proxy.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now https_dns_proxy
+#
+# Change options with: systemctl edit https_dns_proxy
+[Unit]
+Description=https_dns_proxy - DNS-over-HTTPS (HTTP/3) proxy
+Wants=network-online.target nss-lookup.target
+After=network-online.target
+Before=nss-lookup.target
+
+[Service]
+# Static build has no libsystemd, so no sd_notify
+Type=simple
+DynamicUser=yes
+# Listens on 127.0.0.1:5053 by default
+ExecStart=/usr/local/bin/https_dns_proxy -v -v
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+# Hardening
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

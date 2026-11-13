@@ -1,0 +1,252 @@
+name: Portable release
+
+# Daily: builds the static (portable) binary and a Docker image, but only if the
+# source changed since the last release. The release tag is the build date (YYYY.MM.DD).
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Release even if nothing changed since the last release
+        type: boolean
+        default: false
+
+# Actions are pinned by commit hash, not by tag (the version is in the comment).
+# Tags like @v6 are mutable: if an action's repository is compromised, the tag can be
+# moved to malicious code, as happened with tj-actions/changed-files in 2025. This
+# workflow can write releases and packages, so it runs only reviewed, fixed code.
+# To update an action: git ls-remote https://github.com/<owner>/<action> 'refs/tags/<tag>^{}'
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: portable-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Scheduled runs always use the default branch; this also stops manual runs on other
+    # branches, so only merged code is released
+    if: >-
+      github.event_name == 'schedule' ||
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      with:
+        fetch-depth: 0
+        # Only local git commands follow; gh gets its token from GH_TOKEN
+        persist-credentials: false
+
+    - name: Check for changes since the last release
+      id: check
+      env:
+        GH_TOKEN: ${{ github.token }}
+        FORCE: ${{ inputs.force }}
+      run: |
+        # Only these paths affect the binary, the release assets or how they are
+        # built and checked
+        watched_paths=(src CMakeLists.txt portable .dockerignore .github/workflows/portable-release.yml)
+
+        last_tag=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+        if [ -z "$last_tag" ]; then
+          echo "No previous release"
+          changed=true
+        elif ! git diff --quiet "$last_tag" HEAD -- "${watched_paths[@]}"; then
+          echo "Changes since $last_tag:"
+          git log --oneline "$last_tag"..HEAD -- "${watched_paths[@]}"
+          changed=true
+        else
+          echo "No changes since $last_tag"
+          changed=false
+        fi
+        if [ "$FORCE" = "true" ]; then
+          changed=true
+        fi
+
+        # One release per day; a forced second run on the same day gets a suffix
+        version=$(date -u +%Y.%m.%d)
+        candidate=$version
+        n=1
+        while git rev-parse -q --verify "refs/tags/$candidate" >/dev/null; do
+          n=$((n + 1))
+          candidate="$version.$n"
+        done
+
+        echo "changed=$changed" >> "$GITHUB_OUTPUT"
+        echo "version=$candidate" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      with:
+        # Otherwise the token is saved in .git/config, which goes into the Docker build
+        # context (.git is kept for the version) and into the exported build cache
+        persist-credentials: false
+
+    - name: Set image name
+      run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+    - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+    - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Build portable binary
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      with:
+        context: .
+        file: portable/Dockerfile
+        target: binary
+        # All temporary files go outside the workspace: a new file in the workspace changes
+        # the build context, and the image build below would compile the binary again
+        # (with a different build time) instead of reusing this one
+        outputs: type=local,dest=${{ runner.temp }}/out
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Smoke test
+      working-directory: ${{ runner.temp }}
+      run: |
+        file out/https_dns_proxy
+        file out/https_dns_proxy | grep -q 'static'
+        out/https_dns_proxy -V | tee versions.txt
+        grep -q HTTP3 versions.txt
+
+    # Unit tests already ran inside the Docker build. These tests need network access,
+    # dig, valgrind and Robot Framework, so they run here against the built binary.
+    - name: Install test dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends dnsutils valgrind
+        python3 -m venv "$RUNNER_TEMP/venv"
+        "$RUNNER_TEMP/venv/bin/pip" install robotframework
+
+    - name: Integration tests
+      run: |
+        python3 tests/integration/test_tcp_lifecycle.py \
+          --binary "$RUNNER_TEMP/out/https_dns_proxy" --openssl "$(command -v openssl)"
+
+    # Robot and valgrind write logs into the current directory, so the tests run from a
+    # copy outside the workspace (a changed workspace would change the build context)
+    - name: Functional tests
+      run: |
+        cp -r tests/robot "$RUNNER_TEMP/robot"
+        cd "$RUNNER_TEMP/robot"
+        "$RUNNER_TEMP/venv/bin/python3" -m robot.run \
+          --variable "BINARY_PATH:$RUNNER_TEMP/out/https_dns_proxy" \
+          --outputdir "$RUNNER_TEMP/robot-results" \
+          functional_tests.robot
+
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      if: failure()
+      with:
+        name: functional-test-logs
+        path: |
+          ${{ runner.temp }}/robot-results
+          ${{ runner.temp }}/robot/valgrind-*.log
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      with:
+        context: .
+        file: portable/Dockerfile
+        target: image
+        push: true
+        # "latest" is added only after the image passes the checks below
+        tags: ${{ env.IMAGE }}:${{ env.VERSION }}
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.version=${{ env.VERSION }}
+          org.opencontainers.image.description=Static https_dns_proxy (DNS-over-HTTPS proxy with HTTP/3) on an empty base image
+        cache-from: type=gha
+
+    - name: Check that the image has the same binary
+      working-directory: ${{ runner.temp }}
+      run: |
+        docker pull "$IMAGE:$VERSION"
+        container=$(docker create "$IMAGE:$VERSION")
+        docker cp "$container:/https_dns_proxy" image_binary
+        docker rm "$container"
+        cmp out/https_dns_proxy image_binary
+
+    # The resolver is given by hostname, so this also checks the bundled CA certificates
+    # and /etc/services, which only the image provides
+    - name: Image test
+      run: |
+        docker run -d --name image_test -p 127.0.0.1:5053:5053/udp -p 127.0.0.1:5053:5053/tcp \
+          "$IMAGE:$VERSION" -4 -v -v -v -r https://cloudflare-dns.com/dns-query
+        sleep 3
+        status=0
+        dig +tries=3 +time=5 @127.0.0.1 -p 5053 example.com | grep -q 'status: NOERROR' || status=1
+        dig +tcp +tries=3 +time=5 @127.0.0.1 -p 5053 example.com | grep -q 'status: NOERROR' || status=1
+        docker logs image_test
+        docker rm -f image_test
+        exit "$status"
+
+    # -q allows only HTTP/3, so a successful answer means QUIC works in the image.
+    # "using HTTP/3" is logged by curl once the connection really uses HTTP/3.
+    - name: Image test (HTTP/3 only)
+      run: |
+        docker run -d --name image_test_http3 -p 127.0.0.1:5053:5053/udp -p 127.0.0.1:5053:5053/tcp \
+          "$IMAGE:$VERSION" -4 -q -v -v -v -r https://cloudflare-dns.com/dns-query
+        sleep 3
+        status=0
+        dig +tries=3 +time=5 @127.0.0.1 -p 5053 example.com | grep -q 'status: NOERROR' || status=1
+        dig +tcp +tries=3 +time=5 @127.0.0.1 -p 5053 example.com | grep -q 'status: NOERROR' || status=1
+        docker logs image_test_http3 > "$RUNNER_TEMP/image_test_http3.log" 2>&1
+        docker rm -f image_test_http3
+        grep -q 'using HTTP/3' "$RUNNER_TEMP/image_test_http3.log" || status=1
+        if [ "$status" -ne 0 ]; then
+          cat "$RUNNER_TEMP/image_test_http3.log"
+        fi
+        exit "$status"
+
+    - name: Tag image as latest
+      # Copies the tag in the registry, keeping the same digest and attestations
+      run: docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE:$VERSION"
+
+    - name: Prepare release assets
+      working-directory: ${{ runner.temp }}
+      run: |
+        mkdir dist
+        cp out/https_dns_proxy dist/https_dns_proxy-linux-amd64
+        cp "$GITHUB_WORKSPACE/portable/https_dns_proxy.service" dist/
+        cd dist && sha256sum -- * > SHA256SUMS
+
+    - name: Create release
+      working-directory: ${{ runner.temp }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        {
+          echo "Portable (statically linked) build of https_dns_proxy for Linux x86_64."
+          echo
+          echo '```'
+          cat versions.txt
+          echo '```'
+          echo
+          echo "Docker image: \`docker pull $IMAGE:$VERSION\`"
+          echo
+          echo "See the README section \"Portable binary and Docker image\" for usage."
+        } > notes.md
+        # --repo is needed because the working directory is not the git checkout
+        gh release create "$VERSION" dist/* \
+          --repo "$GITHUB_REPOSITORY" \
+          --target "$GITHUB_SHA" \
+          --title "$VERSION" \
+          --notes-file notes.md

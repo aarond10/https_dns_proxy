@@ -9,6 +9,8 @@ cmake_install.cmake
 https_dns_proxy
 *_unittest
 https_dns_proxy.service
+!portable/https_dns_proxy.service
+out/
 install_manifest.txt
 .ninja_deps
 .ninja_log

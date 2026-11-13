@@ -34,7 +34,8 @@ only makes sense if you trust your DoH provider.
 
 ## Features
 
-* Tiny Size (<30kiB).
+* Tiny Size (<30kiB) when linked against system libraries
+  (the [portable build](#portable-binary-and-docker-image) is larger, see below).
 * Uses curl for HTTP/2 and pipelining, keeping resolve latencies extremely low.
 * Single-threaded, non-blocking select() server for use on resource-starved 
   embedded systems.
@@ -111,6 +112,70 @@ ExecStart=/usr/local/bin/https_dns_proxy \
   -u nobody -g nogroup -r https://doh.opendns.com/dns-query
 ```
 
+### Portable binary and Docker image
+
+Every day a GitHub Action checks this repository for changes since the last
+release. If there are any, it builds a new [release](../../releases/latest),
+tagged with the build date (`YYYY.MM.DD`), with these files:
+
+* `https_dns_proxy-linux-amd64` - portable, statically linked binary for Linux x86_64
+* `https_dns_proxy.service` - systemd unit for it
+* `SHA256SUMS` - checksums
+
+It also publishes a [Docker image](../../pkgs/container/https_dns_proxy) with the
+same binary at `ghcr.io/aarond10/https_dns_proxy` (tags: the release date and `latest`).
+Forks with the workflow enabled publish to their own `ghcr.io/<owner>/https_dns_proxy`
+and own releases.
+
+The portable binary has HTTP/3 (QUIC) support (`-q`) and needs no libraries on the
+target system. It runs on any Linux x86_64 distribution, regardless of its libc
+or installed packages.
+
+**Size:** the portable binary is about 8 MB instead of the <30 kiB of a regular
+build. It is statically linked: libcurl, OpenSSL, ngtcp2, nghttp3, nghttp2, c-ares,
+libev and the musl C library are all inside the executable, instead of being shared
+with the rest of the system. For the same reason, security fixes in these libraries
+reach the binary only through a new release, not through system package updates.
+
+Other differences from a regular build:
+
+* No systemd notify support (libsystemd has no static library), so the provided
+  unit uses `Type=simple`.
+* CA certificates are read from `/etc/ssl/certs/ca-certificates.crt`
+  (Debian, Ubuntu, Alpine, Arch and others). On distributions that keep them
+  elsewhere, use `-C`, for example `-C /etc/pki/tls/certs/ca-bundle.crt`
+  on Fedora/RHEL.
+
+Install with systemd:
+```
+$ curl -LO https://github.com/aarond10/https_dns_proxy/releases/latest/download/https_dns_proxy-linux-amd64
+$ curl -LO https://github.com/aarond10/https_dns_proxy/releases/latest/download/https_dns_proxy.service
+$ sudo install -m 755 https_dns_proxy-linux-amd64 /usr/local/bin/https_dns_proxy
+$ sudo install -m 644 https_dns_proxy.service /etc/systemd/system/
+$ sudo systemctl daemon-reload
+$ sudo systemctl enable --now https_dns_proxy
+```
+The unit runs the proxy with default options. To change them, use
+`sudo systemctl edit https_dns_proxy.service` as shown above.
+
+Run with Docker:
+```
+$ docker run -d --name https_dns_proxy \
+    -p 127.0.0.1:5053:5053/udp -p 127.0.0.1:5053:5053/tcp \
+    ghcr.io/aarond10/https_dns_proxy \
+    -r https://cloudflare-dns.com/dns-query
+```
+The image contains only the binary and a CA certificate bundle, in a single layer
+on an empty base image. It runs as an unprivileged user (65534) and listens on
+`0.0.0.0:5053` inside the container. Arguments after the image name are passed
+to `https_dns_proxy`.
+
+To build both locally (needs Docker with buildx), run from the repository root:
+```
+$ docker buildx build -f portable/Dockerfile --target binary --output type=local,dest=./out .
+$ docker buildx build -f portable/Dockerfile --target image -t https_dns_proxy .
+```
+
 ### OpenWRT package install
 
 There is a package in the [OpenWRT packages](https://github.com/openwrt/packages) repository as well.
@@ -142,7 +207,8 @@ user@arch:~# yay -S https-dns-proxy-git
 
 ### Docker install
 
-There is also an externally maintained [Docker image](https://hub.docker.com/r/bwmoran/https-dns-proxy) for latest git version. Documentation, Dockerfile, and entrypoint script can be viewed on [GitHub](https://github.com/moranbw/https-dns-proxy-docker).  An example run:
+See [Portable binary and Docker image](#portable-binary-and-docker-image) for the
+image built by this repository. There is also an externally maintained [Docker image](https://hub.docker.com/r/bwmoran/https-dns-proxy) for latest git version. Documentation, Dockerfile, and entrypoint script can be viewed on [GitHub](https://github.com/moranbw/https-dns-proxy-docker).  An example run:
 
 ```
 ### points towards AdGuard DNS, only use IPv4, increase logging ###

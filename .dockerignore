@@ -1,0 +1,13 @@
+# Local in-tree build results would break the build inside the container.
+# .git is kept on purpose: CMake uses it to embed the version.
+build/
+out/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+custom_curl/
+/https_dns_proxy
+*_unittest
