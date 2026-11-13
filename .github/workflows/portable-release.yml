@@ -40,6 +40,8 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       with:
         fetch-depth: 0
+        # Only local git commands follow; gh gets its token from GH_TOKEN
+        persist-credentials: false
 
     - name: Check for changes since the last release
       id: check
@@ -47,8 +49,9 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         FORCE: ${{ inputs.force }}
       run: |
-        # Only these paths affect the binary or the release assets
-        watched_paths=(src CMakeLists.txt portable .dockerignore)
+        # Only these paths affect the binary, the release assets or how they are
+        # built and checked
+        watched_paths=(src CMakeLists.txt portable .dockerignore .github/workflows/portable-release.yml)
 
         last_tag=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
         if [ -z "$last_tag" ]; then
@@ -86,6 +89,10 @@ jobs:
       VERSION: ${{ needs.check.outputs.version }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      with:
+        # Otherwise the token is saved in .git/config, which goes into the Docker build
+        # context (.git is kept for the version) and into the exported build cache
+        persist-credentials: false
 
     - name: Set image name
       run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
