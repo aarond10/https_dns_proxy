@@ -78,6 +78,9 @@ static uint16_t get_edns_udp_size(const char *dns_req, const size_t dns_req_len)
  * in the request. This function scans the Additional section and removes every record except the
  * OPT one; re-serializing via c-ares then leaves the OPT record directly after the Question
  * section, preserving it in the truncated response stream.
+ * An OPT record is not necessarily small: RFC 8467 padding and EDE text can exceed the peer's
+ * buffer on their own. Preservation yields to delivery, so OPT is dropped in that case. The TC
+ * bit has already sent the peer to TCP, where the whole record set including OPT is returned.
  *
  * 4. Trusted Data Assumption:
  * DoH resolver response is considered trusted input, so assuming that it complies with RFCs
@@ -130,6 +133,31 @@ static void truncate_to_size_limit(uint8_t *buf, size_t *buflen, size_t size_lim
   size_t new_resp_len = 0;
   status = ares_dns_write(dnsrec, &new_resp, &new_resp_len);
 
+  if (status == ARES_SUCCESS && new_resp_len > size_limit) {
+    // The answers and authority records are gone but the message still does
+    // not fit, so the OPT record's own bulk (RFC 8467 padding, EDE text) is
+    // what overflows the peer's buffer. Drop it too: TC already sends the peer
+    // to TCP, where it gets the full record set including OPT.
+    for (size_t i = ares_dns_record_rr_cnt(dnsrec, ARES_SECTION_ADDITIONAL); i > 0; i--) {
+      const ares_dns_rr_t *rr = ares_dns_record_rr_get(dnsrec, ARES_SECTION_ADDITIONAL, i - 1);
+      if (ares_dns_rr_get_type(rr) != ARES_REC_TYPE_OPT) {
+        continue;
+      }
+      status = ares_dns_record_rr_del(dnsrec, ARES_SECTION_ADDITIONAL, i - 1);
+      if (status != ARES_SUCCESS) {
+        WLOG("%04hX: Could not remove OPT record: %s", resp_id, ares_strerror((int)status));
+        break;
+      }
+      ares_free_string(new_resp);
+      new_resp = NULL;
+      new_resp_len = 0;
+      status = ares_dns_write(dnsrec, &new_resp, &new_resp_len);
+      DLOG("%04hX: Dropped OPT record to fit the peer's %zu byte buffer",
+           resp_id, size_limit);
+      break;
+    }
+  }
+
   ares_dns_record_destroy(dnsrec);
 
   if (status != ARES_SUCCESS || new_resp == NULL || new_resp_len == 0) {
@@ -138,13 +166,11 @@ static void truncate_to_size_limit(uint8_t *buf, size_t *buflen, size_t size_lim
     return;
   }
 
-  if (new_resp_len < old_size) {
-    memcpy(buf, new_resp, new_resp_len);
-    *buflen = new_resp_len;
-    buf[2] |= 0x02;  // set truncation flag
-    ILOG("%04hX: DNS response size truncated from %zu to %zu to keep %zu limit",
-         resp_id, old_size, new_resp_len, size_limit);
-  }
+  memcpy(buf, new_resp, new_resp_len);
+  *buflen = new_resp_len;
+  buf[2] |= 0x02;  // set truncation flag
+  ILOG("%04hX: DNS response size truncated from %zu to %zu to keep %zu limit",
+       resp_id, old_size, new_resp_len, size_limit);
 
   ares_free_string(new_resp);
 }
